@@ -1,0 +1,104 @@
+{
+ "id": "azure-pc-invoice-recon",
+ "version": 1,
+ "trust": "builtin",
+ "detect": {
+  "required": [
+   "Subtotal",
+   "TaxTotal",
+   "ChargeType"
+  ],
+  "any_of": [
+   [
+    "BillableQuantity",
+    "Quantity"
+   ]
+  ]
+ },
+ "meta": {
+  "provider": "azure",
+  "kind": "cost_lines",
+  "cost_basis": "billed",
+  "format": "Partner Center new commerce invoice reconciliation"
+ },
+ "columns": {
+  "service_raw": {
+   "from": [
+    "MeterCategory",
+    "ProductName"
+   ],
+   "coalesce": true
+  },
+  "product_code": {
+   "from": [
+    "ProductId"
+   ]
+  },
+  "description": {
+   "from": [
+    "MeterName",
+    "SkuName"
+   ],
+   "coalesce": true
+  },
+  "billed_cost": {
+   "from": [
+    "Subtotal"
+   ]
+  },
+  "tax": {
+   "from": [
+    "TaxTotal"
+   ]
+  },
+  "quantity": {
+   "from": [
+    "BillableQuantity",
+    "Quantity"
+   ]
+  },
+  "unit_price": {
+   "from": [
+    "EffectiveUnitPrice",
+    "UnitPrice"
+   ]
+  },
+  "charge_start": {
+   "from": [
+    "ChargeStartDate",
+    "UsageDate"
+   ]
+  },
+  "charge_end": {
+   "from": [
+    "ChargeEndDate"
+   ]
+  },
+  "account_id": {
+   "from": [
+    "SubscriptionId"
+   ]
+  },
+  "account_name": {
+   "from": [
+    "CustomerName"
+   ]
+  },
+  "currency": {
+   "from": [
+    "Currency",
+    "BillingCurrency"
+   ]
+  },
+  "charge_type": {
+   "from": [
+    "ChargeType"
+   ]
+  },
+  "invoice_id": {
+   "from": [
+    "InvoiceNumber"
+   ]
+  }
+ }
+}

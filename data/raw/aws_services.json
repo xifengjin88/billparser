@@ -1,0 +1,52 @@
+{
+ "AmazonEC2": {
+  "names": [
+   "Amazon Elastic Compute Cloud"
+  ]
+ },
+ "AmazonS3": {
+  "names": [
+   "Amazon Simple Storage Service"
+  ]
+ },
+ "AmazonRDS": {
+  "names": [
+   "Amazon Relational Database Service"
+  ]
+ },
+ "AWSLambda": {
+  "names": [
+   "AWS Lambda"
+  ]
+ },
+ "AmazonCloudFront": {
+  "names": [
+   "Amazon CloudFront"
+  ]
+ },
+ "AmazonDynamoDB": {
+  "names": [
+   "Amazon DynamoDB"
+  ]
+ },
+ "AmazonEKS": {
+  "names": [
+   "Amazon Elastic Container Service for Kubernetes"
+  ]
+ },
+ "AmazonVPC": {
+  "names": [
+   "Amazon Virtual Private Cloud"
+  ]
+ },
+ "AmazonCloudWatch": {
+  "names": [
+   "AmazonCloudWatch"
+  ]
+ },
+ "AWSDataTransfer": {
+  "names": [
+   "AWS Data Transfer"
+  ]
+ }
+}

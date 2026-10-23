@@ -1,0 +1,33 @@
+{
+ "id": "aws-cost-optimization-recommendations",
+ "version": 1,
+ "trust": "builtin",
+ "detect": {
+  "required": [
+   "recommendation_id"
+  ],
+  "any_of": [
+   [
+    "estimated_monthly_savings_after_discount",
+    "estimated_monthly_savings"
+   ]
+  ]
+ },
+ "meta": {
+  "provider": "aws",
+  "kind": "recommendations",
+  "format": "AWS Data Exports cost optimization recommendations"
+ },
+ "columns": {
+  "description": {
+   "from": [
+    "action_type"
+   ]
+  },
+  "service_raw": {
+   "from": [
+    "current_resource_type"
+   ]
+  }
+ }
+}

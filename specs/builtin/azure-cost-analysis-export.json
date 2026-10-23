@@ -1,0 +1,67 @@
+{
+ "id": "azure-cost-analysis-export",
+ "version": 1,
+ "trust": "builtin",
+ "detect": {
+  "required": [
+   "ServiceName"
+  ],
+  "any_of": [
+   [
+    "CostUSD",
+    "Cost",
+    "PreTaxCost",
+    "Cost (USD)"
+   ]
+  ],
+  "forbid": [
+   "MeterCategory",
+   "BilledCost",
+   "line_item_unblended_cost"
+  ]
+ },
+ "meta": {
+  "provider": "azure",
+  "kind": "cost_lines",
+  "cost_basis": "billed",
+  "format": "Azure portal cost analysis download (grouped by service)",
+  "notes": "Unverified: columns depend on the view the user chose. Confirm with real samples."
+ },
+ "columns": {
+  "service_raw": {
+   "from": [
+    "ServiceName"
+   ]
+  },
+  "billed_cost": {
+   "from": [
+    "Cost",
+    "PreTaxCost",
+    "CostUSD",
+    "Cost (USD)"
+   ]
+  },
+  "charge_start": {
+   "from": [
+    "UsageDate",
+    "BillingMonth",
+    "Date"
+   ]
+  },
+  "region": {
+   "from": [
+    "ResourceLocation"
+   ]
+  },
+  "account_name": {
+   "from": [
+    "SubscriptionName"
+   ]
+  },
+  "currency": {
+   "from": [
+    "Currency"
+   ]
+  }
+ }
+}

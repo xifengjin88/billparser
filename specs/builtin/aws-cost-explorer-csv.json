@@ -1,0 +1,52 @@
+{
+ "id": "aws-cost-explorer-csv",
+ "version": 1,
+ "trust": "builtin",
+ "detect": {
+  "any_regex": {
+   "pattern": "\\(\\$\\)\\s*$",
+   "min": 2
+  }
+ },
+ "meta": {
+  "provider": "aws",
+  "kind": "cost_lines",
+  "cost_basis": "billed",
+  "format": "AWS Cost Explorer CSV download (services as columns, dates as rows)"
+ },
+ "reshape": {
+  "unpivot": {
+   "id": "first",
+   "exclude": "^total costs",
+   "total_row": "^(service total|total)"
+  }
+ },
+ "columns": {
+  "service_raw": {
+   "from": [
+    "_var"
+   ],
+   "t": [
+    "strip",
+    {
+     "strip_suffix": "($)"
+    }
+   ]
+  },
+  "billed_cost": {
+   "from": [
+    "_value"
+   ]
+  },
+  "charge_start": {
+   "from": [
+    "_id"
+   ]
+  }
+ },
+ "filters": [
+  {
+   "drop_if_blank": "billed_cost"
+  }
+ ]
+}

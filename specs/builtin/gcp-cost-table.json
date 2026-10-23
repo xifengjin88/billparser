@@ -1,0 +1,72 @@
+{
+ "id": "gcp-cost-table",
+ "version": 1,
+ "trust": "builtin",
+ "detect": {
+  "required": [
+   "Service description",
+   "SKU description"
+  ],
+  "forbid": [
+   "usage_start_time",
+   "cost_type",
+   "cost"
+  ]
+ },
+ "meta": {
+  "provider": "gcp",
+  "kind": "cost_lines",
+  "cost_basis": "billed",
+  "format": "GCP console cost table report CSV",
+  "notes": "Unverified column names; confirm with real samples."
+ },
+ "columns": {
+  "service_raw": {
+   "from": [
+    "Service description"
+   ]
+  },
+  "product_code": {
+   "from": [
+    "Service ID"
+   ]
+  },
+  "description": {
+   "from": [
+    "SKU description"
+   ]
+  },
+  "billed_cost": {
+   "from": [
+    "Cost ($)",
+    "Cost"
+   ],
+   "header_regex": "^cost"
+  },
+  "quantity": {
+   "from": [
+    "Usage amount"
+   ]
+  },
+  "unit": {
+   "from": [
+    "Usage unit"
+   ]
+  },
+  "account_id": {
+   "from": [
+    "Project ID"
+   ]
+  },
+  "account_name": {
+   "from": [
+    "Project name"
+   ]
+  }
+ },
+ "filters": [
+  {
+   "drop_if_blank": "billed_cost"
+  }
+ ]
+}

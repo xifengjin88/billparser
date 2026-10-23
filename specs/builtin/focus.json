@@ -1,0 +1,124 @@
+{
+ "id": "focus",
+ "version": 1,
+ "trust": "builtin",
+ "detect": {
+  "required": [
+   "BilledCost",
+   "ChargePeriodStart"
+  ],
+  "any_of": [
+   [
+    "ServiceName"
+   ]
+  ]
+ },
+ "meta": {
+  "kind": "cost_lines",
+  "cost_basis": "billed",
+  "format": "FOCUS 1.0 to 1.4 (AWS, Azure, GCP, others)"
+ },
+ "columns": {
+  "provider": {
+   "from": [
+    "ProviderName",
+    "ServiceProviderName"
+   ],
+   "t": [
+    "strip",
+    {
+     "map": {
+      "Amazon Web Services": "aws",
+      "AWS": "aws",
+      "Microsoft": "azure",
+      "Microsoft Azure": "azure",
+      "Azure": "azure",
+      "Google Cloud": "gcp",
+      "Google": "gcp",
+      "Google Cloud Platform": "gcp"
+     }
+    }
+   ]
+  },
+  "service_raw": {
+   "from": [
+    "ServiceName"
+   ]
+  },
+  "description": {
+   "from": [
+    "ChargeDescription",
+    "SkuPriceDetails"
+   ]
+  },
+  "billed_cost": {
+   "from": [
+    "BilledCost"
+   ]
+  },
+  "effective_cost": {
+   "from": [
+    "EffectiveCost"
+   ]
+  },
+  "list_cost": {
+   "from": [
+    "ListCost"
+   ]
+  },
+  "quantity": {
+   "from": [
+    "ConsumedQuantity",
+    "PricingQuantity"
+   ]
+  },
+  "unit": {
+   "from": [
+    "ConsumedUnit",
+    "PricingUnit"
+   ]
+  },
+  "charge_start": {
+   "from": [
+    "ChargePeriodStart"
+   ]
+  },
+  "charge_end": {
+   "from": [
+    "ChargePeriodEnd"
+   ]
+  },
+  "region": {
+   "from": [
+    "RegionId",
+    "RegionName",
+    "Region"
+   ]
+  },
+  "account_id": {
+   "from": [
+    "SubAccountId"
+   ]
+  },
+  "account_name": {
+   "from": [
+    "SubAccountName"
+   ]
+  },
+  "currency": {
+   "from": [
+    "BillingCurrency"
+   ]
+  },
+  "charge_type": {
+   "from": [
+    "ChargeCategory"
+   ]
+  },
+  "invoice_id": {
+   "from": [
+    "InvoiceId"
+   ]
+  }
+ }
+}

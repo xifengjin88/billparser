@@ -1,0 +1,68 @@
+{
+ "DZH318Z0BQ4L": {
+  "productName": "Virtual Machines Dv3 Series",
+  "serviceName": "Virtual Machines",
+  "serviceId": "DZH313Z7MMC8",
+  "serviceFamily": "Compute"
+ },
+ "DZH318Z0BPVW": {
+  "productName": "Virtual Machines Ev5 Series Windows",
+  "serviceName": "Virtual Machines",
+  "serviceId": "DZH313Z7MMC8",
+  "serviceFamily": "Compute"
+ },
+ "DZH318Z0BNXN": {
+  "productName": "General Block Blob v2",
+  "serviceName": "Storage",
+  "serviceId": "DZH317F1HKN0",
+  "serviceFamily": "Storage"
+ },
+ "DZH318Z0BQ8K": {
+  "productName": "Premium SSD Managed Disks",
+  "serviceName": "Storage",
+  "serviceId": "DZH317F1HKN0",
+  "serviceFamily": "Storage"
+ },
+ "DZH318Z0BQ1C": {
+  "productName": "SQL Database Single vCore",
+  "serviceName": "SQL Database",
+  "serviceId": "DZH313Z7MMDW",
+  "serviceFamily": "Databases"
+ },
+ "DZH318Z0BPZT": {
+  "productName": "Azure Cosmos DB",
+  "serviceName": "Azure Cosmos DB",
+  "serviceId": "DZH31GDMKKS4",
+  "serviceFamily": "Databases"
+ },
+ "DZH318Z0BRS8": {
+  "productName": "Bandwidth - Routing Preference: Internet",
+  "serviceName": "Bandwidth",
+  "serviceId": "DZH31VJJ0KMD",
+  "serviceFamily": "Networking"
+ },
+ "DZH318Z0BQ3V": {
+  "productName": "Azure Kubernetes Service",
+  "serviceName": "Azure Kubernetes Service",
+  "serviceId": "DZH31JJ8W3M6",
+  "serviceFamily": "Containers"
+ },
+ "DZH318Z0BP2X": {
+  "productName": "Azure App Service Premium v3 Plan",
+  "serviceName": "Azure App Service",
+  "serviceId": "DZH317XQ5SQZ",
+  "serviceFamily": "Compute"
+ },
+ "DZH318Z0BQ9M": {
+  "productName": "Log Analytics",
+  "serviceName": "Log Analytics",
+  "serviceId": "DZH31CNQ45DL",
+  "serviceFamily": "Management and Governance"
+ },
+ "DZH318Z0BQ7Q": {
+  "productName": "Azure OpenAI",
+  "serviceName": "Foundry Models",
+  "serviceId": "DZH31NZ9MMQ5",
+  "serviceFamily": "AI + Machine Learning"
+ }
+}

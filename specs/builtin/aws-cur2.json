@@ -1,0 +1,108 @@
+{
+ "id": "aws-cur2",
+ "version": 1,
+ "trust": "builtin",
+ "detect": {
+  "required": [
+   "line_item_unblended_cost",
+   "line_item_product_code"
+  ],
+  "any_of": [
+   [
+    "line_item_usage_start_date"
+   ]
+  ]
+ },
+ "meta": {
+  "provider": "aws",
+  "kind": "cost_lines",
+  "cost_basis": "billed",
+  "format": "AWS CUR 2.0 (also legacy CUR queried via Athena)"
+ },
+ "columns": {
+  "product_code": {
+   "from": [
+    "line_item_product_code",
+    "product_servicecode"
+   ]
+  },
+  "service_raw": {
+   "from": [
+    "product_product_name",
+    "line_item_product_code"
+   ]
+  },
+  "description": {
+   "from": [
+    "line_item_line_item_description",
+    "line_item_usage_type"
+   ]
+  },
+  "billed_cost": {
+   "from": [
+    "line_item_unblended_cost"
+   ]
+  },
+  "list_cost": {
+   "from": [
+    "pricing_public_on_demand_cost"
+   ]
+  },
+  "quantity": {
+   "from": [
+    "line_item_usage_amount"
+   ]
+  },
+  "unit": {
+   "from": [
+    "pricing_unit"
+   ]
+  },
+  "unit_price": {
+   "from": [
+    "line_item_unblended_rate"
+   ]
+  },
+  "charge_start": {
+   "from": [
+    "line_item_usage_start_date"
+   ]
+  },
+  "charge_end": {
+   "from": [
+    "line_item_usage_end_date"
+   ]
+  },
+  "region": {
+   "from": [
+    "product_region_code",
+    "product_region"
+   ]
+  },
+  "account_id": {
+   "from": [
+    "line_item_usage_account_id"
+   ]
+  },
+  "account_name": {
+   "from": [
+    "line_item_usage_account_name"
+   ]
+  },
+  "currency": {
+   "from": [
+    "line_item_currency_code"
+   ]
+  },
+  "charge_type": {
+   "from": [
+    "line_item_line_item_type"
+   ]
+  },
+  "invoice_id": {
+   "from": [
+    "bill_invoice_id"
+   ]
+  }
+ }
+}

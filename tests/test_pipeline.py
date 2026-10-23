@@ -1,0 +1,244 @@
+"""End-to-end tests. A FakeLLM stands in for the API so LLM routes are tested offline."""
+
+from __future__ import annotations
+
+import json
+import shutil
+import sys
+from pathlib import Path
+
+import pytest
+
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
+sys.path.insert(0, str(ROOT / "samples"))
+
+import billparse.analyze as analyze_mod  # noqa: E402
+from billparse import Pipeline, Settings  # noqa: E402
+from billparse.learn import regression_gate, run_nightly  # noqa: E402
+from billparse.llm import redact  # noqa: E402
+from billparse.spec import SpecError, check_spec  # noqa: E402
+from billparse.transforms import parse_number  # noqa: E402
+from make_samples import german_xlsx  # noqa: E402
+
+FILES = ROOT / "samples" / "files"
+
+GERMAN_SPEC = {"source": "grid", "detect": {"required": ["Leistung", "Betrag"]},
+               "meta": {"provider": "azure", "kind": "cost_lines", "cost_basis": "billed"},
+               "table": {"end": "Gesamtbetrag"},
+               "columns": {"service_raw": {"from": ["Leistung"]}, "quantity": {"from": ["Menge"]},
+                           "unit_price": {"from": ["Einzelpreis"]}, "billed_cost": {"from": ["Betrag"]}},
+               "filters": [{"drop_if_blank": "billed_cost"}]}
+
+
+class FakeLLM:
+    """Returns queued responses; records every prompt."""
+
+    def __init__(self, spec_responses=None, extract_response=None):
+        self.spec_responses = list(spec_responses or [])
+        self.extract_response = extract_response
+        self.calls: list[tuple[str, str]] = []
+
+    def complete(self, system: str, user: str, max_tokens: int = 4000) -> str:
+        self.calls.append((system, user))
+        if system.startswith("Extract every billable"):
+            return json.dumps(self.extract_response or {"rows": []})
+        resp = self.spec_responses.pop(0) if self.spec_responses else {"bad": True}
+        return resp if isinstance(resp, str) else json.dumps(resp)
+
+
+@pytest.fixture
+def make_pipe(tmp_path):
+    (tmp_path / "data" / "raw").mkdir(parents=True)
+    for f in (ROOT / "data" / "raw").glob("*.json"):
+        shutil.copy(f, tmp_path / "data" / "raw" / f.name)
+    analyze_mod._RESOLVER = None
+
+    def make(llm=None):
+        return Pipeline(Settings(store_dir=tmp_path / "store", catalog_dir=tmp_path / "data",
+                                 use_llm=llm is not None), llm=llm)
+    yield make
+    analyze_mod._RESOLVER = None
+
+
+# ---------------------------------------------------------------- known and messy samples, no LLM
+EXPECTED = {
+    "aws_cur2.csv.gz": ("builtin", 4052.23), "azure_ea_usage.csv": ("builtin", None),
+    "pc_invoice_recon.csv": ("builtin", 2742.51), "focus_gcp.parquet": ("builtin", None),
+    "gcp_export.json": ("builtin", 1320.00), "aws_cost_explorer.csv": ("builtin", None),
+    "messy_report.csv": ("mapper", 6438.05), "custom_workbook.xlsx": ("mapper", 1653.32),
+    "spend_optimizer_pivot.xlsx": ("mapper", 54094.50), "reseller_invoice.pdf": ("mapper", 3414.88),
+    "summary_invoice.pdf": ("mapper", 12513.18), "custom_api.json": ("mapper", 677.76),
+}
+
+
+@pytest.mark.parametrize("name", sorted(EXPECTED))
+def test_samples_parse_without_llm(make_pipe, name):
+    r = make_pipe().parse_file(FILES / name)
+    route, total = EXPECTED[name]
+    assert r["status"] in ("reconciled", "unreconciled"), r["checks"]
+    assert r["spec"]["route"] == route
+    assert r["llm_calls"] == 0
+    if total is not None:
+        assert r["analysis"]["total_billed"] == pytest.approx(total, abs=0.01)
+
+
+def test_reseller_pdf_layout_details(make_pipe):
+    pipe = make_pipe()
+    r = pipe.parse_file(FILES / "reseller_invoice.pdf")
+    rows = pipe.store.get_rows(r["sha256"])
+    assert r["status"] == "reconciled" and len(rows) == 38           # spans two pages
+    wrapped = rows[rows["description"].str.contains("pay-as-you-go", na=False)]
+    assert len(wrapped) == 1                                          # continuation line merged
+    assert set(rows["provider"].dropna()) == {"aws", "azure"}         # group headers became provider
+    assert r["header_fields"] == {} or isinstance(r["header_fields"], dict)
+
+
+def test_cached_second_upload(make_pipe):
+    pipe = make_pipe()
+    pipe.parse_file(FILES / "messy_report.csv")
+    assert pipe.parse_file(FILES / "messy_report.csv").get("cached") is True
+
+
+def test_cost_explorer_unpivot(make_pipe):
+    pipe = make_pipe()
+    r = pipe.parse_file(FILES / "aws_cost_explorer.csv")
+    rows = pipe.store.get_rows(r["sha256"])
+    assert len(rows) == 24 and r["status"] == "reconciled"
+    assert "Total costs" not in " ".join(rows["service_raw"].astype(str))
+
+
+# ---------------------------------------------------------------- LLM routes
+def test_llm_spec_with_repair_loop(make_pipe, tmp_path):
+    bad_transform = {**GERMAN_SPEC, "columns": {**GERMAN_SPEC["columns"],
+                                                 "billed_cost": {"from": ["Betrag"], "t": ["parse_euro"]}}}
+    no_label = {**GERMAN_SPEC, "columns": {"billed_cost": {"from": ["Betrag"]}}}
+    llm = FakeLLM([bad_transform, no_label, GERMAN_SPEC])
+    pipe = make_pipe(llm)
+    f = tmp_path / "de.xlsx"
+    german_xlsx(f)
+    r = pipe.parse_file(f)
+    assert r["status"] == "reconciled", r["checks"]
+    assert r["spec"]["route"] == "llm_spec" and r["llm_calls"] == 3
+    assert r["analysis"]["total_billed"] == pytest.approx(276.48 + 363.60 + 540.68 + 44.54, abs=0.01)
+    # repair prompts carried the validator feedback
+    assert "Unknown transform" in llm.calls[1][1] and "labels" in llm.calls[2][1]
+
+
+def test_learned_spec_reused_without_llm(make_pipe, tmp_path):
+    llm = FakeLLM([GERMAN_SPEC])
+    pipe = make_pipe(llm)
+    a, b = tmp_path / "sep.xlsx", tmp_path / "oct.xlsx"
+    german_xlsx(a)
+    german_xlsx(b, month="Oktober 2026", scale=1.1)
+    pipe.parse_file(a)
+    r = pipe.parse_file(b)
+    assert r["spec"]["route"] == "learned" and r["llm_calls"] == 0
+    assert r["status"] == "reconciled"
+
+
+def test_extract_then_derive(make_pipe, tmp_path):
+    f = tmp_path / "de.xlsx"
+    german_xlsx(f)
+    rows = [{"service_raw": "Virtual Machines D4s v5", "billed_cost": 276.48},
+            {"service_raw": "Azure SQL Database", "billed_cost": 363.60},
+            {"service_raw": "Storage Premium SSD", "billed_cost": 540.68},
+            {"service_raw": "Bandwidth", "billed_cost": 44.54}]
+    llm = FakeLLM(["not json", "still not json", "{}"], extract_response={"rows": rows, "total": 1225.30})
+    pipe = make_pipe(llm)
+    r = pipe.parse_file(f)
+    assert r["spec"]["route"] == "llm_extract_derived", r["attempts"]
+    assert r["analysis"]["total_billed"] == pytest.approx(1225.30, abs=0.01)
+    # the derived spec is deterministic: the next file in this layout needs no LLM
+    g = tmp_path / "de2.xlsx"
+    german_xlsx(g, scale=1.2)
+    r2 = pipe.parse_file(g)
+    assert r2["spec"]["route"] == "learned" and r2["llm_calls"] == 0
+
+
+# ---------------------------------------------------------------- nightly learning loop
+def _seed_layout(make_pipe, tmp_path):
+    pipe = make_pipe(FakeLLM([GERMAN_SPEC]))
+    for i, scale in enumerate((1.0, 1.1)):
+        f = tmp_path / f"m{i}.xlsx"
+        german_xlsx(f, scale=scale)
+        pipe.parse_file(f)
+    spec_id = pipe.store.learned_specs()[0]["id"]
+    # the reseller renames a column; the learned spec now misses it and no LLM is available by day
+    changed = tmp_path / "changed.xlsx"
+    german_xlsx(changed, amount_header="Betrag (EUR)", scale=1.3)
+    day = make_pipe(None)
+    r = day.parse_file(changed)
+    assert r["status"] == "needs_review"
+    return spec_id, changed
+
+
+def test_nightly_repairs_spec_and_passes_gate(make_pipe, tmp_path):
+    spec_id, changed = _seed_layout(make_pipe, tmp_path)
+    fixed = {**GERMAN_SPEC, "detect": {"required": ["Leistung"]},
+             "columns": {**GERMAN_SPEC["columns"], "billed_cost": {"from": ["Betrag (EUR)", "Betrag"]}}}
+    night = make_pipe(FakeLLM([fixed]))
+    report = run_nightly(night)
+    repair = report["repairs"][0]
+    assert repair["result"].startswith("promoted v2"), repair
+    assert repair["gate"]["checked"] == 2 and repair["gate"]["passed"]
+    assert report["review"][0]["now"] == "reconciled"
+    assert not [r for r in night.store.read("review") if r.get("open")]
+
+
+def test_regression_gate_rejects_breaking_fix(make_pipe, tmp_path):
+    spec_id, _ = _seed_layout(make_pipe, tmp_path)
+    breaking = {**GERMAN_SPEC, "detect": {"required": ["Leistung"]},
+                "columns": {**GERMAN_SPEC["columns"], "billed_cost": {"from": ["Betrag (EUR)"]}}}
+    night = make_pipe(FakeLLM([breaking]))
+    report = run_nightly(night)
+    assert report["repairs"][0]["result"] == "rejected by regression gate"
+    assert night.store.versions(spec_id) == [1]
+
+
+def test_candidate_promoted_after_clean_files(make_pipe, tmp_path):
+    pipe = make_pipe(FakeLLM([GERMAN_SPEC]))
+    for i in range(3):
+        f = tmp_path / f"p{i}.xlsx"
+        german_xlsx(f, scale=1 + i / 10)
+        pipe.parse_file(f)
+    report = run_nightly(pipe)
+    assert report["promotions"] and report["promotions"][0]["promoted_to"] == "verified"
+    spec = pipe.store.learned_specs()[0]
+    assert spec["trust"] == "verified"
+    assert regression_gate(pipe, spec, spec["id"])["passed"]
+
+
+# ---------------------------------------------------------------- safety and units
+def test_spec_safety():
+    with pytest.raises(SpecError):
+        check_spec({"columns": {"billed_cost": {"from": ["x"]}}, "exec": "rm -rf /"})
+    with pytest.raises(Exception):
+        check_spec({"columns": {"billed_cost": {"from": ["x"]}}, "derive": {"list_cost": "__import__('os')"}})
+    with pytest.raises(SpecError):
+        check_spec({"columns": {"made_up_field": {"from": ["x"]}}})
+
+
+@pytest.mark.parametrize("raw,val", [("$1,234.50", 1234.5), ("(12.00)", -12.0), ("12.00-", -12.0),
+                                     ("1.234,56 €", 1234.56), ("276,48 €", 276.48), ("1,234", 1234.0),
+                                     ("", None), ("n/a", None), (7, 7.0)])
+def test_parse_number(raw, val):
+    assert parse_number(raw) == val
+
+
+def test_redaction():
+    text = redact("acct 123456789012 sub /subscriptions/aaaa-bbbb/rg ops@contoso.com")
+    assert "123456789012" not in text and "contoso.com" not in text and "/subscriptions/" not in text
+
+
+def test_api(make_pipe, tmp_path, monkeypatch):
+    from fastapi.testclient import TestClient
+    import billparse.api as api
+    monkeypatch.setattr(api, "pipe", make_pipe())
+    client = TestClient(api.app)
+    with open(FILES / "summary_invoice.pdf", "rb") as fh:
+        r = client.post("/parse", files={"file": ("summary_invoice.pdf", fh, "application/pdf")})
+    assert r.status_code == 200 and r.json()["status"] == "reconciled"
+    sha = r.json()["sha256"]
+    assert client.get(f"/results/{sha}/rows").status_code == 200
+    assert client.get("/specs").status_code == 200

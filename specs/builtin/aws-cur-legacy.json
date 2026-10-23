@@ -1,0 +1,99 @@
+{
+ "id": "aws-cur-legacy",
+ "version": 1,
+ "trust": "builtin",
+ "detect": {
+  "required": [
+   "lineItem/UnblendedCost",
+   "lineItem/ProductCode"
+  ]
+ },
+ "meta": {
+  "provider": "aws",
+  "kind": "cost_lines",
+  "cost_basis": "billed",
+  "format": "AWS legacy CUR (CSV column style)"
+ },
+ "columns": {
+  "product_code": {
+   "from": [
+    "lineItem/ProductCode",
+    "product/servicecode"
+   ]
+  },
+  "service_raw": {
+   "from": [
+    "product/ProductName",
+    "lineItem/ProductCode"
+   ]
+  },
+  "description": {
+   "from": [
+    "lineItem/LineItemDescription",
+    "lineItem/UsageType"
+   ]
+  },
+  "billed_cost": {
+   "from": [
+    "lineItem/UnblendedCost"
+   ]
+  },
+  "list_cost": {
+   "from": [
+    "pricing/publicOnDemandCost"
+   ]
+  },
+  "quantity": {
+   "from": [
+    "lineItem/UsageAmount"
+   ]
+  },
+  "unit": {
+   "from": [
+    "pricing/unit"
+   ]
+  },
+  "unit_price": {
+   "from": [
+    "lineItem/UnblendedRate"
+   ]
+  },
+  "charge_start": {
+   "from": [
+    "lineItem/UsageStartDate"
+   ]
+  },
+  "charge_end": {
+   "from": [
+    "lineItem/UsageEndDate"
+   ]
+  },
+  "region": {
+   "from": [
+    "product/regionCode",
+    "product/region",
+    "product/location"
+   ]
+  },
+  "account_id": {
+   "from": [
+    "lineItem/UsageAccountId"
+   ]
+  },
+  "currency": {
+   "from": [
+    "lineItem/CurrencyCode"
+   ]
+  },
+  "charge_type": {
+   "from": [
+    "lineItem/LineItemType"
+   ]
+  },
+  "invoice_id": {
+   "from": [
+    "bill/InvoiceId"
+   ]
+  }
+ }
+}

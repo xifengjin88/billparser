@@ -1,0 +1,96 @@
+{
+ "id": "azure-pc-daily-rated-usage",
+ "version": 1,
+ "trust": "builtin",
+ "detect": {
+  "required": [
+   "BillingPreTaxTotal",
+   "MeterCategory",
+   "EntitlementId"
+  ]
+ },
+ "meta": {
+  "provider": "azure",
+  "kind": "cost_lines",
+  "cost_basis": "billed",
+  "format": "Partner Center new commerce daily rated usage",
+  "notes": "Excludes reservations, savings plans and license products; totals will understate full spend."
+ },
+ "columns": {
+  "service_raw": {
+   "from": [
+    "MeterCategory"
+   ]
+  },
+  "product_code": {
+   "from": [
+    "ProductId"
+   ]
+  },
+  "description": {
+   "from": [
+    "MeterName"
+   ]
+  },
+  "billed_cost": {
+   "from": [
+    "BillingPreTaxTotal"
+   ]
+  },
+  "quantity": {
+   "from": [
+    "Quantity"
+   ]
+  },
+  "unit": {
+   "from": [
+    "Unit",
+    "UnitType"
+   ]
+  },
+  "unit_price": {
+   "from": [
+    "EffectiveUnitPrice",
+    "UnitPrice"
+   ]
+  },
+  "charge_start": {
+   "from": [
+    "UsageDate",
+    "ChargeStartDate"
+   ]
+  },
+  "charge_end": {
+   "from": [
+    "ChargeEndDate"
+   ]
+  },
+  "region": {
+   "from": [
+    "ResourceLocation",
+    "MeterRegion"
+   ]
+  },
+  "account_id": {
+   "from": [
+    "EntitlementId",
+    "SubscriptionId"
+   ]
+  },
+  "account_name": {
+   "from": [
+    "CustomerName"
+   ]
+  },
+  "currency": {
+   "from": [
+    "BillingCurrency"
+   ]
+  },
+  "charge_type": {
+   "from": [
+    "ChargeType"
+   ]
+  }
+ }
+}

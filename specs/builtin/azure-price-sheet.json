@@ -1,0 +1,45 @@
+{
+ "id": "azure-price-sheet",
+ "version": 1,
+ "trust": "builtin",
+ "detect": {
+  "required": [
+   "MeterId",
+   "UnitPrice",
+   "UnitOfMeasure"
+  ],
+  "forbid": [
+   "Quantity",
+   "CostInBillingCurrency",
+   "Cost"
+  ]
+ },
+ "meta": {
+  "provider": "azure",
+  "kind": "price_sheet",
+  "format": "Azure price sheet export"
+ },
+ "columns": {
+  "service_raw": {
+   "from": [
+    "MeterCategory"
+   ]
+  },
+  "product_code": {
+   "from": [
+    "ProductId",
+    "PartNumber"
+   ]
+  },
+  "unit_price": {
+   "from": [
+    "UnitPrice"
+   ]
+  },
+  "unit": {
+   "from": [
+    "UnitOfMeasure"
+   ]
+  }
+ }
+}

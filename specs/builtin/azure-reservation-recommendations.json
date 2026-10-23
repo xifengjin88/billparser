@@ -1,0 +1,33 @@
+{
+ "id": "azure-reservation-recommendations",
+ "version": 1,
+ "trust": "builtin",
+ "detect": {
+  "required": [
+   "RecommendedQuantity"
+  ],
+  "any_of": [
+   [
+    "NetSavings"
+   ]
+  ]
+ },
+ "meta": {
+  "provider": "azure",
+  "kind": "recommendations",
+  "format": "Azure reservation recommendations export"
+ },
+ "columns": {
+  "description": {
+   "from": [
+    "SkuName",
+    "NormalizedSize"
+   ]
+  },
+  "quantity": {
+   "from": [
+    "RecommendedQuantity"
+   ]
+  }
+ }
+}

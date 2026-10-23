@@ -1,0 +1,118 @@
+{
+ "id": "gcp-billing-export",
+ "version": 1,
+ "trust": "builtin",
+ "detect": {
+  "any_of": [
+   [
+    "service.description",
+    "service_description"
+   ],
+   [
+    "usage_start_time",
+    "invoice.month",
+    "usage_start_time"
+   ]
+  ],
+  "required": [
+   "cost"
+  ]
+ },
+ "meta": {
+  "provider": "gcp",
+  "kind": "cost_lines",
+  "cost_basis": "billed",
+  "format": "GCP BigQuery standard or detailed usage cost export (CSV or JSON)"
+ },
+ "columns": {
+  "service_raw": {
+   "from": [
+    "service.description",
+    "service_description"
+   ]
+  },
+  "product_code": {
+   "from": [
+    "service.id",
+    "service_id"
+   ]
+  },
+  "description": {
+   "from": [
+    "sku.description",
+    "sku_description"
+   ]
+  },
+  "billed_cost": {
+   "from": [
+    "cost"
+   ]
+  },
+  "credits": {
+   "from": [
+    "credits"
+   ],
+   "t": [
+    {
+     "json_sum": "amount"
+    }
+   ]
+  },
+  "quantity": {
+   "from": [
+    "usage.amount_in_pricing_units",
+    "usage_amount_in_pricing_units",
+    "usage.amount"
+   ]
+  },
+  "unit": {
+   "from": [
+    "usage.pricing_unit",
+    "usage_pricing_unit",
+    "usage.unit"
+   ]
+  },
+  "charge_start": {
+   "from": [
+    "usage_start_time"
+   ]
+  },
+  "charge_end": {
+   "from": [
+    "usage_end_time"
+   ]
+  },
+  "region": {
+   "from": [
+    "location.region",
+    "location_region",
+    "location.location"
+   ]
+  },
+  "account_id": {
+   "from": [
+    "project.id",
+    "project_id"
+   ]
+  },
+  "account_name": {
+   "from": [
+    "project.name",
+    "project_name"
+   ]
+  },
+  "currency": {
+   "from": [
+    "currency"
+   ]
+  },
+  "charge_type": {
+   "from": [
+    "cost_type"
+   ]
+  }
+ },
+ "derive": {
+  "effective_cost": "billed_cost + fillna(credits, 0)"
+ }
+}

@@ -1,0 +1,117 @@
+{
+ "id": "azure-usage-details",
+ "version": 1,
+ "trust": "builtin",
+ "detect": {
+  "required": [
+   "MeterCategory"
+  ],
+  "any_of": [
+   [
+    "CostInBillingCurrency",
+    "Cost",
+    "PreTaxCost"
+   ],
+   [
+    "Date",
+    "UsageDateTime"
+   ]
+  ],
+  "forbid": [
+   "BillingPreTaxTotal",
+   "Subtotal",
+   "BilledCost"
+  ]
+ },
+ "meta": {
+  "provider": "azure",
+  "kind": "cost_lines",
+  "cost_basis": "billed",
+  "format": "Azure cost and usage details: EA, MCA, MPA, CSP, pay-as-you-go (actual or amortized)"
+ },
+ "columns": {
+  "service_raw": {
+   "from": [
+    "MeterCategory",
+    "ServiceName"
+   ]
+  },
+  "product_code": {
+   "from": [
+    "ProductId",
+    "PartNumber"
+   ]
+  },
+  "description": {
+   "from": [
+    "MeterName",
+    "ProductName",
+    "Product"
+   ]
+  },
+  "billed_cost": {
+   "from": [
+    "CostInBillingCurrency",
+    "Cost",
+    "PreTaxCost"
+   ]
+  },
+  "quantity": {
+   "from": [
+    "Quantity",
+    "UsageQuantity"
+   ]
+  },
+  "unit": {
+   "from": [
+    "UnitOfMeasure"
+   ]
+  },
+  "unit_price": {
+   "from": [
+    "EffectivePrice",
+    "ResourceRate"
+   ]
+  },
+  "charge_start": {
+   "from": [
+    "Date",
+    "UsageDateTime"
+   ]
+  },
+  "region": {
+   "from": [
+    "ResourceLocation",
+    "MeterRegion"
+   ]
+  },
+  "account_id": {
+   "from": [
+    "SubscriptionId",
+    "SubscriptionGuid"
+   ]
+  },
+  "account_name": {
+   "from": [
+    "SubscriptionName"
+   ]
+  },
+  "currency": {
+   "from": [
+    "BillingCurrencyCode",
+    "BillingCurrency",
+    "Currency"
+   ]
+  },
+  "charge_type": {
+   "from": [
+    "ChargeType"
+   ]
+  },
+  "invoice_id": {
+   "from": [
+    "InvoiceId"
+   ]
+  }
+ }
+}
