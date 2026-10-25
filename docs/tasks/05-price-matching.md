@@ -15,7 +15,7 @@ priced.
 
 | Value | Source |
 |---|---|
-| `list_unit_price`, `catalog_sku`, `price_match_level` | price catalog (task 04), as of the line's date |
+| `list_unit_price`, `catalog_sku_id`, `price_match_level` | price catalog (task 04), as of the line's date |
 | `list_cost` when the file printed none | quantity (from the file) × `list_unit_price` (catalog); `origin = "inferred"` |
 | `list_cost` when the file printed one | the file; never overwritten |
 | `implied_unit_price` | `billed_cost / quantity`, or `effective_cost / quantity` when effective is printed (file values) |
@@ -106,7 +106,7 @@ Fields on `schema.Charge`:
 
 - `list_unit_price` already exists from task 02. Fill it from the catalog only when it is empty.
 - `catalog_sku_id` **already exists** on `schema.Charge` and in `export.py`. Fill it with the matched catalog
-  record's SKU or meter, and use the column name `catalog_sku_id` instead of `catalog_sku` in the table above.
+  record's SKU or meter. (The table above uses this name too.)
 - New typed fields: `price_match_level`, `implied_unit_price`, `price_ratio`, `price_missing`, `price_assumptions`.
 
 **Public contract** (`export.py`): add the five new fields to `export.Charge` and to the field list in
