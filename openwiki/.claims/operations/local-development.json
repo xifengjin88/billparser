@@ -1,0 +1,114 @@
+{
+  "schemaVersion": 1,
+  "pageVersion": "sha256:b45238cc9477dea2244a7b38b1ba175402a5647061f188b81142a253c9de218e",
+  "claims": [
+    {
+      "id": "claim_ebd3fc1a9e984fb99a72ebfa5758cf7a",
+      "statement": "The compose stack runs db (PostgreSQL on 127.0.0.1:5434), api (port API_PORT default 8010) and web (port WEB_PORT default 8090), with volumes pgdata and billparse-data.",
+      "evidence": [
+        {
+          "resource": "repo://docker-compose.yml",
+          "version": "repo-file-v1:sha256:f40ffc9e3bbaf2ba5ccebd38fd1f5fe33e2e230851afb8ebdfeaa970adc36f96"
+        }
+      ]
+    },
+    {
+      "id": "claim_764d22c5515a43d0aec881648e01a736",
+      "statement": "The database image is postgres:17.6-alpine and gets its schema from the app's Alembic migrations, not init scripts.",
+      "evidence": [
+        {
+          "resource": "repo://docker/db/Dockerfile",
+          "version": "repo-file-v1:sha256:875cac78580d62c5866c99387b47d4f6a9f7a14d08a57114e59f5312b65db997"
+        }
+      ]
+    },
+    {
+      "id": "claim_5d3490d37f6a4163a2547c9f9372a703",
+      "statement": "The entrypoint copies the raw catalog into CATALOG_DIR once, runs alembic upgrade head for PostgreSQL unless RUN_MIGRATIONS=0, then starts the given command.",
+      "evidence": [
+        {
+          "resource": "repo://docker/entrypoint.sh",
+          "version": "repo-file-v1:sha256:d0d7152f60a2684d7260631933cffe9c50408eb64fb01b6c380e226bcdba4fde"
+        }
+      ]
+    },
+    {
+      "id": "claim_99f23fe50cdd4cce9196f2b73925bede",
+      "statement": "The API image installs dependencies with uv sync --frozen --no-dev on Python 3.13 slim and runs as the billparse user.",
+      "evidence": [
+        {
+          "resource": "repo://Dockerfile",
+          "version": "repo-file-v1:sha256:c5d50fdc8453bb01cb4569e4337da60a1916d95af8196dd893ba984ed10a1f75"
+        }
+      ]
+    },
+    {
+      "id": "claim_cd1034b8272744ad952b3d1008604b89",
+      "statement": "make dev mounts the code, reloads uvicorn on billparse and svcres changes with polling, runs the Vite dev server, and rebuilds on dependency changes.",
+      "evidence": [
+        {
+          "resource": "repo://Makefile#L25-L30",
+          "version": "repo-lines-v1:sha256:50d47e0da0c4b018ea961bb77efe78ecd83f075be7250a91ebe1a82331b1d322:eyJzZWxlY3RlZExpbmVDb3VudCI6NiwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiMzA4ZGMzYjcxOGVmZjg2ZWE0MjM4ZTVkZjMyNmVjMzgyYzdlMjIxOTliN2E1MWRmZmY3NDU3ZDVkMjIzYjJiMSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMDFiYTQ3MTljODBiNmZlOTExYjA5MWE3YzA1MTI0YjY0ZWVlY2U5NjRlMDljMDU4ZWY4Zjk4MDVkYWNhNTQ2YiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiOTQ5NjUzMjU2ZGM3OGMxNGZmOWJlNzM1ZTAyMzkxNWNjZWVkYzI1MWI0NTI0ZTU3MGRlMDdjMjAyZDIxY2Q0MSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiMDYxYmJhOTI5ZmY4OGM3NDJjMmEzZTBkZmQ4M2I0MmI4NWUyYTUyODU0OWVmMDQyNjhkOWE1NDgyNmRmY2MxZiJ9"
+        },
+        {
+          "resource": "repo://docker-compose.dev.yml",
+          "version": "repo-file-v1:sha256:0c222bc5a72cf20bfaf313d1f30da037bf52fac1c36baca1754d06a9a17243ed"
+        }
+      ]
+    },
+    {
+      "id": "claim_6fbcd9cdf9074577a3c614ee0b2b1db4",
+      "statement": "reset-db and destroy ask for yes before deleting data, and backup-db does not include the uploads volume.",
+      "evidence": [
+        {
+          "resource": "repo://Makefile#L66-L81",
+          "version": "repo-lines-v1:sha256:39752fc8d7d121b89da4d63ac28037bedafac8a7cf5923ae81c179c7a784c378:eyJzZWxlY3RlZExpbmVDb3VudCI6MTYsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjRhOTYyNmVkNDI0Mzk2NTk1ZmQxZmE5MDFjYmQ3OWVmNzc4YTY1NTllY2VlYTMyOGVjMTU5Y2U3NGRiMTc5MDUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6Ijc2YjVhMmFmM2EyNTc2MTgxMzU0NmNlMGRkYzk2ZmVmMGJmN2MxYzY0MzEyYmE1NWI3YmM3Y2MwODQxNjNmMWUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImYwYjNkZTZmODBjZTUxZDc0YTAxYmUyZDgzYmJkYTNmNzI5NWE5YWFlYmMzY2YyOGI3MWQ3NjNlMGIxMzgyMzEifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_4c9a8782e7744af2a8ede596e6db1a71",
+      "statement": "Settings are read from the process environment first and then from .env, or the file named by ENV_FILE.",
+      "evidence": [
+        {
+          "resource": "repo://billparse/settings.py#L1-L30",
+          "version": "repo-lines-v1:sha256:4d9cb613691f83cadc22eea2552f6b28d29b56ec37b380e408be08a6abfb9c91:eyJzZWxlY3RlZExpbmVDb3VudCI6MzAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjU3Nzg2YThkY2YzN2QxNDJiYzg2MTJjOTJmYzJkYjQyYTBjNWVkYTEzZmYzOWRjYmI4OWEzYmNlNmEwNjFkYTIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjMzOTVlNWU1MGQ4NDY5ZjkwZDg4ZTVkYTFkZDY3NzcwNDcyZTU0ZGE5NTBiMDI1NGZkODBmODExNTAyZmUwM2MifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_77b45dea888d463ba289c66c64ac1609",
+      "statement": "example.env lists the LLM, agent, storage, server and sign-in variables, with AGENT_ENABLED=0 and AUTH=off by default.",
+      "evidence": [
+        {
+          "resource": "repo://example.env",
+          "version": "repo-file-v1:sha256:bc2d0ea39212090fcaeaeaa96300a00bd59477a94a8502d6e0c57516fd66b280"
+        }
+      ]
+    },
+    {
+      "id": "claim_bb25cc47366f432192abe9b1b40a600f",
+      "statement": "make lint runs Ruff on a fixed list of backend files and oxlint on the web app.",
+      "evidence": [
+        {
+          "resource": "repo://Makefile#L104-L107",
+          "version": "repo-lines-v1:sha256:da8b3e94a3c7512bed78ffa899543266c7024ff994b8fbce21fe83435031f524:eyJzZWxlY3RlZExpbmVDb3VudCI6NCwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiYzZjZTJmYmRkZTdiMGFiNDkyMTk4YTEwNWMyOGMzNTdmNzQyZjY3MjhjZjQzZjI0MzllYjRhMjI1NmU0NzYyNiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiODI3ODVjZGYwZjI2NGM1NmM1YmNhOGI0YTUyMzNhYmU4ODVhOWE4ZGVhZDRmZDk5ZGI0Njc4NzUyN2ZkMjA2OCIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiY2I3ZjVlN2U2NDAzZDA1MzZjYmZhNzlmOGE0YTVjMzkwOWZmNTYwMjVjNzYyYjA2N2ZjZDhiNzNiNDgwMWZkYyIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiMzBhYWM2YWQ2MmE3Y2Y5YTM2YzA3MTZhNzM2YWJmNTgxZjUzYTg4NTljNzI2NThmOGI1Zjc1NWVhOWY1YTU1NCJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_83f1aa45d28b4cb0b93895fefbab1b5a",
+      "statement": "refresh_catalog.sh fetches GCP services only when GCP_API_KEY is set and keeps the old catalog when the new one has under 90% of its codes.",
+      "evidence": [
+        {
+          "resource": "repo://scripts/refresh_catalog.sh",
+          "version": "repo-file-v1:sha256:9c2b5322ff238860f7844970e48dda798b5e729fb37fb612e82decda01c37f02"
+        }
+      ]
+    }
+  ],
+  "verification": {
+    "by": "openwiki/0.7.2",
+    "at": "2026-10-25T20:19:27.415Z"
+  }
+}

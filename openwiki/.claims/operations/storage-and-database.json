@@ -1,0 +1,128 @@
+{
+  "schemaVersion": 1,
+  "pageVersion": "sha256:f69d205dee824332ea90d198796adea4b226c0c585df1969ac3cca005e014e5d",
+  "claims": [
+    {
+      "id": "claim_478c557084444d5f94e5dfb9d755b138",
+      "statement": "DATABASE_URL selects the database; without it a SQLite file billparse.db in the data directory is used.",
+      "evidence": [
+        {
+          "resource": "repo://billparse/db.py#L135-L137",
+          "version": "repo-lines-v1:sha256:68ab386f2ac0edb58b0897088182d66a9913b98f6f4b4e86a7639690f289fc3b:eyJzZWxlY3RlZExpbmVDb3VudCI6MywiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiZGYzMGNlNmE0MTYxZTkxMDBhZmVjZTI0YmM5OTcyOTFhMDc1MDdjYWVhNWE0ODU1YThiZjRlZjFjZThjY2VlMSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMDFiYTQ3MTljODBiNmZlOTExYjA5MWE3YzA1MTI0YjY0ZWVlY2U5NjRlMDljMDU4ZWY4Zjk4MDVkYWNhNTQ2YiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiYTE1MzI3ZDZhYjQ1N2E5N2VkYTUwN2QxZTNhNDgzYmQ0MTExZTAwYmYyYzY2OGFlYjlkOTAyMDEyZDg0ZDYyZSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiMjcxNzdjZDcyZjY2YTI3ZmUzOTRlYjQ5ZTFjNjBjYTNmMzM4ZDQ0NDRkMTBjYzRiODZjOWVmNWRiNTgxMjgyOSJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_edd85da07e454d9584322780a39801f8",
+      "statement": "SQLite tables are created with create_all on first use, while PostgreSQL gets its schema only from the Alembic migrations.",
+      "evidence": [
+        {
+          "resource": "repo://billparse/db.py#L140-L147",
+          "version": "repo-lines-v1:sha256:34006a5e38e9a6810938c4d300ee3afe1193dad4f939956ee43ad2b2e7b58882:eyJzZWxlY3RlZExpbmVDb3VudCI6OCwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiNzg3ZGZkMzRhMDk1ZDAzZmM0YjE1YTgxMzRjMmYwOTMzODM5ZjAxMDJjODRiYmViODMzNDUzZmE1M2U1MWJjNCIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMTBmMTc2OGY2OWMzODVlNjI0Yjk5ZmVmYWFkMjYwMjlkMjc5MjU0NmJjZTVlMWNiMTUwMGVhOTY0ZmYzYzI4NyIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiNDAzMTViNTg1M2RlZmU0N2MyOGI3N2FlN2I5YjA1NWQzZTZkOGY3NWU4YjYyNGE3ZGY1NjUwNDE4NzhjOGE5NiIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjAsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiZTNiMGM0NDI5OGZjMWMxNDlhZmJmNGM4OTk2ZmI5MjQyN2FlNDFlNDY0OWI5MzRjYTQ5NTk5MWI3ODUyYjg1NSJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_6a8123a45c1d449f9de7a4bb88f0bb61",
+      "statement": "Every version of a learned spec is kept in spec_version and never overwritten; spec records the current version; built-in specs are files, never rows.",
+      "evidence": [
+        {
+          "resource": "repo://billparse/db.py#L53-L69",
+          "version": "repo-lines-v1:sha256:9de8705aa5408887d994dbcf4ccc28436d7a29a24074157e9c9a9cf462f89f69:eyJzZWxlY3RlZExpbmVDb3VudCI6MTcsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImJjOGMzODZiNDJmNjkzZmZhYjdlY2Y5ZjUxNDdjZjU4MDA2MzFlZjFmYzJmZDkwOTYzYTkyN2Q0MWY3MjlmMDAiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjQ1NzEzY2E3NzhhMTNhNTgwMWE1ODdlN2M3MmQ4ZTRhYWViODFkMGUxZjE2NzVmMzU0NzBhMWNjYTAyMGQyMDMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImEyYTBlNWE1NDBlZTg0MTE1ZGRlNWQ2MTBkNmEzMjA2Yjc3MGI3OGY4N2RmZjI3MzYyZDUyNjk3ODQ0YzllOTIifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_7b84d1987df141a5beb692cc0674b688",
+      "statement": "spec_doc records each file a spec was accepted on with rows, total and confidence: the spec's regression set; spec_fingerprint records the layouts a spec parsed.",
+      "evidence": [
+        {
+          "resource": "repo://billparse/db.py#L72-L88",
+          "version": "repo-lines-v1:sha256:bb10a0b8ae9d4f3b7c4ed46d29eb6d272f1d8f48194c3bed7a85717c92a1607a:eyJzZWxlY3RlZExpbmVDb3VudCI6MTcsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImJkMTdmMWQ0OGRmZGVjNWFhZDMzNDMzMDM3ZDhkYWYyNWI3NWQxNDlhY2ZiNmU5ZTMxNjJmYjIwZjE0ZDNlNWMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6Ijk2YTYyZWI2YmY1ZGRjMjNhODhiODNmNTNmNTQyYmU2ZDZlODk2OWJmMzFkNjVhYzc0YzY3NTMwNzEzM2FiYzMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImY3ZTdiNzE4MGI1MGQ4ZTQ3ZjE4ZDNlMjk5MDZmMzMzMGYyYzNjMGI0NmJhMDY4MmJjMWY0NGUzNzA0Mzk3ZTIifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_13a70128e40f4ad99dde53483a7c6d06",
+      "statement": "The journal table is an append-only log with a stream name, sha256, timestamp and JSON data.",
+      "evidence": [
+        {
+          "resource": "repo://billparse/db.py#L90-L99",
+          "version": "repo-lines-v1:sha256:7c61dd735b379da2481ce0f09ed8ea4520821183b6fe8d87f62ce60d19583a4c:eyJzZWxlY3RlZExpbmVDb3VudCI6MTAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImNiZDRiOWMzZTJkNzAwYmQ2OTYzOGMxNTVhYjllOGJkODkwZGY4ZmU0YzA0MjBiOTUxY2QxYTAzZGVlZWI1MDYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjBkNTY5NzUzNTAzNzA3ZjBkN2U2YzlkNDIzYzVlNWY1ZDAyZDBjZTcyMDA4YmMxYjU0NDZkYzU5NTc1MTZiYmUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjQ2MDIyMTdhN2RiYzkzZmY4MmQ0Nzc2MGQzM2Q3MmQyMGI0NWMxNWQ5ZDRkYWU3Y2FjMDJlMzdkNGE2ZDIzMjgifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_9e51fcf43e314d45808609f91735bf76",
+      "statement": "Parse runs are stored as journal entries in the runs stream.",
+      "evidence": [
+        {
+          "resource": "repo://billparse/store.py#L265-L270",
+          "version": "repo-lines-v1:sha256:ccab06ea836acec1e4ac3c440c4746da7a298a9ce24029dcad5a0807d2a057b9:eyJzZWxlY3RlZExpbmVDb3VudCI6NiwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiY2FkMDk2Y2FjMDQ1OTEwNzRmMTAwZGNjZWFmODA2NGI3NDFjNjc3NDQyODAzM2E0YzA2NjZjZjc2MWNlZTdjOCIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiYWZjZTUxZDE2MWI0Njk1MzhlZTI0MTZhMGEwMDU1YjUwY2U3NmI0MThmMWI4NDg1ZWY4NTBlMjUxMjA2ZDVmZCIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiYzk4ZWU1NGQ3ZTRiNzg1MTVkYjNmMTM1YzNjYTU0NjZhNzA3ODUzMmJhYTZmZGQwMmFkNGE5NTBlZDY1OTZhMSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiNWM0NjlkYjM0N2U0OTYxZDkzOWViNzZhYmJjYmUxYWYzZThhZjkzMjQ5YmFkYTBmYzRlOWRmMjU2YWIyNmZhMCJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_9a066643a7dd47f9a89ed0c275cb8abb",
+      "statement": "JSON columns are jsonb on PostgreSQL and JSON text on SQLite, and jsonable turns NaN and infinity into null.",
+      "evidence": [
+        {
+          "resource": "repo://billparse/db.py#L23-L23",
+          "version": "repo-lines-v1:sha256:64e4df8cf249348233a0c6425c35cc7d6de149f383fff165a5a1d72c3b46ad77:eyJzZWxlY3RlZExpbmVDb3VudCI6MSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiNjRlNGRmOGNmMjQ5MzQ4MjMzYTBjNjQyNWMzNWNjN2Q2ZGUxNDlmMzgzZmZmMTY1YTVhMWQ3MmMzYjQ2YWQ3NyIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNjRlNGRmOGNmMjQ5MzQ4MjMzYTBjNjQyNWMzNWNjN2Q2ZGUxNDlmMzgzZmZmMTY1YTVhMWQ3MmMzYjQ2YWQ3NyIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiY2QxMDA4MTg1ZjI1NjRkMmRjNGRkNGY2Y2ZkYWQ3OGI0YmYzNWM5NmI4NmE2MzFhY2NhMTA4OGYxOTlhZTgxNSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiZGQyNGI5N2JmNGJlMDVkODBmY2NiNWNhNmRmMmM1MmZjZWU0Yzg3YzRjODdlZmZiNTU3ODA0YjdmOGU4NzZlYiJ9"
+        },
+        {
+          "resource": "repo://billparse/store.py#L47-L57",
+          "version": "repo-lines-v1:sha256:4f2ecfc970cc3544a6424f7aa2646803eb59158754457b972d36acd694293119:eyJzZWxlY3RlZExpbmVDb3VudCI6MTEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImYxZTQzMzQ0NjJjMGY5YjY4NmNiMjE4NDJlOWEwMTc2M2FiYjE4MGY1MTZhZmY0OTg0Y2FlMTQ1MWFkMmQzOTgiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImQyMDJlNzRjZDcwNWY5YWRhMzYwMzg1NDE1ZmYwZjdhMWNjMzBiYTIzMjc3ZTEwMzA4YjRlYzUzNGUyODRlZTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjNmOWQ4Yzc5ZWMyZDI1N2Q3ZGYzY2FmMzg1NWE5NGMzNWQ2MTE1NmYyM2FlNDUzZDgxZWM0MTc5MjBkOTYxZGIiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6Ijc1Y2JlNDUxODIyZDZhNDMzY2M5YWZmZDAwMmFhNzE3ZTljNmM1NWZiMGZkYjNiYTI5YzkxYjFlOTZiNWU4YmEifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_a66ef83afeef49bebc6156330a4941ed",
+      "statement": "Large parts are files under the data directory: uploads in docs, Parquet rows in results, contract parts in parts.",
+      "evidence": [
+        {
+          "resource": "repo://billparse/store.py#L1-L16",
+          "version": "repo-lines-v1:sha256:113c01b69f95e711cada6dbb438dba163d9f6bf583c1cf7e5f5432091ff37793:eyJzZWxlY3RlZExpbmVDb3VudCI6MTYsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImNmODRkNDJkMzM5NzI2OGYyNDZiMGE4YmM5YmNiMjhjYjkzNGI0OGI5ZGExYTU5NWRkYmE3MjU0MTY4YWNiODIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImEzMDNlY2RkNGE0ZDEwZjE5YzczZmQ0MmZkMTI0MzdmZDMzNTRhODI2ODE2MDVkYTUyNTVhOTdhMzkwNjhkYmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjU1YjZlODcwNmI0MzA0N2YyYTZkYjY3ZjEzMjYzODU5NTYwNGU2N2YzNjk2Njg3NmNlMDE1OGYwMDUzZTZiZDEifQ"
+        },
+        {
+          "resource": "repo://billparse/store.py#L60-L66",
+          "version": "repo-lines-v1:sha256:5107e390fc23119ddf11b4a1dc9217ada1d94afdc6ae9b725b11c4c2e283a98a:eyJzZWxlY3RlZExpbmVDb3VudCI6NywiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiNjIzYTYwMTI1YjZkYmUxZDMwMGViMjA2ODMzNTM2NGYzZTk4MWQ5YjY4YmE3NGEyNzYwMjJjMDllNDE4NjM5ZiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiN2U4MjE2YjY3NzYzNDlmMjk4YzcyNjRiNDRmMjZhYjFkZTcwMzY5ZWM5MTRlNGJhZjY4NWFiMmMyMjI2YzQ4ZSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiMjk1NGNkMDZhMjJmOGY4NTgxNWFmM2YzYzJkOTFkMWQ4NmJhMjAyYjIxNzcwNjRjNDk0ZTdkOTUxMWU1Y2FmOCIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiZDVkODFhNmRhM2NlZGVhMWVjODg4NmY2ZDcxYzI5OTg0Y2IyNjk1NzczMDhhNjA5OGIzZjBkMDQzYjg1ZjBiNyJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_06144efc641a4197989cadd78cf482d6",
+      "statement": "Each Store method opens its own short session with expire_on_commit false.",
+      "evidence": [
+        {
+          "resource": "repo://billparse/store.py#L70-L73",
+          "version": "repo-lines-v1:sha256:0606a7a7508eb7123d7cb06f4fa49c1612345d7d66168c6f4ec4123c9df44583:eyJzZWxlY3RlZExpbmVDb3VudCI6NCwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiYjU2N2VhNzE1MzlmYTA5NGFiY2U2ZTcxZTdkYWVhOWVmNDIxODliZDdmYTkyMTE5NmI3ZWViMWQzNjhiZDkzYyIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiYmUzMGIyMmUxY2NhM2NlMGMyZjU0MzAyNGQwOTEyYjZmYzhmMTUzMTJiYjA1ZDNkNmM2MGYxNGUwMWIyNjBhZCIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiZDVkODFhNmRhM2NlZGVhMWVjODg4NmY2ZDcxYzI5OTg0Y2IyNjk1NzczMDhhNjA5OGIzZjBkMDQzYjg1ZjBiNyIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiYWQ5ODg3YTdlMjFlMjUyNjE4ZDlmMmQ1YmZhMWY0MjRlZGI4NDUyODkyYTM1N2Q4NTBiNzNiODUyMDQxOTc2NiJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_1ce133a9c3ea49a09ba9c83bf1226744",
+      "statement": "delete_document removes the result, rows, journal entries and upload but keeps specs and their regression links.",
+      "evidence": [
+        {
+          "resource": "repo://billparse/store.py#L242-L252",
+          "version": "repo-lines-v1:sha256:3ebb07076385fa90f10de5ba3ae156771985d1db73a7dea99b4d425e1d22ee32:eyJzZWxlY3RlZExpbmVDb3VudCI6MTEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImNmOWUzZDYxNTNlMDc0ZTJlMzk4MDA0MTA4NGFhNGEzZGY5MjU2ZTlkYjY5ZGM2YzMwYzc0MjcyOTY3MGI4OTYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjYwMmRiZjM5YzIyMzY4NDVkM2YyNGQ2Y2M0NjYxNTU3MTU1NWJjNjgxY2IzZTE1YWI4NGU1MzgxNTJiNDFkZTYiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjY3NTBkMmNiZjVmNjFhYjE2ZTRhMDFmMTI1ZTg0NWU5NmE5NTA4YzI0NWNkZDM1Y2RlMTIyODY0NjcxYmVkMGIiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjQyODljNWEwYmRjM2ExZDY2MjIwOGYzYTFlMjRlMmE5MDQzNjVlMWM4ZjU5NjNmYzlmNGRmZmI4OTcxNzE4ODYifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_16b967586e1c4651831a414bab30c6a4",
+      "statement": "The Alembic environment uses alembic.ini or DATABASE_URL for the URL, the SQLModel tables as target metadata, and batch mode on SQLite.",
+      "evidence": [
+        {
+          "resource": "repo://migrations/env.py#L1-L40",
+          "version": "repo-lines-v1:sha256:2f166612ba923b5210792134d2c7350bc884c08c547c23adefc1aa02c682c276:eyJzZWxlY3RlZExpbmVDb3VudCI6NDAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImYxNTAxYTg3M2Y1MWJhYjAzMjhkMjQzMjdkZTkwMjI5YzU0ODBmMWE0ZDJhMzFjY2Y5YmY4ZjlmMDU3ZTQ3NjciLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjM4MmE4NzZjZjljNDcyODk4MGU4YTVmNjFlYjRiNGUzNTBjMDc1ZDYyYWM2ODRmZTllMjQyZDM3ZmNjNThiMGEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjoxLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjAzNTE2NzIwYTU2MjU5YWMxNTIzMGY0NzI4YWM1M2JkNzkwYWYzMzdkYTQxM2IxYzQ1YmVlNjk0YzU2MzAyMjkifQ"
+        }
+      ]
+    }
+  ],
+  "verification": {
+    "by": "openwiki/0.7.2",
+    "at": "2026-10-25T20:19:27.415Z"
+  }
+}

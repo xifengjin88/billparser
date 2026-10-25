@@ -1,0 +1,98 @@
+{
+  "schemaVersion": 1,
+  "pageVersion": "sha256:a62fb27dcdce2129bb253978f001edefb8e3304a2b151daa4cde6288e26478a7",
+  "claims": [
+    {
+      "id": "claim_04e43c4213cd4eddb1fbf6d7a5fac924",
+      "statement": "Tests never read the developer's .env: ENV_FILE points to a missing file before settings load, and DATABASE_URL and AUTH are removed so tests use SQLite with sign-in off.",
+      "evidence": [
+        {
+          "resource": "repo://tests/conftest.py",
+          "version": "repo-file-v1:sha256:a71cf49242239c15b170bde55ecead7bb8dbb432bd1ded03a50a99c68610a677"
+        }
+      ]
+    },
+    {
+      "id": "claim_8f8212cefb46439dac9af4bc151ca631",
+      "statement": "The pipeline tests use a FakeLLM that records prompts and returns queued spec responses or a fixed extraction.",
+      "evidence": [
+        {
+          "resource": "repo://tests/test_pipeline.py#L34-L48",
+          "version": "repo-lines-v1:sha256:8a6eea2a156c3c22c81da87f7bf86e94449be868302ac2a376fa14f02db30754:eyJzZWxlY3RlZExpbmVDb3VudCI6MTUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImZlOWNkMDNjNjRlYmMyZTUxYmQ1YzkzN2UzYWRlZDc2YTgwZDkyMGQ0MmRmYjk1OTdlNDhjMjc2ZjRmNTJkYTciLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImIwZWIxN2NjNDNjMmVhNDZkMmZmYjQxOWI0OGEwMGQwOWM0Y2FiYjJiOTBkNzA5NjhhMjhhYzgwZTEyMDhhM2EiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjkwM2UzMmIxYjMzODMwNDNjYTc3YThjMzIwN2IwYmNiZjlkY2Y4MzBjNTNkNmU0NjgxYzEyNTM3NGE0ODAwZjcifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_33757b5bd54b426b814d2fd0bc9a8cc5",
+      "statement": "EXPECTED maps each sample to the route that must read it and its total, and every sample must parse as reconciled or unreconciled with no LLM call.",
+      "evidence": [
+        {
+          "resource": "repo://tests/test_pipeline.py#L64-L82",
+          "version": "repo-lines-v1:sha256:e98663037cb6d0858785ff0ee3ad2dfeddf9de912a9c15a027e5d7ce72e979cb:eyJzZWxlY3RlZExpbmVDb3VudCI6MTksImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImE3MTY1MmQ4ZTc4MThlMzI0ZDVkZDIzODkzNzAxODE4ZDgyMTkyZjAzNDc5MzEzNGI4MGY3YmUwMTRlZTdiMzIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijk4YTUxYjYzZjk1ODRhNTcwM2E3NzM5MmQ1MDkwMjQ3ZTcwN2EzMTNlN2I1YzM1OTQzY2Y3YTRkYTFjZmRiOWIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImRjNzQyMmEzYTQwNjdkNGU2NTZiYWU4ZDdjNDUwMDY2YWNhOGQ0MDJiMWViZGNlMjJjNzI3ZjEwZTk5Y2U5OTgiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImZmODRlN2QyMWYxMGUxNGM5NTY1YWNlNzhjYWU1ZGRmYmIxOWVkYjI2YjU5ODM3NDEyNTMyZjA2YTNiOTU3ZDQifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_61ec7ed3d4c0412c983d982b5786813d",
+      "statement": "The agent tests drive the agent with a FakeLLM that plays scripted tool-use turns.",
+      "evidence": [
+        {
+          "resource": "repo://tests/test_agent.py#L39-L51",
+          "version": "repo-lines-v1:sha256:0a5707b574633afbcf6470bea779b3572ee21f0bd3dad179961dbfccc6b4b82f:eyJzZWxlY3RlZExpbmVDb3VudCI6MTMsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImZlOWNkMDNjNjRlYmMyZTUxYmQ1YzkzN2UzYWRlZDc2YTgwZDkyMGQ0MmRmYjk1OTdlNDhjMjc2ZjRmNTJkYTciLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjM4OTA5MDEzMDE3MjdiNDlmZGQwYTg0NDM3MDQ4MjNmZDc2ZjljNDNkYzIwNGExYWQ5NmJiYzliOWEzNjA4YjkiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjM3OTRmNDNkNzdmYWNkNTQyNzQ1YzZmMWUxNDY4ODNlMjRkZDQxOWE4NWMxYmE0MGZkYjY2OTA5YzYxYzM3M2UifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_66f8a826ac054169a825f598e845be73",
+      "statement": "make test runs pytest quietly through uv.",
+      "evidence": [
+        {
+          "resource": "repo://Makefile#L101-L102",
+          "version": "repo-lines-v1:sha256:2f4ab9cf93398f57af186d711c632a9222316c9b20b71d5251971eb031734b0e:eyJzZWxlY3RlZExpbmVDb3VudCI6MiwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiMWFjZjYxZThjMTQwYmVhYmZkNGE1ZjljOGI1M2FiNzhhNDI0NDIxYjFmYjFiZjdkYzZhMzQzYTQzZjQ4NDkyYiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMDMwNjIzNmFkZjdhMDA2MzljYTZlYTY0NDkzYzk3ZmIwMzQ0ZmQ5MzdhODFjNDU2M2ViNjdkZjA2YjBlODM1ZSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiODY3NjgyNWM5NmVhOGZhOGRkMTY3MzBlYmU1NGFjZmJiNTE1YjBiN2M5ZWQ3YWE3OGI3ZmE2YjY2NzgxN2FmZiIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiMzQzN2QxMjU5YjU3MjBmMmRjZmU4MTYxYWY2MjgwMDI2Y2EzMmE3MWQ0Mzc4NWJhMjQ1MTM3ZjYzMDAwZGZlMCJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_b7b3e23eaf714981a073868f4ccd2653",
+      "statement": "The corpus script reads files in place from CORPUS_DIR or ~/projects/cost_engine_inputs with the LLM off and writes reports under store/corpus, and states that the corpus must never be copied into the repository.",
+      "evidence": [
+        {
+          "resource": "repo://scripts/corpus.py#L1-L17",
+          "version": "repo-lines-v1:sha256:9377137a3c4e9f7f5488f92069edad42420af515d53b57eb83a0bcc0226997cd:eyJzZWxlY3RlZExpbmVDb3VudCI6MTcsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjE5ZTA1MTgxM2QzODVlMDM5OWQ2YTBmZjMwYmQyNDRjMjc4NGQyMDMyNWZmODY3MjllMDhhYzEzOWJmZDFmYmIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImU4Njc4OGRjOTUzMWE3ZjkxOGVkOWYxZDY3ODY5NGFhYTNmZWYzN2UxNjE2MDdiYTQxOWUzZThkMWEwNmJjNzgifQ"
+        },
+        {
+          "resource": "repo://scripts/corpus.py#L181-L181",
+          "version": "repo-lines-v1:sha256:9bbad84b3070c03c0b0c6c31cca8620b3e046e9b30fa1f9d8e5109835610c983:eyJzZWxlY3RlZExpbmVDb3VudCI6MSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiOWJiYWQ4NGIzMDcwYzAzYzBiMGM2YzMxY2NhODYyMGIzZTA0NmU5YjMwZmExZjlkOGU1MTA5ODM1NjEwYzk4MyIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiOWJiYWQ4NGIzMDcwYzAzYzBiMGM2YzMxY2NhODYyMGIzZTA0NmU5YjMwZmExZjlkOGU1MTA5ODM1NjEwYzk4MyIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiZTlmYzYwZTEyZTBlNWIwNGU5MmQxNDViNTZiNzZkOWE4ZDkxMDE2OGVlNWFkNTNiOWMzZGQzZWM3MGEzYWM3MSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiMGY5NDI2YmE5MDA3NjUxYjJhMzU0MjE1NDQxMzI1ZWQzNzBjY2FmZjMxMDkwZjNkN2Q4MTA0YTZmMTA0NmUwMiJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_99e957a4f6d24b53bbc25be246c83017",
+      "statement": "The corpus comparison calls a file worse on lower completeness, lower attribute coverage, a new error or failed expectations, better on higher ones, and changed when status, total, lines or breakdowns move.",
+      "evidence": [
+        {
+          "resource": "repo://scripts/corpus.py#L111-L146",
+          "version": "repo-lines-v1:sha256:b601f2e661d920d624baa8d841c88f60588ff6437bc2dabdb4ead13792df6477:eyJzZWxlY3RlZExpbmVDb3VudCI6MzYsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijg0YWZkNDgyOTg1OGExY2Q3NDM1ZWUwNzE2NzYyMWJhMmJkOTg3OTNlZDcwNDlhM2M2YTkyNzc3YTU2NzY3NWYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjU0NTI2YWZkNzhlMmJiZGM0N2QwODZmNjliOTdhZjYwZTQ5MjAzZDNjNDlhMTAwMDNmNTQxNzEyODlmOTYxZTQiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjA3Y2RjYzZlYmMwZDEzZjBhOWJlZDQwNjI0ZjJiNmE0MTNlNjhlOTUyNGE0ZDgyZDI0OTY1MDBlMDllODkyZjQiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjQyODYwYWU3N2U2YWVkZTYxY2NhNTVjNjU1Njg4N2I2NTc0NmI0ZTU2YmYzYThlZThjMTUzMzJiODMxZWJmYzkifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_63d00304ea4c406e8a0a9705ef3dc29a",
+      "statement": "corpus-check fails when any file is worse or changed against the accepted baseline, and corpus-accept accepts a run as the baseline.",
+      "evidence": [
+        {
+          "resource": "repo://Makefile#L83-L93",
+          "version": "repo-lines-v1:sha256:bab4f0f23b5aae90037b2d5f3fca54ac7ec81da5b054b13397e305118f1f155e:eyJzZWxlY3RlZExpbmVDb3VudCI6MTEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImYyNjU5ZGM3NmJiYWJiZGE3YmE0MTNkZmViOTBmN2YzMmUzYjRlNzFiYjBkOGQ5YmRhNjIzNTQyODE3ZjgzMjAiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjRjODRmNzAyNWE0NGFhMTBlYjg1N2Q4YmZlMTE2OTUwNWViOTdiY2ViZmM3NmQwZTBjZGMzNDRmNzg1MDkxMDciLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImY3ZWQ0NmNjZWY2MDZkZjQ5MzVhMTkwOWM5NmI0YTEzNzZkMzBkZTFmM2Y3ZTJmYTM3MDNjODJkMDA1ZGZlZTciLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImIyYjhlYmI3MTYwZDVmN2NkMGRhNDhjMDAyMGNkNzc1NjBmZjljZDJmMzVkMmU3OTVkYmEyNWNjYjBlM2Q5NGIifQ"
+        },
+        {
+          "resource": "repo://scripts/corpus.py#L245-L283",
+          "version": "repo-lines-v1:sha256:7d5585e914182c7d4367145acfeafc6588b2d11a9b7bc16de9593578d7f17df5:eyJzZWxlY3RlZExpbmVDb3VudCI6MzksImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjFhNDFiOTZiMzFjZDIwMzMzNTdmNzg3NjY1OGFjMDk0MzAzOWNjNDZiMTMxN2ExZDA1NGUxYTMwMmUxYWZiZTkiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImQyYzA4NjUyMWRhNDM1OThhM2E1NjAxOTRhNzU5YmNmYjY0YTA2MjBkYzA1NDJkZTM1OTRiMDVjYWU4MWFiMDEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImM4ZGQzN2U4NDI3MzEwNzg2Y2VkOGZmYTY2MjMzMThlN2ZjNjI2ODU2ZTk4YjlkNzM0OWRjNTcwMTE0YTQ0ZWQiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjNkNDEzNDBjYzIzOWExNTljZTliNjAyMmU5ZjYzMjI4MzJlMmVhZDc2Y2FlOWU0NzU0ZDIxMGViOGZiNmQ1ZTgifQ"
+        }
+      ]
+    }
+  ],
+  "verification": {
+    "by": "openwiki/0.7.2",
+    "at": "2026-10-25T20:19:27.415Z"
+  }
+}

@@ -1,0 +1,9 @@
+# Files
+
+- [The spec-authoring agent](agent.md) - How billparse sends a file that no spec proved to a Claude agent that writes or repairs a JSON spec with tools on the real file, and how only the code's own checks decide whether that spec is saved.
+- [Reading files into the document model](document-model.md) - How billparse/docmodel.py turns any upload (PDF, Excel, CSV, Parquet, JSON, text, Word, PowerPoint, gzip, zip) into one Document of grid regions and frame regions that every spec and check reads.
+- [Messy layouts, the tree of sums and line context](layout-and-tree.md)
+- [LLM spec generation and extract-then-derive](llm-and-induction.md) - The two LLM routes in billparse's parse ladder (an LLM-written spec with repair rounds, and LLM row extraction followed by deriving a deterministic spec), what the LLM sees, how its output is checked, and how cost and models are configured.
+- [Architecture overview and parse flow](overview.md) - The end-to-end path of one uploaded cloud bill through billparse (intake by sha256, reading, routing, validation, service resolution, analysis, contract build, storage) and the entry points that start it (CLI, HTTP API, web API background tasks, agent).
+- [Routing lanes and the spec interpreter](routing-and-specs.md) - How billparse chooses a reading for a file (built-in spec, learned spec, rule mapper, LLM spec, LLM extract), when an attempt is accepted, and how the single spec interpreter runs a JSON spec (detect, sources, columns, transforms, derive, reshape, filters, fields, totals).
+- [Rule mapper and layout fingerprints](rule-mapper.md) - How billparse proposes specs without an LLM (header rules plus value profiles, month pivots, inventories, list-style PDF lines, the tree of sums), how layout fingerprints route files to learned specs, and how attributes such as instance type are read from line text.

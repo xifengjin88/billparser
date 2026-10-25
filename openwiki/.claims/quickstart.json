@@ -1,0 +1,58 @@
+{
+  "schemaVersion": 1,
+  "pageVersion": "sha256:24ef5ded08a75c8cd28c00a24ab3a34f7d123dfdbe6bd18dcb8dec3ea8986fae",
+  "claims": [
+    {
+      "id": "claim_f2047a692d704e0e93e228d02298797a",
+      "statement": "billparse is a Python package requiring Python 3.12 or later, with FastAPI, SQLModel, pandas, pdfplumber, rapidfuzz and the anthropic SDK among its dependencies, and a billparse console script.",
+      "evidence": [
+        {
+          "resource": "repo://pyproject.toml#L1-L36",
+          "version": "repo-lines-v1:sha256:44e345347fae9b6b8857c1964dcd6f4a7700f1f6e281147300275da390f4482a:eyJzZWxlY3RlZExpbmVDb3VudCI6MzYsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjcwMmE4MWMzODM2ZWRlZjJkMGJhMTFkMjM1M2ZiNmRhYmM3NzcxNTBhN2NhODNlYTBkOWU5YTcwMzEzZmVhYmIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjFiZTliODJlZmYxODhiYWJhYzRmYzBlMmM5OWQ4YmY3YTQ4ZWExMzA3NTQ0YmNmMDMyYmNlM2VjNTdhM2U3NzkifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_afa44e2da384452581d4f74e227cd24e",
+      "statement": "make up starts the Docker stack with the web app on port 8090 and the API on 8010 by default, and make dev adds hot reload.",
+      "evidence": [
+        {
+          "resource": "repo://Makefile#L17-L30",
+          "version": "repo-lines-v1:sha256:7c086dbeb26afe75241929f8922e1b0d5741d174a77c85a7440c0f1f5f22441f:eyJzZWxlY3RlZExpbmVDb3VudCI6MTQsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImQ1YTZhMDE2NTU2MTNiMDc1YWRkNDExNWVkNTM3Y2E1ZWFlNmUwOTNlY2U3N2Y2ZDMyOTM2ZmNmMjJlMjI2YjUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjI2ZWUzYzU3M2Q0MjAxYjUxMTcxYTgxZDQxOGQzMWYzOWUwNGI2ZmRiNmNlMTg5ZmMwMTc1MzUzMmI3NmUxM2YiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjA2MWJiYTkyOWZmODhjNzQyYzJhM2UwZGZkODNiNDJiODVlMmE1Mjg1NDllZjA0MjY4ZDlhNTQ4MjZkZmNjMWYifQ"
+        },
+        {
+          "resource": "repo://docker-compose.yml",
+          "version": "repo-file-v1:sha256:f40ffc9e3bbaf2ba5ccebd38fd1f5fe33e2e230851afb8ebdfeaa970adc36f96"
+        }
+      ]
+    },
+    {
+      "id": "claim_f2228f0f186746aab851a31d474ce57d",
+      "statement": "Without Docker, make api-local runs the API on port 8000 and make web-local runs the web dev server on 5173.",
+      "evidence": [
+        {
+          "resource": "repo://Makefile#L118-L122",
+          "version": "repo-lines-v1:sha256:1f936b24f75340bf990bcb34c9a3bf3d6a52b67d2dda41a4c3cabf536ebf6263:eyJzZWxlY3RlZExpbmVDb3VudCI6NSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiMGNmYjViODJmOGM0YzQ4OWMxODMxOGZmNzQyMTZmNGI0MDM2OGE5OTUzYTY4MTk2NjhhYWM5YjVjMmUzMDI2YiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiZTlkMGYyYWQ2ZDUzNTc3MTE2MjhjNGFlNWVhZmE4YjhmMTc4MGFmMTBlMTNmMDkzM2NiODYyODFiOTk1MzIyZiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiYTdmZmI2NzY2ZjM1N2FiMTA0OTllY2RmODI4NDc1Y2FmZmQ5OWZjZDhhOTU4ZTY2ODk0NmIxNzU4ZjI4MGM3YSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjAsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiZTNiMGM0NDI5OGZjMWMxNDlhZmJmNGM4OTk2ZmI5MjQyN2FlNDFlNDY0OWI5MzRjYTQ5NTk5MWI3ODUyYjg1NSJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_e3a60b899d844167b964040fb6978755",
+      "statement": "The parse flow is intake, read into the document model, route, extract, clean, validate, resolve services, analyze and store.",
+      "evidence": [
+        {
+          "resource": "repo://README.md",
+          "version": "repo-file-v1:sha256:681a3c2ab83d56fb1e3a932c4eb6f7a2c12dc3769e00dbf15b6d93ce116c6712"
+        },
+        {
+          "resource": "repo://billparse/pipeline.py#L1-L15",
+          "version": "repo-lines-v1:sha256:5db85d6f51d51f50b53bfa13d387fa8cfaa9537c196a5bb0ccf1debe63b825a1:eyJzZWxlY3RlZExpbmVDb3VudCI6MTUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjMyYWI5OWU1Mjk0OTQyYzQ0ZDY2ZDhhNGZiMGExNGM5Mjg2YWViYzhmMzgzMWZlMzY3Mjk0NmVkZmYwODQwMWMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjBkYWQzNDI5YzAzZDRmMDJhMjE4MjdmMjY2MWZjZGFiZDk0YjA0ZTU5YTJmNTNhZDgwYzg0NzI3NDZjMWEwMDgifQ"
+        }
+      ]
+    }
+  ],
+  "verification": {
+    "by": "openwiki/0.7.2",
+    "at": "2026-10-25T20:19:27.415Z"
+  }
+}

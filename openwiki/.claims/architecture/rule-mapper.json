@@ -1,0 +1,152 @@
+{
+  "schemaVersion": 1,
+  "pageVersion": "sha256:cb9ba1ec22dd1d9ffa479804716f27c2641b3d3fce11ed9f05fb2437440c06f5",
+  "claims": [
+    {
+      "id": "claim_d919e9bc3a0c428b9680516cebd4c948",
+      "statement": "propose_all first proposes the tree-of-sums spec with confidence 0.7 for documents with page regions, then the best rule-based spec from propose.",
+      "evidence": [
+        {
+          "resource": "repo://billparse/mapper.py#L159-L171",
+          "version": "repo-lines-v1:sha256:61fe5266c7aacf873f0e296de5e5a9768b566fa7bf7de95a9432eff1072852d2:eyJzZWxlY3RlZExpbmVDb3VudCI6MTMsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjFhYWUzNDNhNTIxYzEzN2NmZjJhNzI4Nzk0Mzk5OTk2N2YyMjI2ODUwOTA3YWJjOTc4YWM1NzIyYjkxNGVlODUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjU0NTI2YWZkNzhlMmJiZGM0N2QwODZmNjliOTdhZjYwZTQ5MjAzZDNjNDlhMTAwMDNmNTQxNzEyODlmOTYxZTQiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImY5MGViNGIxYzFlMGZlZGIzZTczNzNhMDcyMDlhYWNhNGUxNmMwMTU3ZTQ5ZDZiYjIyN2EzMzk3YmE0OTZlZjUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6Ijk3ZjYzMGQxMjkxNWMzM2M1MzFmYjk4M2Y1ODQwOWRlMjkxZmIzZjczODFhNzI3NjEyM2M1NzRlY2Q3MjRkNjUifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_d76730a9e374409989d06c97d2d0ad87",
+      "statement": "A table with three or more month-like headers and a text label column becomes an unpivot spec with the month in charge_start and confidence 0.8.",
+      "evidence": [
+        {
+          "resource": "repo://billparse/mapper.py#L267-L295",
+          "version": "repo-lines-v1:sha256:88e9758fea9e6b0a7ce71375daba2cf96be6409b1f89ac479eb205cbf485078c:eyJzZWxlY3RlZExpbmVDb3VudCI6MjksImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjU1YWRhYTdiNDJjYTQzMjk1NGRmNWU5ZjQ4MWFiNThmMTUwNTc3YjA1YzA5YThiYjExNTdkZTMyMzg5MmI4ZGMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQ5YWE5Zjg3YmMwZDEzMDcyYzg0MDRlYWEyYzM4M2QzZDFjNGQ4ZDI0NzU0MmE2NTdiN2NiNzJiN2ZlZjk0YmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjBkMzBkNjdkMjRhMGUwM2RkM2YwYjk4OTU1ZGNkNDZhM2QxNGQyYjU3NDhkMWU3NDY1YTcxNTQ4MjM5MmNiMWYiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6Ijc3ZWUxYzliNTFjZTI3MmQ0ODhjMWIzYmY4MzRmYjJjMzYwNjk3NWMyNmRhYTg0MGFiODM0Mjg5YjMyZTI4OGYifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_73b1b34636694d8eafc3450d63027422",
+      "statement": "A table with no cost column but instance type, OS or engine columns is proposed as an inventory spec with confidence 0.6.",
+      "evidence": [
+        {
+          "resource": "repo://billparse/mapper.py#L236-L247",
+          "version": "repo-lines-v1:sha256:a28f9a99531cd891730adf534656152b1437507cfdfe2c333fa997c1ffddd9e7:eyJzZWxlY3RlZExpbmVDb3VudCI6MTIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImUxYjc4OTMwMmY4MjVmNzg5MzljNTkwNzY1MmRhNjQ1ZTY1YzYwMzZiMTBlYmVjNjQ2N2EyYmY1MGNkMDg1OGIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjA0MWI3Mjg0NTZlN2I4NDBkNTgwYjkxMzlmOTUwOGY4ZGNmOGNkN2U2NGU5MzVhYzE4MzY4ODI0MGI1ZjI3MWEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImIwYTM2ZTQ0MTBlZDBhOTMwMDMwYTczMWYxMmZlNDJhYzcwNDBmMTc5NGEzMDE5NGJkNjg3NTg5ZWI3NTU1NmEiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjdjOTljNjdiOWVkMDY4MDJlMjM4NWI0MmU2OGRhZmZlODc3NTNiMDY3OTdhOWU2Y2ZlM2FlMzYwY2QzZjUxNDkifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_1d992b9076c0484fa8b52b550d5694bc",
+      "statement": "For PDFs whose best rule confidence is below 0.6, list-style line patterns are tried and scored by their coverage of money lines, capped at 0.85.",
+      "evidence": [
+        {
+          "resource": "repo://billparse/mapper.py#L190-L193",
+          "version": "repo-lines-v1:sha256:a02d4e8164dd55fdf467f21e3d9ba7346ff8ffc99624da251c7a79240a134742:eyJzZWxlY3RlZExpbmVDb3VudCI6NCwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiZjAzNTg5YzBmZjc3ZDFjOTNiOGUwNWQxMTI3MTlmOTVhYjE4OGEyMjY0NGU3NjZhODUxMDEwYWUxOThhMmFiYSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMDFiYTQ3MTljODBiNmZlOTExYjA5MWE3YzA1MTI0YjY0ZWVlY2U5NjRlMDljMDU4ZWY4Zjk4MDVkYWNhNTQ2YiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiYmQ4ZmFmOTU5YTEwNWZhZThkZTMzMzY1ZGJhNzYwZWI4Y2FiODk1ZGZhYzljNWFhMzY4ZTExZTU3YmRiMmE5MCIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiNWZjODE4ZmVmN2FkY2ViZTc4ZWI2NTQ1ZjI3YWNhOGQwOTYyMDliYjY3MjBkMDJmYzJlZGQ3ZTkyNDI3MzBkNyJ9"
+        },
+        {
+          "resource": "repo://billparse/mapper.py#L298-L321",
+          "version": "repo-lines-v1:sha256:ed760993dd7f9f7030dced51cf3b423a2727544145444657b5db140423cd8a49:eyJzZWxlY3RlZExpbmVDb3VudCI6MjQsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImZmNDExY2VkNjFhZGY1OGQ4NzQxZmY5MmE5NTc2NTQ2MGEyNWVhY2I5N2U4YjI1NWZjYTdhM2RlMWI2NzFlZTgiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImRjM2Y4ZDU4YzEwNjk4ZDhlZTNmY2M5YzUyMWY0YmJlYWNiZGNhMjhhMzMwYzc1NzJhMWFjZGQzMzg2M2Y3MzkiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImU2MTUwZWRhN2RmYjQ0ZGM3NGNlMzc5ZGRhODk5ZWM5OGYyNjU5MzU4N2UxZTg0NzY2ZmNhN2YzZDM2MmNkZDgiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjA1OTg0NTIwNTFjNjU2ZWUwYTZmZmJjYzU2Y2QzYzhiZDE1NjE2OGE2NDJjODA4Zjk0MWI2ZWIyNzdlMTY0OWIifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_8f840ded9f2c47a2961f529c0ad00b2c",
+      "statement": "map_columns considers a column for a field only when its header matches a rule, adds a value-profile score, picks pairs greedily with a minimum score of 2.0, and falls back to the rightmost money-looking column for billed_cost.",
+      "evidence": [
+        {
+          "resource": "repo://billparse/mapper.py#L128-L159",
+          "version": "repo-lines-v1:sha256:7077a9d08e69aa66f7eb9868c35de21a0dd6f16f829b790fd51b0e466575e9ce:eyJzZWxlY3RlZExpbmVDb3VudCI6MzIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjBlZjQxMTk5Mjc4MTk0ODcyYmYwZjgxYjA5NzViZGYzZjU5ZWI3MGViZTNlMjc5NTA4ZjdjY2I0M2Y0NTY5YzciLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjFhYWUzNDNhNTIxYzEzN2NmZjJhNzI4Nzk0Mzk5OTk2N2YyMjI2ODUwOTA3YWJjOTc4YWM1NzIyYjkxNGVlODUiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjBmMGE0N2YxNzA2MzA5YjAyMGU0NGIyYWM4ZmRlZjAwZjA5YjJjOWRkMzliNDc2OTJkZjczYjJmOTdiZWZjZTciLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjY2Zjc3MzIxNjViNmI2MjJmOTMyOGY5YjAxOGZmZWJjYzlkNjYxOWZiZGI0YWNhZDBmMGNlMzhmYTQzNjMxMzcifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_aff5401a54cc4c059d2b69d7d600f5da",
+      "statement": "Header scores split CamelCase headers and are lowered by negative regexes for some fields.",
+      "evidence": [
+        {
+          "resource": "repo://billparse/mapper.py#L94-L102",
+          "version": "repo-lines-v1:sha256:53e7243bbdc802f63c1c8a8f2319f4d70370df5c7f88889263f75f99d46db736:eyJzZWxlY3RlZExpbmVDb3VudCI6OSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiYzhjZDBmMGFjYTk2ZmFmYjM2ZDc1MGM0ZDIyMWZjNTIzMmEwZmJhZjI3YjEyMDU5YjlhOTQzZDcyNTRjMGQyZSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNWFkNzcxYTY1N2YyMzc5NTkzMmI4NjliYzkwZjIyZGYxYzRjNzc5YjdjYWY3ZThmMjUxYTEyODkxNWZkZGU2MiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiOWMyYTk5YjA2MTFlNjA2NjFmMWI1ZTUxNDYzOTdlYzZkYzQzNzc1NjE5MzM4MzZhYmNhZjFlNzVhOTQzYTExYiIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiZjQxZmUyMWY1NGEwNzk1ZmNjM2NhOWI3NzQ5OGQ0ODkzNDE4Njk5MDlhMzQwYjg0MDhlYzhjNDcxYTFiYjVkOSJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_8cef24e95a9a49fcab023dfe40d0b54f",
+      "statement": "Mapper confidence is 0.5 with a cost column, plus 0.25 with a service or description column, plus up to 0.25 from the average score.",
+      "evidence": [
+        {
+          "resource": "repo://billparse/mapper.py#L152-L156",
+          "version": "repo-lines-v1:sha256:fb54d22a0679e3ffc379e689dd27d8509c6f4abe6c80c73a1d8563e9428f3ed4:eyJzZWxlY3RlZExpbmVDb3VudCI6NSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiNjZiM2YwZDM3YjFlNmI5MDI5NmQ4NzRjZjViNWNlMTNkN2EzZThiMDBmNTU1MDQxZmJjYzQ0YjIzZDJjZjgwYyIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMDFiYTQ3MTljODBiNmZlOTExYjA5MWE3YzA1MTI0YjY0ZWVlY2U5NjRlMDljMDU4ZWY4Zjk4MDVkYWNhNTQ2YiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiZWIxNjMxY2EzNWVkMmNhZjE0MTZmMDljMTFhM2U3MmM0ZWRmOGQ5ODllYzQ0Njc5ZmY1ZTE4YjM2NTA1MDkxYiIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiYTEwNDlmZmI1ZWQ5YmI4ZGEzMTEyNThkODFjMzdjYzkwODUwMDE3OWJmNjVjMTY2Yjc5YzZiMjQ0MmUzYjNkYyJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_24af00ec58324f41a95ea27a6381fa3c",
+      "statement": "The layout fingerprint hash is the first 16 hex characters of SHA-1 over file type, region kinds and sorted normalized headers.",
+      "evidence": [
+        {
+          "resource": "repo://billparse/fingerprint.py#L42-L48",
+          "version": "repo-lines-v1:sha256:ffa6f6f548e4cefd55a2cac95979b71130e429a9cd93db56e827d9c1ffe06b7e:eyJzZWxlY3RlZExpbmVDb3VudCI6NywiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiNDllMjdmY2IxOTY2ZjFiOWIyMjBhMDk2YTcxOWQwNzkwYWY3ODBkOTZhYmVhZjBkZDY4OWVjYjJhMDM4OTU1NCIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNTIyOWE4NWIzZDliYTc1YmYyYWI5MGNjZGZkNGFhZWQ2MzBiNTA1ZWUwYzdlOGY0MTIzZGUzYWZjNWZjY2E4MCIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiNDg3YzBkZWUzMzljNGEwZjgyNGE0YzZkOTVkZmYxMDQyMWRhM2I0MmY4Yjg3ZWIzOGE1ZDVlMTM4ZjllNzc4NCIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiMjM0ZTdmZDk4OTE5OTk5MTI0NjY5MGY5MGZhM2I0YTkzMjhiMTFiYzlmNTE5ZmUwOWM5OWIzODYyMjE0M2FiYyJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_3f6d22e9b423408eb28ce380d3222638",
+      "statement": "Fingerprint similarity is 0 between PDF and tabular files and otherwise 0.75 times header Jaccard plus 0.25 times top-word Jaccard.",
+      "evidence": [
+        {
+          "resource": "repo://billparse/fingerprint.py#L51-L60",
+          "version": "repo-lines-v1:sha256:2a3dfab695e2a03685036597827865083e471b80c9f10658a185b0d2340d781d:eyJzZWxlY3RlZExpbmVDb3VudCI6MTAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjVlNWQzOTA0ZjZmYTQxZWQzMGIwY2EwMDQ0MmRhNmFkYTZhNmYxMjMwNzI3MDQ1MjA0MTdkYTNiODUzMzljMjEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjBkOGNiODA0NjRlNDA4OWQ0OTBjYjc0ZWU0ZDMwNDkwYzFlYzNjZjQxYWM4N2Y0NGQzN2FjZWNjY2ZlOGY1MWYiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImRiYjRlMzA4NTk3OTdkOGM1ZjIzNzAxODg5YWZiZmEzODA3NTM2NTgzYzRhN2I5ZDk5N2ZiNGU0YWJiMTU0ZTAiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_2ce14c3d18804740b4c9c5bb5eefcc7c",
+      "statement": "attributes.extract fills only empty attribute fields from description, service label, product code and context path, so file columns always win, and tax lines get no quantity or price.",
+      "evidence": [
+        {
+          "resource": "repo://billparse/attributes.py#L1-L6",
+          "version": "repo-lines-v1:sha256:4e6bb02595fafe950af8f01796d32dd71503014b3c6e27bd197db5fdd680ca8d:eyJzZWxlY3RlZExpbmVDb3VudCI6NiwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiYzM2NTM3YmQzNDY5MjE4OGYwODcxNmY0Zjg1M2ViZjhjNzgxMjMzZmJlOWRjZDBkYTkwMzQzY2QyMjEzYmQ1YSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiODdiYTQ0YWM1OWRjMmE3ODVkZTNiZDU5MjViZjQwMTg3OTRmOWJhNzc4NmMwMzc4NGI0ODkzNjk4Mjk3ZGJkNCIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjAsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiZTNiMGM0NDI5OGZjMWMxNDlhZmJmNGM4OTk2ZmI5MjQyN2FlNDFlNDY0OWI5MzRjYTQ5NTk5MWI3ODUyYjg1NSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiMWFhZjc2MzdjYjZlN2U1ZGI4NWQ2MzQyNzQ2MDE0ZGYwNDFjY2Q1NThhOTIwYjI5ZWI2YWM3MTlkN2JhZjVjMiJ9"
+        },
+        {
+          "resource": "repo://billparse/attributes.py#L111-L145",
+          "version": "repo-lines-v1:sha256:7f10fe364e65f9e7e1bc2b0974740f63b787310d06d31d4c0a601c1902faa1fc:eyJzZWxlY3RlZExpbmVDb3VudCI6MzUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjBhMjI2M2JkOWFlOGRlY2MwMzJjZTZjOWE5ZmQ0MjJkMjkyODE0Zjk0ZWMxMDk0N2IxZjNkYTg3ZTlkZGJhZGIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjcwMmQ1MmU4YjllZTg1Y2UxY2MzNDM3ZDQwNTM5NTE0OWRlYmZiZGY0OWU4ZmI0ZjkxODdiMjdjNzVjNWU5ZjYiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjliOGNiZjRkNWU4MGJiZTVlNDhjNTdmNGZjYjczNTY3M2Q2MDc3NDBiNDJhN2FiNmM5MjM2ZTM3MmE5ZjUzZTAiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImNiYTk2Yjk4Y2ZkNTQyYjE2ZWI2NDhlNTg4Yjk3NGNjMDA1Yjc3MjIxMTQ1ZWJmNDliNTU5NWRjYWYzZDc4ODAifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_d0fcc4f1825a48a99e1aa214414f7f4d",
+      "statement": "The Azure size pattern requires the Standard_ or Basic_ prefix.",
+      "evidence": [
+        {
+          "resource": "repo://billparse/attributes.py#L18-L18",
+          "version": "repo-lines-v1:sha256:8e5523af49a3a59241d861c4dec2105d23e6f0fdb772651a0994a999128c92eb:eyJzZWxlY3RlZExpbmVDb3VudCI6MSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiOGU1NTIzYWY0OWEzYTU5MjQxZDg2MWM0ZGVjMjEwNWQyM2U2ZjBmZGI3NzI2NTFhMDk5NGE5OTkxMjhjOTJlYiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiOGU1NTIzYWY0OWEzYTU5MjQxZDg2MWM0ZGVjMjEwNWQyM2U2ZjBmZGI3NzI2NTFhMDk5NGE5OTkxMjhjOTJlYiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiYWZhYTY1NTIzNDFjMGRiYjdiMjZjMGQ3YjQyNzgxZjUyOTIwZWZjNTljY2YwOThmMTk1NGUwMzc3ZWI0MDY2ZCIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiZWY2ODYxNDNkYmU0N2E2OTY3MzZjODNkM2JiNjcxNmY2YzA2YzNjMTQ5ODRmYzliZDI3ZTk4MWNlNTRlNjNjNiJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_439db59099284d8fabc5674e8f0de340",
+      "statement": "Attribute extraction runs only for extractions of up to 100,000 rows.",
+      "evidence": [
+        {
+          "resource": "repo://billparse/pipeline.py#L300-L301",
+          "version": "repo-lines-v1:sha256:15575ee291b676dac0a57890ebe6588d12669de33f8f2f04b32b121119b722d3:eyJzZWxlY3RlZExpbmVDb3VudCI6MiwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiMGY1N2Q1YmYwYmM3MTExMDYzZmIwNTEwNTI2YzEzNjY4ZmVhMDM4YjVjOWNjYTljOTgzODdlZTM3ZDE4YjEwNyIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNzI3ZDk3YTc0NzY4YTA2YjBjYzVhNDM1M2RiZjEwNDNhODJmNzQyNTFkNjFlYjJmMGI0NDcxMGIwOGVjZjU1YiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiZTdlZmRmMGM5MDYwYWYyMDQ0MGI0MmRlMmI0Mzg2NGY3ZWQ2NTI2MDk1NjAzZmU2MWUzYmNmYmE1MTI5MGU0OCIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiN2Y1OWQxOWFhN2E4ZmZiMmRiNjQ2YzA2M2JmMDNlM2UxNjVmZDgwM2VjYTQ1NmJjNTRhMTJmNmQ5NTZiMjBmMCJ9"
+        },
+        {
+          "resource": "repo://billparse/pipeline.py#L42-L42",
+          "version": "repo-lines-v1:sha256:cf3055d19f82a9c3a9e988f730d20348e82725bd8ec91c1f8f971b9d44d2fc4c:eyJzZWxlY3RlZExpbmVDb3VudCI6MSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiY2YzMDU1ZDE5ZjgyYTljM2E5ZTk4OGY3MzBkMjAzNDhlODI3MjViZDhlYzkxYzFmOGY5NzFiOWQ0NGQyZmM0YyIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiY2YzMDU1ZDE5ZjgyYTljM2E5ZTk4OGY3MzBkMjAzNDhlODI3MjViZDhlYzkxYzFmOGY5NzFiOWQ0NGQyZmM0YyIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiOGNiZjQwM2U3ZjBjNTM0NDY2NjUyN2RiMzg5YjZiMGVmMDBkOWEyNGE4MzUyYTYwODg4ZjRhZTFiNjgwZWViZCIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiNmMxZjAyZmQ3ZWMxZDQ2MmMwY2I4MThiOTQ4ZmZlNGY3MTViMmMyYzQzMjYzMGMyMzJkZmUzNGQ0Mjc0M2ZhOSJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_8f89be27f527401dad69676c1786b2eb",
+      "statement": "normalize_regions replaces known printed region names with codes and keeps the printed name in region_name.",
+      "evidence": [
+        {
+          "resource": "repo://billparse/attributes.py#L148-L165",
+          "version": "repo-lines-v1:sha256:2922a3b5917b1eb1cfac214a98d9142ff8e93ebd8ec8f9998a8f96c7bd7a1e6c:eyJzZWxlY3RlZExpbmVDb3VudCI6MTgsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjdmZDkyMTljYTMwNGRhNzExMjNjYWNmNWY5ZmYwNzMwMzFkMTZmMmFkN2Q3MDhhZTcyN2EzMzczOWU1Yzg0YjciLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImJlOGNjZTg3Njg3MGQwZWJhNWQyMGY5OWEwODQ3NThlZGVmYWM0ZWZkZGE4ZTQ0YmJmYjBmOThmODEzMDg2MmUiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6Ijk5Mzk1OTRjMzU0NmJiM2M5ZTZkZTUxNjU5ZmRhNjYwYzBkOTJiYmI2YjhiMzcyM2RkODE2NWY3YjJkODE0NzkiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjM2NjgyZWMxNGYxZDA4NzhkZjdkNmQ5MWRmOWVjODc1ODRmYjgyMjQzMzE3ZTljNjI3MmNkYjM0NTU2YWIxODkifQ"
+        }
+      ]
+    }
+  ],
+  "verification": {
+    "by": "openwiki/0.7.2",
+    "at": "2026-10-25T20:19:27.415Z"
+  }
+}
