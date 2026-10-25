@@ -59,6 +59,16 @@ Key data shapes:
   `contract._charge` does the copying, field by field. Fields it does not know go into `Charge.attributes` (an
   untyped dict). Over `CONTRACT_MAX_CHARGES` (50,000) rows, `contract._rollup` merges lines that are alike in every
   key of `contract.ROLLUP_KEYS`.
+- **Public contract: what consumers receive** (`billparse/export.py`). `export.to_schema(doc)` projects the
+  internal `schema.Document` onto a **strict** copy of the schema (`extra="forbid"`) and validates it.
+  `POST /parse` returns this (`api._contract`). Two consequences you must remember:
+  1. A field added to `schema.py` but not to `export.py` (its model **and** the field list in `to_schema`)
+     **never reaches consumers**.
+  2. A new `Literal` value (for example a new charge `kind`) added to `schema.py` but not to the matching `Literal`
+     in `export.py` makes `to_schema` **raise**, which breaks `POST /parse`.
+
+  The output is billparse's own schema, not FOCUS. Field names follow FOCUS where one exists (`list_cost` ≈ FOCUS
+  `ListCost`, `list_unit_price` ≈ `ListUnitPrice`); keep that mapping in the field comments.
 - **Store.** `store.Store` saves the summary in the `documents` table, the rows as Parquet, extra parts with
   `save_part(sha, name, text)` / `part(sha, name)`.
 - **Web app.** `billparse/webapi.py` builds `DocumentView` and `ChargeRow` for the React app in `web/`. Its
@@ -142,7 +152,11 @@ the price catalog (04) to confirm instance types and SKUs.
    totals per sample file) must stay as it is. New behavior gets **new** sample generators in
    `samples/make_samples.py`, new files in `samples/files/`, and new entries in `EXPECTED`. Run
    `uv run python samples/make_samples.py` after adding a generator.
-4. **Schema changes are additive.** Never rename or remove a field in `billparse/schema.py` or a response model in
+4. **Every schema change goes into three places:** `billparse/schema.py` (internal), `billparse/export.py` (the
+   public contract: model, `Literal` values and the field list in `to_schema`), and `billparse/webapi.py` if the
+   web app shows it. Add a test that `export.to_schema` validates on the new sample files and that `POST /parse`
+   returns the new fields.
+   **Schema changes are additive.** Never rename or remove a field in `billparse/schema.py` or a response model in
    `billparse/webapi.py`. Add fields; bump `schema.SCHEMA_VERSION` (one minor step per task that changes it) and
    explain the bump in the comment beside it.
 5. **Money columns are special.** Every new money field (any `*_cost`) goes into `transforms.NUMERIC` and

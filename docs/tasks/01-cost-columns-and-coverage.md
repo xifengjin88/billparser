@@ -136,6 +136,16 @@ Observed on `samples/files/focus_gcp.parquet`: every charge has `basis: "billed"
      `effective_cost` when present, with `min_count=1` so an all-empty group stays empty instead of becoming 0.
    - `build`: fill `Document.cost_types` and `Document.cost_basis`.
 
+   **Public contract** (`export.py`). This is what consumers receive from `POST /parse`, and it is strict, so do
+   all of this or the new fields never leave billparse and the new kind makes `to_schema` raise:
+   - `export.Charge`: add `list_cost`, `contracted_cost`, `effective_cost`, `coverage`, `line_type_raw`, with the
+     same types as in `schema.py`. Add a comment with each one's FOCUS name: `ListCost`, `ContractedCost`,
+     `EffectiveCost`; `coverage` comes from `PricingCategory` / `CommitmentDiscountType`.
+   - `export.Charge.kind`: add `"commitment_negation"` to its `Literal`.
+   - `export.Document`: add `cost_types` and `cost_basis`.
+   - `export.to_schema`: add the five charge fields to the tuple of names copied with `_cv`, and copy
+     `cost_types` and `cost_basis` into `out`.
+
 7. **Analysis and validation:**
    - `analyze.NON_USAGE`: add `"Negation"`. `TYPE_OF_CHARGE`: add `"Negation": "commitment_negation"`.
    - Negation lines are reported on their own in `non_usage`. They are not usage and not credits.
@@ -183,6 +193,9 @@ New tests, in a new file `tests/test_cost_types.py`, using the `make_pipe` fixtu
   right;
 - roll-up: with `CONTRACT_MAX_CHARGES` set low (monkeypatch), covered and on-demand lines are not merged, and
   `effective_cost` is summed;
+- `export.to_schema` validates for every new sample. `POST /parse` (`tests/test_webapi.py` client) on
+  `aws_cur2_commitments.csv.gz` returns charges with `list_cost`, `effective_cost` and `coverage`, and a negation
+  charge with kind `commitment_negation`;
 - `SCHEMA_VERSION == "1.4"`.
 
 ## Done when

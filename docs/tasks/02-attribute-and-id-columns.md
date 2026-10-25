@@ -58,6 +58,10 @@ Why:
    - `contract._charge`: fill `sku_id` from the new `sku_id` field when present, else from `product_code` as today.
      Copy the two unit prices like `unit_price`.
    - **Do not** add `resource_id` to `ROLLUP_KEYS`: it would stop roll-ups from merging anything.
+   - **Public contract** (`export.py`): add the same seven fields to `export.Charge` and to the field list in
+     `export.to_schema`, or consumers never receive them. Comment each one with its FOCUS name where one exists:
+     `list_unit_price` ≈ `ListUnitPrice`, `contracted_unit_price` ≈ `ContractedUnitPrice`, `resource_id` ≈
+     `ResourceId`. Test that `POST /parse` returns them for a new sample.
 
 3. **A transform to read map or JSON cells** (`transforms.py`, registered in `TRANSFORMS`): `json_get` takes a key
    and returns that key's value from a JSON object cell (a string or a dict). Example: `{"json_get": "ServiceType"}`.

@@ -93,17 +93,30 @@ Run each level only on the keys that are still unmatched. Record the level on ev
 | `price_missing` | missing attributes, or None |
 | `price_assumptions` | defaults used, or None |
 | `list_unit_price` | from the catalog **only when the file did not print one** (task 02 maps printed ones) |
-| `catalog_sku` | the matched catalog record's SKU or meter |
+| `catalog_sku_id` | the matched catalog record's SKU or meter |
 | `implied_unit_price` | see the table at the top |
 | `price_ratio` | `implied_unit_price / list_unit_price` |
 | `list_cost` | filled only where empty: `quantity × factor × list_unit_price` |
 | `_list_cost_inferred` | True where this stage filled `list_cost` |
 
 `contract._charge` reads `_list_cost_inferred` and `_contracted_cost_inferred` to set `origin="inferred"`,
-`source="price_catalog"`. Add the price fields to `schema.Charge` as typed fields: `price_match_level`,
-`list_unit_price` (already added in task 02), `catalog_sku`, `implied_unit_price`, `price_ratio`,
-`price_missing`, `price_assumptions`. Bump `SCHEMA_VERSION` to `"1.7"`. Do the 1.7 removal of
-`commitment_opportunity` promised in task 03 in the same bump.
+`source="price_catalog"`.
+
+Fields on `schema.Charge`:
+
+- `list_unit_price` already exists from task 02. Fill it from the catalog only when it is empty.
+- `catalog_sku_id` **already exists** on `schema.Charge` and in `export.py`. Fill it with the matched catalog
+  record's SKU or meter, and use the column name `catalog_sku_id` instead of `catalog_sku` in the table above.
+- New typed fields: `price_match_level`, `implied_unit_price`, `price_ratio`, `price_missing`, `price_assumptions`.
+
+**Public contract** (`export.py`): add the five new fields to `export.Charge` and to the field list in
+`export.to_schema`. `list_unit_price` was added in task 02, and `catalog_sku_id` is already copied. Consumers read
+the on-demand list price from `list_unit_price` and `list_cost` (FOCUS `ListUnitPrice`, `ListCost`), with
+`origin` saying whether the file printed it or the catalog supplied it. Add a document-level `pricing` object to
+`export.Document` (match rate, catalog version, inferred discount, warnings) and copy it in `to_schema`.
+
+Bump `SCHEMA_VERSION` to `"1.7"`. Do the 1.7 removal of `commitment_opportunity` promised in task 03 in the same
+bump.
 
 ### 6. Rules for inferred values
 
