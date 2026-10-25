@@ -1,0 +1,14 @@
+.venv/
+.env
+store/
+data/catalog.msgpack
+data/synonyms.json
+data/resolution_cache.json
+**/__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+.git/
+backups/
+samples/files/
+web/

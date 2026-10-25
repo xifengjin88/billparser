@@ -8,6 +8,8 @@ from __future__ import annotations
 import re
 import unicodedata
 
+from .seeds import AZURE_ABBREVIATIONS
+
 _NOISE_WORDS = {"service", "services", "the"}
 _PREFIXES = ("amazon ", "aws ", "microsoft ", "azure ", "google cloud ", "google ", "gcp ")
 _NON_ALNUM = re.compile(r"[^a-z0-9]+")
@@ -40,3 +42,18 @@ def norm_loose(text: object) -> str:
 def code_key(text: object) -> str:
     """Product codes compare case-insensitively with surrounding whitespace removed."""
     return str(text).strip().upper() if text is not None else ""
+
+
+def azure_head(text: object) -> str:
+    """The service part of a Microsoft invoice product name, its short words written out:
+    "Az DDOS Prot-NW Prot Plan-1 Hr" -> "azure ddos protection", "VM Dadsv5 Series" -> "virtual machines dadsv5
+    series". Empty when the text has no letters."""
+    head = str(text or "").split("-", 1)[0].split(":", 1)[0]
+
+    def word(w: str) -> str:                            # "p/l" is one short word; "sgl/el" is two
+        w = w.lower()
+        if w in AZURE_ABBREVIATIONS or "/" not in w:
+            return AZURE_ABBREVIATIONS.get(w, w)
+        return " ".join(AZURE_ABBREVIATIONS.get(x, x) for x in w.split("/"))
+    joined = " ".join(word(w) for w in head.split())
+    return norm(AZURE_ABBREVIATIONS.get(joined, joined))

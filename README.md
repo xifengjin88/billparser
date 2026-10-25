@@ -7,17 +7,56 @@ without LLM calls.
 
 ## Quick start
 
+With Docker (PostgreSQL, the API and the web app):
+
 ```bash
-uv sync --extra dev                     # or: pip install -e ".[dev]"
+cp example.env .env                     # optional: ANTHROPIC_API_KEY, AUTH, ...
+make up                                 # web app http://localhost:8090, API http://localhost:8010/parse
+make dev                                # the same with hot reload (API and web app)
+make help                               # every target: logs, psql, migrate, nightly, backup-db, destroy, ...
+```
+
+The ports differ from invoice-parser's (8000/8080), so both stacks run side by side; `API_PORT` and `WEB_PORT`
+change them. The API container runs the migrations (`alembic upgrade head`) before it starts. Data stays in two
+volumes: `pgdata` (PostgreSQL) and `billparse-data` (uploads, result rows, nightly reports, the service catalog and
+the synonyms that review teaches).
+
+Without Docker (SQLite file in `store/` unless `DATABASE_URL` is set):
+
+```bash
+uv sync --extra dev
 python samples/make_samples.py          # 13 sample files in samples/files/
 cp tests/fixtures/raw/*.json data/raw/  # tiny demo catalog; see "Service catalog" for the real one
 python -m billparse parse samples/files/* --no-llm
-python -m pytest -q                     # 41 tests, LLM routes use a fake LLM
+make api-local                          # API on :8000
+make web-local                          # web app on :5173 (cd web && pnpm install first)
+make test                               # tests; LLM routes use a fake LLM
 ```
 
-With an API key, unknown layouts go to the LLM: `export ANTHROPIC_API_KEY=...`
-(model via `BILLPARSE_MODEL`). API server: `uvicorn billparse.api:app`, then
-`curl -F file=@invoice.pdf localhost:8000/parse`.
+With an API key, unknown layouts go to the LLM: `ANTHROPIC_API_KEY=...` (model via `BILLPARSE_MODEL`;
+`BILLPARSE_USE_LLM=0` turns it off).
+
+## Web app and API
+
+The web app (`web/`: React, Vite, shadcn/ui, react-query; nginx in Docker forwards `/api` to the API) has:
+
+| Page | What it does |
+|---|---|
+| Upload | Drop files; each one is parsed in the background (`POST /parse/start`, polled at `GET /parse/tasks/{sha}`) |
+| Documents | Every file: status, confidence, total, route; a document's lines, checks, analysis and routes tried |
+| Review | The queue (`needs_review`, `unsupported`, most money first). Edit or delete lines, add lines, map unresolved services to catalog services, **Check again** (validates and analyzes again, saves nothing), tick the checklist, **Approve** |
+| Specs | Built-in and learned specs, every version, make one current, mark verified, the files each one parsed |
+| Learning | Metrics, run the nightly loop in the background, nightly reports |
+
+Approving keeps the corrected lines as the document's result (the parsed result stays beside it), closes the
+review item, saves each service pick as a synonym, and marks a candidate spec verified when no line was edited.
+
+API types for the web app come from the OpenAPI document: `make web-types`. `GET /parse` is the API page with
+every endpoint. The endpoints of the CLI era stay: `POST /parse`, `GET /results/{sha}`, `/results/{sha}/rows`,
+`/review`, `/specs/{id}`, `POST /specs/{id}/approve`, `/nightly`, `/metrics`, plus `/health`.
+
+Sign-in is optional and works as in invoice-parser: `AUTH=google` with a Google OAuth client, one email domain,
+and an invite code the first time (see `example.env`). The redirect URI is `<address>/api/auth/callback`.
 
 ## How a file flows
 
@@ -50,13 +89,21 @@ continuation, subtotal, total, header repeat, note. Group headers carry down as 
 (or as the provider when they name one). Wrapped description lines merge into the line above.
 Subtotals with SUM formulas over rows above are recognized; row-wise SUMs are not.
 
+**Context of each line** (`context.py`, `svcres/regions.py`). Headings above a line give its account, service
+and region (a heading that is a whole AWS, Azure or GCP region name or code). The region is the code
+(`ca-central-1`, `eastus2`), for every route; the printed name stays in `region_name`. A PDF row
+printed in cells gives its quantity and unit ("588 Hrs") and keeps its other amounts by column name ("Pre-tax
+charges"). Header rows over value rows ("Billing period | Account ID") are header fields. Each line has one type:
+usage, tax, credit or commitment fee. They are never merged, and each keeps its service; the analysis shows each
+service's money by type (`by_service_and_type`).
+
 **Validation** (`validate.py`). Evidence that moves a confidence score:
 
 | Check | What it catches |
 |---|---|
 | labels | cost with no service or description |
 | line math | qty x unit price != amount (flags consistent ratios as unit or currency issues) |
-| stated total | grand total anywhere (table row, header field, JSON metadata, any language via "one row equals the sum of the others"), or subtotals that sum to the lines |
+| stated total | grand total anywhere (table row, header field, JSON metadata, any language via "one row equals the sum of the others"), or subtotals that sum to the lines. For a tree of totals (PDF bills) the proof is exact: printed total = lines + the rounding at each printed subtotal, to the cent, and no subtotal may differ from its parts by more than half a cent per part (0.005 × (parts + 1)). Anything else is money counted twice or not read |
 | row coverage | rows with amounts that didn't make it into line items |
 | dual extraction | learned or LLM spec vs an independent rule-based extraction |
 | plausibility | dates, mixed currencies, unexplained negatives |
@@ -80,12 +127,10 @@ Run nightly: `python -m billparse nightly` (or `POST /nightly`).
    reproduce every file the spec parsed before (row count, total, confidence). Pass: promoted
    as a new version. Fail: rejected, old version stays.
 3. Promotes candidate specs to verified after 3 clean files.
-4. Retrains the row classifier (decision tree) from rows of reconciled documents; installed only
-   at 97%+ holdout agreement. Rules stay as fallback.
-5. Writes a report with the metrics that should improve over time: first-route success,
+4. Writes a report with the metrics that should improve over time: first-route success,
    share with no LLM call, average LLM calls, reconciled share.
 
-Every parse appends to `store/records.jsonl`; row labels go to `store/labels.jsonl`.
+Every parse appends a record (route, status, checks) to the log.
 
 Manage specs: `python -m billparse specs [list | show ID | approve ID | rollback ID VERSION | test ID]`.
 
@@ -104,9 +149,13 @@ Corrections: `python -m billparse synonym "VM Hrs" "azure:Virtual Machines"`.
 
 ## Storage
 
-Everything is on disk under `store/` behind `store.py` (specs with versions, raw docs for
-regression, results as JSON plus Parquet rows, JSONL logs). Swap for S3 and Postgres by
-reimplementing that one class.
+`store.py` keeps rows in the database (`db.py`): documents, every version of every learned spec, each spec's
+regression set (`spec_doc`, `spec_fingerprint`), the logs (`journal`: records, labels, review) and the admitted
+users. PostgreSQL with `DATABASE_URL`, else a SQLite file in `PARSER_DATA_DIR`. Large parts are files in
+`PARSER_DATA_DIR`: uploads (`docs/`), rows as Parquet (`results/`) and nightly reports.
+
+Schema changes go through Alembic: change `billparse/db.py`, then
+`DATABASE_URL=... uv run alembic revision --autogenerate -m "..."`.
 
 ## Known limits
 
@@ -115,4 +164,5 @@ reimplementing that one class.
 - No OCR: scanned PDFs are detected and queued. Hook Azure Document Intelligence or Textract
   into `docmodel._read_pdf` to produce the same word-with-position rows.
 - Commitment savings are indicative ranges; monthly bills hide hourly usage.
-- Single process, synchronous. Stages are plain functions, so a queue can wrap them later.
+- Parses run in a thread pool in the API process (`PARSE_WORKERS`). A task is in memory: an API restart forgets
+  running tasks (never stored results). One API container only.

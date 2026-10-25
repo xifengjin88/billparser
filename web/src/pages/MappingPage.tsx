@@ -1,0 +1,152 @@
+import { useDeferredValue, useState } from 'react'
+import { toast } from 'sonner'
+import { Trash2Icon } from 'lucide-react'
+
+import { useAddAlias, useAliases, useDeleteAlias, useMapping, useResolve } from '@/api/queries'
+import { DataTable } from '@/components/app/DataTable'
+import { Empty, Loading, NativeSelect, PageHeader } from '@/components/app/common'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { when } from '@/lib/format'
+
+export function MappingPage() {
+  return (
+    <>
+      <PageHeader
+        title="Service mapping"
+        description="A printed service label resolves to a code in this order: a code printed on the document, an alias taught in review, a layout spec's names, an exact name or alias in the mapping file, then a choice among close candidates. Names shared by several codes never resolve on their own."
+      />
+      <Tabs defaultValue="try">
+        <TabsList>
+          <TabsTrigger value="try">Try a label</TabsTrigger>
+          <TabsTrigger value="aliases">Learned aliases</TabsTrigger>
+          <TabsTrigger value="flagged">Rows to check</TabsTrigger>
+          <TabsTrigger value="ambiguous">Shared names</TabsTrigger>
+          <TabsTrigger value="all">Full mapping</TabsTrigger>
+        </TabsList>
+        <TabsContent value="try" className="pt-3"><TryLabel /></TabsContent>
+        <TabsContent value="aliases" className="pt-3"><Aliases /></TabsContent>
+        <TabsContent value="flagged" className="pt-3"><MappingTable view="flagged" /></TabsContent>
+        <TabsContent value="ambiguous" className="pt-3"><MappingTable view="ambiguous" /></TabsContent>
+        <TabsContent value="all" className="pt-3"><MappingTable view="all" /></TabsContent>
+      </Tabs>
+    </>
+  )
+}
+
+function TryLabel() {
+  const [text, setText] = useState('Savings Plans for AWS Compute usage')
+  const [provider, setProvider] = useState('')
+  const labelText = useDeferredValue(text)
+  const r = useResolve(labelText, provider)
+  return (
+    <div className="max-w-3xl space-y-3">
+      <div className="flex flex-wrap gap-2">
+        <Input value={text} onChange={(e) => setText(e.target.value)} placeholder="Label as printed on a bill" className="min-w-72 flex-1" />
+        <NativeSelect value={provider} onChange={(e) => setProvider(e.target.value)}>
+          <option value="">any provider</option>
+          {['aws', 'azure', 'gcp'].map((p) => <option key={p} value={p}>{p}</option>)}
+        </NativeSelect>
+      </div>
+      {r.isFetching && !r.data ? <Loading /> : r.data && (
+        r.data.code ? (
+          <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm dark:border-emerald-900 dark:bg-emerald-950/40">
+            <span className="font-mono font-medium">{r.data.code}</span> — {r.data.name} <span className="text-muted-foreground">(matched by {r.data.how})</span>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            <div className={`rounded-lg border p-3 text-sm ${r.data.how === 'ambiguous' ? 'border-amber-200 bg-amber-50 dark:border-amber-900 dark:bg-amber-950/40' : 'border-red-200 bg-red-50 dark:border-red-900 dark:bg-red-950/40'}`}>
+              {r.data.how === 'ambiguous' ? 'Shared by several codes; a person or a printed code decides.' : 'No match.'}
+            </div>
+            {r.data.candidates.length > 0 && (
+              <ul className="space-y-1 text-sm">
+                {r.data.candidates.map(([code, name]) => <li key={code}><span className="font-mono">{code}</span> — {name}</li>)}
+              </ul>
+            )}
+          </div>
+        )
+      )}
+    </div>
+  )
+}
+
+function Aliases() {
+  const aliases = useAliases()
+  const add = useAddAlias()
+  const del = useDeleteAlias()
+  const [provider, setProvider] = useState<'aws' | 'azure' | 'gcp'>('aws')
+  const [labelText, setLabel] = useState('')
+  const [code, setCode] = useState('')
+  return (
+    <div className="space-y-4">
+      <form
+        className="flex flex-wrap items-end gap-2 rounded-lg border p-3"
+        onSubmit={(e) => {
+          e.preventDefault()
+          add.mutate({ provider, label: labelText, code }, {
+            onSuccess: () => { toast.success(`Saved: ${labelText} → ${code}`); setLabel(''); setCode('') },
+            onError: (er) => toast.error(er.message),
+          })
+        }}
+      >
+        <label className="space-y-1 text-xs text-muted-foreground">Provider
+          <NativeSelect className="block" value={provider} onChange={(e) => setProvider(e.target.value as typeof provider)}>
+            {['aws', 'azure', 'gcp'].map((p) => <option key={p} value={p}>{p}</option>)}
+          </NativeSelect>
+        </label>
+        <label className="space-y-1 text-xs text-muted-foreground">Printed label
+          <Input value={labelText} onChange={(e) => setLabel(e.target.value)} className="w-72" required />
+        </label>
+        <label className="space-y-1 text-xs text-muted-foreground">Code
+          <Input value={code} onChange={(e) => setCode(e.target.value)} className="w-48 font-mono" required />
+        </label>
+        <Button type="submit" disabled={add.isPending}>Add an alias</Button>
+      </form>
+      {aliases.isLoading ? <Loading /> : !aliases.data?.length ? <Empty>None yet. Setting a service code in review saves the label here.</Empty> : (
+        <DataTable rows={aliases.data} rowKey={(a) => `${a.provider}|${a.label_norm}`} height="auto" columns={[
+          { key: 'provider', header: 'Provider', width: '90px', render: (a) => a.provider },
+          { key: 'label', header: 'Label', width: 'minmax(240px, 3fr)', render: (a) => a.label },
+          { key: 'code', header: 'Code', width: '180px', render: (a) => <span className="font-mono text-xs">{a.code}</span> },
+          { key: 'source', header: 'Source', width: 'minmax(160px, 2fr)', render: (a) => <span className="text-muted-foreground">{a.source}</span> },
+          { key: 'created', header: 'Added', width: '150px', render: (a) => when(a.created) },
+          {
+            key: 'del', header: '', width: '44px', align: 'center',
+            render: (a) => <button aria-label={`Remove ${a.label}`} className="text-muted-foreground hover:text-red-600" onClick={() => del.mutate(a)}><Trash2Icon className="size-4" /></button>,
+          },
+        ]} />
+      )}
+    </div>
+  )
+}
+
+function MappingTable({ view }: { view: 'all' | 'flagged' | 'ambiguous' }) {
+  const [q, setQ] = useState('')
+  const [provider, setProvider] = useState('')
+  const [offset, setOffset] = useState(0)
+  const query = useDeferredValue(q)
+  const m = useMapping(query, provider, view, offset)
+  const total = m.data?.total ?? 0
+  return (
+    <div className="space-y-3">
+      <div className="flex flex-wrap items-center gap-2">
+        <Input placeholder="Search code, name or alias" value={q} onChange={(e) => { setQ(e.target.value); setOffset(0) }} className="w-72" />
+        <NativeSelect value={provider} onChange={(e) => { setProvider(e.target.value); setOffset(0) }}>
+          <option value="">all providers</option>
+          {['aws', 'azure', 'gcp'].map((p) => <option key={p} value={p}>{p}</option>)}
+        </NativeSelect>
+        <Button size="sm" variant="outline" disabled={offset === 0} onClick={() => setOffset(Math.max(0, offset - 200))}>Previous</Button>
+        <span className="text-sm text-muted-foreground tabular-nums">{total ? `${offset + 1}–${Math.min(total, offset + 200)} of ${total.toLocaleString()}` : '0 rows'}</span>
+        <Button size="sm" variant="outline" disabled={offset + 200 >= total} onClick={() => setOffset(offset + 200)}>Next</Button>
+      </div>
+      <DataTable rows={m.data?.rows ?? []} rowKey={(r) => `${r.provider}|${r.code}`} height={560} empty={m.isLoading ? 'Loading…' : 'No row matches.'} columns={[
+        { key: 'provider', header: 'Provider', width: '80px', render: (r) => r.provider },
+        { key: 'code', header: 'Code', width: '200px', render: (r) => <span className="font-mono text-xs">{r.code}</span> },
+        { key: 'name', header: 'Name', width: 'minmax(220px, 2fr)', render: (r) => r.name },
+        { key: 'match', header: 'Match', width: '100px', render: (r) => r.match },
+        { key: 'aliases', header: 'Aliases', width: 'minmax(200px, 2fr)', render: (r) => <span className="text-muted-foreground">{r.aliases.join(', ')}</span> },
+        { key: 'note', header: 'Note', width: 'minmax(240px, 3fr)', render: (r) => <span className="text-muted-foreground" title={r.note}>{r.was ? `was “${r.was}”. ` : ''}{r.note}</span> },
+      ]} />
+    </div>
+  )
+}

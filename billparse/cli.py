@@ -13,8 +13,10 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from pathlib import Path
 
 from .pipeline import Pipeline, Settings
+from .settings import configure_logging, load_env
 
 
 def _print_summary(r: dict) -> None:
@@ -68,8 +70,13 @@ def main(argv: list[str] | None = None) -> None:
     sy = sub.add_parser("synonym")
     sy.add_argument("raw")
     sy.add_argument("service_key")
+    ag = sub.add_parser("agent", help="the agent that writes specs (needs AGENT_ENABLED=1 and ANTHROPIC_API_KEY)")
+    ag.add_argument("action", choices=["list", "run", "drain", "retry", "trace"])
+    ag.add_argument("target", nargs="?", help="run: a file to parse and review; retry/trace: a job id")
     a = ap.parse_args(argv)
 
+    load_env()
+    configure_logging()
     pipe = Pipeline(Settings(use_llm=not getattr(a, "no_llm", False)))
     if a.cmd == "parse":
         for f in a.files:
@@ -91,6 +98,45 @@ def main(argv: list[str] | None = None) -> None:
         from .analyze import get_resolver
         get_resolver(pipe.s.catalog_dir).add_synonym(a.raw, a.service_key)
         print(f"Saved {a.raw!r} -> {a.service_key}")
+    elif a.cmd == "agent":
+        _agent(pipe, a)
+
+
+def _agent(pipe: Pipeline, a) -> None:
+    from . import agent
+    st = pipe.store
+    if a.action == "list":
+        for j in st.agent_jobs():
+            print(f"{j['id']:5} {j['status']:9} {j['kind']:6} rounds={j['rounds']} ${j['cost_usd']:.2f}  "
+                  f"{j['name'][:50]}  {j.get('spec_id') or ''}  {(j.get('note') or j.get('error') or '')[:60]}")
+        return
+    if a.action == "trace":
+        for e in agent.read_trace(st, int(a.target)):
+            print(json.dumps(e, default=str)[:400])
+        return
+    if a.action == "retry":
+        print("queued" if st.retry_agent_job(int(a.target)) else "not queued (no such job, or it is running)")
+        return
+    if not agent.enabled():
+        raise SystemExit("The agent calls the Claude API and costs money: set AGENT_ENABLED=1 and ANTHROPIC_API_KEY.")
+    if a.action == "run":
+        path = Path(a.target)                       # agent=False: the job below is its only run (no second paid run)
+        r = pipe.parse_bytes(path.read_bytes(), path.name, force=True, agent=False)
+        if not agent.needs_agent(r):
+            print(f"{r['file']}: {r['completeness']}, no review needed")
+            return
+        key = agent.job_key(st, r)                  # the layout's job may have been made for another file
+        job_id = agent.enqueue_for(pipe, r) or next(j["id"] for j in st.agent_jobs() if j["layout_key"] == key)
+        st.retry_agent_job(job_id)
+        _print_job(agent.run_job(pipe, job_id))
+    elif a.action == "drain":
+        for j in reversed(st.agent_jobs("queued")):
+            _print_job(agent.run_job(pipe, j["id"]))
+
+
+def _print_job(j: dict) -> None:
+    print(f"job {j['id']} {j['name']}: {j['status']} after {j['rounds']} round(s), {j['tool_calls']} tool calls, "
+          f"${j['cost_usd']:.2f}; spec {j.get('spec_id') or '-'}; {(j.get('note') or j.get('error') or '')[:200]}")
 
 
 def _specs(pipe: Pipeline, a) -> None:

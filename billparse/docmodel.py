@@ -17,13 +17,22 @@ import gzip
 import hashlib
 import io
 import json
+import logging
+import multiprocessing
+import os
 import re
+import threading
 import zipfile
+from collections import Counter
+from concurrent.futures import ProcessPoolExecutor
+from concurrent.futures.process import BrokenProcessPool
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
 import pandas as pd
+
+log = logging.getLogger(__name__)
 
 MAX_GRID_ROWS = 20_000           # bigger sheets are read as frames (no formatting)
 HEADER_SCAN_ROWS = 40
@@ -121,10 +130,21 @@ def _load_into(doc: Document, data: bytes, name: str, prefix: str = "") -> None:
     if data[:2] == b"\x1f\x8b":                               # gzip
         inner = name[:-3] if lname.endswith(".gz") else name + ".csv"
         return _load_into(doc, gzip.decompress(data), inner, prefix)
+    if data[:4] == b"PK\x03\x04" and lname.endswith((".docx", ".pptx")):
+        doc.file_type = lname.rsplit(".", 1)[-1]
+        doc.regions += _read_office(data, prefix, doc.file_type)
+        return
     if data[:4] == b"PK\x03\x04" and not lname.endswith((".xlsx", ".xlsm")):
-        with zipfile.ZipFile(io.BytesIO(data)) as z:          # zip of exports
+        try:
+            z = zipfile.ZipFile(io.BytesIO(data))             # zip of exports
+        except zipfile.BadZipFile:
+            doc.file_type = doc.file_type or "zip"
+            doc.notes.append(f"{name}: the archive is damaged (no central directory); nothing could be read")
+            return
+        with z:
             for info in z.infolist():
-                if not info.is_dir() and not info.filename.startswith("__MACOSX"):
+                if not info.is_dir() and not info.filename.startswith("__MACOSX") \
+                        and not Path(info.filename).name.startswith("._"):
                     _load_into(doc, z.read(info), info.filename, prefix=info.filename + ":")
         doc.file_type = doc.file_type or "zip"
         return
@@ -143,9 +163,81 @@ def _load_into(doc: Document, data: bytes, name: str, prefix: str = "") -> None:
         doc.regions.append(records)
         if meta.rows:
             doc.regions.append(meta)
+    elif lname.endswith(TEXT_EXT) and not _tabular(_decode(data)):
+        doc.file_type = doc.file_type or "txt"
+        doc.regions.append(_read_text(_decode(data), prefix))
     else:
         doc.file_type = "csv"
         doc.regions.append(_read_csv(data, prefix))
+
+
+# ---------------------------------------------------------------- text, Word, PowerPoint
+TEXT_EXT = (".txt", ".text", ".md", ".log", ".yaml", ".yml", ".tf", ".hcl")
+
+
+def _tabular(text: str) -> bool:
+    """A delimited table saved as text: most lines split into the same 3+ fields."""
+    lines = [ln for ln in text.splitlines()[:200] if ln.strip()]
+    if len(lines) < 3:
+        return False
+    for sep in (",", "\t", ";", "|"):
+        counts = Counter(ln.count(sep) for ln in lines)
+        n, freq = counts.most_common(1)[0]
+        if n >= 2 and freq >= 0.8 * len(lines):
+            return True
+    return False
+
+
+def _read_text(text: str, prefix: str, name: str = "page1") -> Region:
+    """Text lines as one page: one cell per line, the indent (in characters) as its x position."""
+    rows = []
+    for i, line in enumerate(text.splitlines()):
+        if not line.strip():
+            continue
+        indent = len(line) - len(line.lstrip())
+        rows.append(Row(cells=[Cell(value=line.strip(), x0=indent * 6.0, x1=(indent + len(line.strip())) * 6.0)],
+                        index=i + 1, top=float(i), page=1))
+    return Region(kind="page", name=prefix + name, rows=rows)
+
+
+def _read_office(data: bytes, prefix: str, kind: str) -> list[Region]:
+    """Word and PowerPoint text and tables (their XML, no extra library): a page per slide, one for a document.
+    Each table row is one line with its cells; each paragraph is one line."""
+    import xml.etree.ElementTree as ET
+    ns = {"w": "http://schemas.openxmlformats.org/wordprocessingml/2006/main",
+          "a": "http://schemas.openxmlformats.org/drawingml/2006/main"}
+    regions: list[Region] = []
+    with zipfile.ZipFile(io.BytesIO(data)) as z:
+        if kind == "docx":
+            parts = ["word/document.xml"]
+        else:
+            parts = sorted((n for n in z.namelist() if re.match(r"ppt/slides/slide\d+\.xml$", n)),
+                           key=lambda n: int(re.search(r"(\d+)", n.rsplit("/", 1)[-1]).group(1)))
+        for k, part in enumerate(parts, 1):
+            root = ET.fromstring(z.read(part))
+            lines: list[str] = []
+            if kind == "docx":
+                body = root.find("w:body", ns)
+                for el in list(body) if body is not None else []:
+                    if el.tag.endswith("}tbl"):
+                        for tr in el.iter(f"{{{ns['w']}}}tr"):
+                            cells = ["".join(t.text or "" for t in tc.iter(f"{{{ns['w']}}}t")).strip()
+                                     for tc in tr.iter(f"{{{ns['w']}}}tc")]
+                            lines.append("    ".join(c for c in cells if c))
+                    elif el.tag.endswith("}p"):
+                        lines.append("".join(t.text or "" for t in el.iter(f"{{{ns['w']}}}t")))
+            else:
+                for tbl in root.iter(f"{{{ns['a']}}}tbl"):
+                    for tr in tbl.iter(f"{{{ns['a']}}}tr"):
+                        cells = ["".join(t.text or "" for t in tc.iter(f"{{{ns['a']}}}t")).strip()
+                                 for tc in tr.iter(f"{{{ns['a']}}}tc")]
+                        lines.append("    ".join(c for c in cells if c))
+                for para in root.iter(f"{{{ns['a']}}}p"):
+                    text = "".join(t.text or "" for t in para.iter(f"{{{ns['a']}}}t"))
+                    if text.strip() and not any(text.strip() in ln for ln in lines):
+                        lines.append(text)
+            regions.append(_read_text("\n".join(lines), prefix, name=f"{'slide' if kind == 'pptx' else 'page'}{k}"))
+    return regions
 
 
 # ---------------------------------------------------------------- CSV
@@ -283,16 +375,19 @@ def _read_xlsx(data: bytes, prefix: str) -> list[Region]:
             for r in range(rng.min_row, rng.max_row + 1):
                 for c in range(rng.min_col, rng.max_col + 1):
                     merged[(r, c)] = v
+        computed = _evaluate_formulas(ws, wsf)            # formulas saved without a result (files written by programs)
         rows: list[Row] = []
         for r in range(1, (ws.max_row or 0) + 1):
             cells: list[Cell] = []
             for c in range(1, (ws.max_column or 0) + 1):
                 cell = ws.cell(r, c)
                 val = merged.get((r, c), cell.value)
-                if val is None:
-                    continue
                 fv = wsf.cell(r, c).value
                 formula = fv if isinstance(fv, str) and fv.startswith("=") else None
+                if val is None and formula:
+                    val = computed.get((r, c))
+                if val is None:
+                    continue
                 cells.append(Cell(value=val, x0=c, x1=c + 1,
                                   bold=bool(cell.font and cell.font.bold),
                                   indent=float(cell.alignment.indent or 0) if cell.alignment else 0.0,
@@ -303,23 +398,147 @@ def _read_xlsx(data: bytes, prefix: str) -> list[Region]:
     return regions
 
 
+_REF = re.compile(r"\$?([A-Z]{1,3})\$?(\d+)")
+_RANGE = re.compile(r"\$?([A-Z]{1,3})\$?(\d+):\$?([A-Z]{1,3})\$?(\d+)")
+
+
+def _col_number(letters: str) -> int:
+    n = 0
+    for ch in letters:
+        n = n * 26 + ord(ch) - 64
+    return n
+
+
+def _evaluate_formulas(ws, wsf, rounds: int = 6) -> dict[tuple[int, int], float]:
+    """Values of formulas that have no saved result: references, ranges, SUM, numbers and + - * / only, evaluated
+    with Python's syntax tree (never eval). Others stay empty."""
+    import ast
+    import operator
+    values: dict[tuple[int, int], float] = {}
+    pending: dict[tuple[int, int], str] = {}
+    for row in wsf.iter_rows():
+        for cell in row:
+            v = cell.value
+            if isinstance(v, str) and v.startswith("="):
+                saved = ws.cell(cell.row, cell.column).value
+                if saved is None:
+                    pending[(cell.row, cell.column)] = v[1:].upper()
+                elif isinstance(saved, (int, float)) and not isinstance(saved, bool):
+                    values[(cell.row, cell.column)] = float(saved)   # a formula with its result: a value to others
+            elif isinstance(v, (int, float)) and not isinstance(v, bool):
+                values[(cell.row, cell.column)] = float(v)
+    ops = {ast.Add: operator.add, ast.Sub: operator.sub, ast.Mult: operator.mul, ast.Div: operator.truediv}
+
+    def calc(node):
+        if isinstance(node, ast.Expression):
+            return calc(node.body)
+        if isinstance(node, ast.Constant) and isinstance(node.value, (int, float)):
+            return float(node.value)
+        if isinstance(node, ast.BinOp) and type(node.op) in ops:
+            return ops[type(node.op)](calc(node.left), calc(node.right))
+        if isinstance(node, ast.UnaryOp) and isinstance(node.op, (ast.USub, ast.UAdd)):
+            v = calc(node.operand)
+            return -v if isinstance(node.op, ast.USub) else v
+        raise ValueError("unsupported")
+
+    computed: dict[tuple[int, int], float] = {}
+    for _ in range(rounds):
+        progress = False
+        for key, f in list(pending.items()):
+            def rng(m: re.Match) -> str:
+                c1, r1, c2, r2 = _col_number(m[1]), int(m[2]), _col_number(m[3]), int(m[4])
+                cells = [(r, c) for r in range(r1, r2 + 1) for c in range(c1, c2 + 1)]
+                if any(k in pending for k in cells):
+                    raise KeyError("not ready")
+                return repr(sum(values.get(k, 0.0) for k in cells))
+            try:
+                expr = re.sub(r"SUM\(([^()]*)\)", lambda m: "(" + "+".join(
+                    _RANGE.sub(rng, part) if ":" in part else part for part in m[1].split(",")) + ")", f)
+                expr = _RANGE.sub(rng, expr)
+                expr = _REF.sub(lambda m: _ref_value(m, values, pending), expr)
+                v = calc(ast.parse(expr, mode="eval"))
+            except (KeyError, ValueError, SyntaxError, ZeroDivisionError, TypeError):
+                continue
+            values[key] = computed[key] = round(v, 10)
+            del pending[key]
+            progress = True
+        if not progress:
+            break
+    return computed
+
+
+def _ref_value(m: re.Match, values: dict, pending: dict) -> str:
+    key = (int(m[2]), _col_number(m[1]))
+    if key in pending:
+        raise KeyError("not ready")
+    return repr(values.get(key, 0.0))
+
+
 # ---------------------------------------------------------------- PDF
+# PDF pages are read in parallel processes (pdfminer is pure Python: about a second a page). PDF_WORKERS sets the
+# number of processes (default: the CPUs, at most 8; 1 reads in this process). The pool is made once and kept.
+PDF_WORKERS = int(os.environ.get("PDF_WORKERS", "0")) or min(os.cpu_count() or 1, 8)
+PDF_PARALLEL_PAGES = 4                                     # fewer pages: start-up costs more than it saves
+_pool: ProcessPoolExecutor | None = None
+_pool_lock = threading.Lock()
+
+
+def _pdf_pool() -> ProcessPoolExecutor:
+    global _pool
+    with _pool_lock:
+        if _pool is None:
+            # spawn, not fork: the API parses in threads, and a forked child of a threaded process can hang
+            _pool = ProcessPoolExecutor(PDF_WORKERS, mp_context=multiprocessing.get_context("spawn"))
+        return _pool
+
+
+def _pdf_words(data: bytes, pages: list[int]) -> list[tuple[int, list[dict], bool]]:
+    """(page number, words, has images) for the given 1-based pages. Runs in a worker process."""
+    import pdfplumber
+
+    out = []
+    with pdfplumber.open(io.BytesIO(data)) as pdf:
+        for pno in pages:
+            page = pdf.pages[pno - 1]
+            words = page.extract_words(extra_attrs=["fontname", "size"], keep_blank_chars=False,
+                                       use_text_flow=False)
+            out.append((pno, words, bool(page.images) if not words else False))
+    return out
+
+
 def _read_pdf(data: bytes, prefix: str) -> list[Region]:
     import pdfplumber
 
-    regions: list[Region] = []
     with pdfplumber.open(io.BytesIO(data)) as pdf:
-        for pno, page in enumerate(pdf.pages, 1):
-            words = page.extract_words(extra_attrs=["fontname", "size"], keep_blank_chars=False,
-                                       use_text_flow=False)
-            reg = Region(kind="page", name=f"{prefix}page{pno}")
-            if not words:
-                reg.scanned = bool(page.images)
-                regions.append(reg)
-                continue
+        n = len(pdf.pages)
+    pages = list(range(1, n + 1))
+    found: list[tuple[int, list[dict], bool]] | None = None
+    if PDF_WORKERS > 1 and n >= PDF_PARALLEL_PAGES:
+        chunks = [pages[i::PDF_WORKERS] for i in range(min(PDF_WORKERS, n))]
+        try:
+            found = [x for part in _pdf_pool().map(_pdf_words, [data] * len(chunks), chunks) for x in part]
+        except (BrokenProcessPool, OSError) as e:          # no processes here (a sandbox): read in this process
+            log.warning("PDF pages read in one process: %s", e)
+            _reset_pool()
+    if found is None:
+        found = _pdf_words(data, pages)
+    regions: list[Region] = []
+    for pno, words, images in sorted(found, key=lambda x: x[0]):
+        reg = Region(kind="page", name=f"{prefix}page{pno}")
+        if not words:
+            reg.scanned = images
+        else:
             reg.rows = _words_to_rows(words, pno)
-            regions.append(reg)
+        regions.append(reg)
     return regions
+
+
+def _reset_pool() -> None:
+    global _pool
+    with _pool_lock:
+        if _pool is not None:
+            _pool.shutdown(wait=False, cancel_futures=True)
+        _pool = None
 
 
 def _words_to_rows(words: list[dict], page: int, y_tol: float = 3.0) -> list[Row]:

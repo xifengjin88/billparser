@@ -22,7 +22,7 @@ from pathlib import Path
 import msgpack
 
 from .normalize import code_key, norm, norm_loose
-from .seeds import AWS_SEED, AZURE_FAMILY_TO_CATEGORY, GCP_KEYWORD_CATEGORY
+from .seeds import AWS_SEED, AZURE_ALIASES, AZURE_FAMILY_TO_CATEGORY, GCP_KEYWORD_CATEGORY, MARKETPLACE_SELLERS
 
 PROVIDERS = ("azure", "aws", "gcp")
 
@@ -36,10 +36,14 @@ class Catalog:
     built_at: float = 0.0
 
     # ---------- building ----------
-    def add_service(self, provider: str, name: str, category: str, family: str | None = None) -> str:
+    def add_service(self, provider: str, name: str, category: str, family: str | None = None,
+                    code: str | None = None) -> str:
+        """code: the provider's own id of the service (AWS service code, Azure serviceId, GCP service id)."""
         key = f"{provider}:{name}"
-        self.services.setdefault(key, {"provider": provider, "name": name,
-                                       "category": category, "family": family})
+        svc = self.services.setdefault(key, {"provider": provider, "name": name,
+                                             "category": category, "family": family, "code": None})
+        if code and not svc.get("code"):
+            svc["code"] = code
         self.add_name(provider, name, key)
         return key
 
@@ -73,8 +77,14 @@ class Catalog:
 def build(raw_dir: Path) -> Catalog:
     cat = Catalog(built_at=time.time())
     _build_azure(cat, raw_dir / "azure_products.json")
+    _azure_aliases(cat)
     _build_aws(cat, raw_dir / "aws_services.json")
     _build_gcp(cat, raw_dir / "gcp_services.json")
+    for provider in PROVIDERS:                          # third-party products: one Marketplace service per cloud
+        key = cat.add_service(provider, "Marketplace", "Marketplace", code="Marketplace")
+        cat.add_code(provider, "Marketplace", key)
+        for seller in MARKETPLACE_SELLERS.get(provider, []):
+            cat.add_name(provider, seller, key)
     return cat
 
 
@@ -91,13 +101,21 @@ def _build_azure(cat: Catalog, path: Path) -> None:
         if not svc:
             continue
         fam = p.get("serviceFamily") or "Other"
-        key = cat.add_service("azure", svc, AZURE_FAMILY_TO_CATEGORY.get(fam, "Other"), fam)
+        key = cat.add_service("azure", svc, AZURE_FAMILY_TO_CATEGORY.get(fam, "Other"), fam, p.get("serviceId"))
         cat.add_code("azure", pid, key)
         if p.get("serviceId"):
             cat.add_code("azure", p["serviceId"], key)
         # Product names ("Virtual Machines Dv3 Series") are what invoices often show.
         if p.get("productName"):
             cat.add_name("azure", p["productName"], key, product=True)
+
+
+def _azure_aliases(cat: Catalog) -> None:
+    for name, aliases in AZURE_ALIASES.items():
+        key = f"azure:{name}"
+        if key in cat.services:
+            for a in aliases:
+                cat.add_name("azure", a, key)
 
 
 def _build_aws(cat: Catalog, path: Path) -> None:
@@ -107,7 +125,7 @@ def _build_aws(cat: Catalog, path: Path) -> None:
         names = (raw.get(code) or {}).get("names") or []
         category, aliases = AWS_SEED.get(code, ("Other", []))
         display = names[0] if names else (aliases[0] if aliases else code)
-        key = cat.add_service("aws", display, category)
+        key = cat.add_service("aws", display, category, code=code)
         cat.add_code("aws", code, key)
         for n in [code, *names[1:], *aliases]:
             cat.add_name("aws", n, key)
@@ -120,5 +138,5 @@ def _build_gcp(cat: Catalog, path: Path) -> None:
             continue
         n = norm(name)
         category = next((c for kw, c in GCP_KEYWORD_CATEGORY if kw in n), "Other")
-        key = cat.add_service("gcp", name, category)
+        key = cat.add_service("gcp", name, category, code=sid)
         cat.add_code("gcp", sid, key)

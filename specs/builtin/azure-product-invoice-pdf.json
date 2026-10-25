@@ -1,0 +1,31 @@
+{
+ "id": "azure-product-invoice-pdf",
+ "version": 1,
+ "trust": "builtin",
+ "source": "tree",
+ "detect": {
+  "text": "Billing Details By Product"
+ },
+ "meta": {
+  "provider": "azure",
+  "kind": "cost_lines",
+  "cost_basis": "billed",
+  "format": "Microsoft invoice PDF, billing details by product (Enterprise Agreement / CSP)",
+  "notes": "Each charge is a part number, its product name (often wrapped onto two lines), Unit Price, Qty, Net Charge, Tax Amount and Total, then its period: the period ends the charge (tree.blocks). The Total is split into the net charge (usage) and its tax (a Tax line). Proved by Net Amount, Sales Tax and Total (including Tax). A savings plan or a reserved capacity (RI) is a commitment fee."
+ },
+ "tree": {
+  "blocks": true
+ },
+ "context": {
+  "charge_types": [
+   [
+    "Tax",
+    "\\b(sales tax|tax amount|VAT|GST|HST)\\b"
+   ],
+   [
+    "Purchase",
+    "\\b(savings plan|reserved capacity|reservation)\\b|\\bRI\\b"
+   ]
+  ]
+ }
+}

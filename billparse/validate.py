@@ -16,6 +16,7 @@ import pandas as pd
 
 from .spec import Extraction
 from .transforms import parse_number
+from .tree import bound
 
 TOTAL_LABEL = re.compile(r"^\s*(?:grand\s+)?(?:sub)?\s*total\b|\b(?:amount|balance)\s+due\b|\binvoice\s+total\b", re.I)
 TAX_LABEL = re.compile(r"\b(?:sales\s+tax|tax|vat|gst|hst)\b", re.I)
@@ -57,6 +58,8 @@ def clean_rows(ext: Extraction) -> list[str]:
             notes.append(f"{int(is_prov.sum())} rows had a provider name as service; used the description instead")
             label = _label_series(df)
 
+    if ext.evidence:                                # the tree of sums already separated totals from lines
+        return notes
     # a "Total" row is a stated total, not spend. Safety net for totals in other languages
     # ("Gesamtbetrag", "Totale"): any single row equal to the sum of all the others.
     is_tot = label.str.contains(TOTAL_LABEL).fillna(False).astype(bool)
@@ -119,8 +122,12 @@ def validate(ext: Extraction, alt: Extraction | None = None, resolved_share: flo
     tot_check, reconciled = _stated_totals(ext, total, non_tax)
     checks.append(tot_check)
     checks.append(_coverage(ext))
+    if ext.evidence:
+        checks += _tree_checks(ext.evidence, total)
     if alt is not None:
         checks.append(_dual(ext, alt))
+    if (cur := _converted(ext)) is not None:
+        checks.append(cur)
     checks += _plausibility(df)
     if resolved_share is not None:
         st = "pass" if resolved_share >= 0.9 else "warn" if resolved_share >= 0.6 else "fail"
@@ -163,10 +170,15 @@ def _line_math(df: pd.DataFrame) -> Check:
 
 
 def _stated_totals(ext: Extraction, total: float, non_tax: float) -> tuple[Check, bool]:
+    rec = (ext.evidence or {}).get("reconcile") or {}
+    if (dup := _duplicates(ext.evidence or {})) is not None:
+        return dup, False
+    if rec.get("src"):
+        return _tree_total(rec, total)
     cands = []
     for t in ext.stated_totals:
         amt = parse_number(t.get("amount"))
-        if amt is not None and t.get("kind") != "subtotal":
+        if amt is not None and t.get("kind") not in ("subtotal", "llm_claim"):   # an LLM's own sum proves nothing
             cands.append((t, amt))
     if not cands:
         subs = [parse_number(t.get("amount")) for t in ext.stated_totals if t.get("kind") == "subtotal"]
@@ -176,8 +188,9 @@ def _stated_totals(ext: Extraction, total: float, non_tax: float) -> tuple[Check
                          f"({sum(subs):,.2f}); no grand total on the document", 0.25), True
         detail = "No stated total found" + (f" ({len(subs)} subtotals seen, sum {sum(subs):,.2f})" if subs else "")
         return Check("stated_total", "skip", detail + "; marked unreconciled", 0.0), False
-    tol = max(0.05, 0.0005 * abs(total))
-    tax_rows = [parse_number(t.get("amount")) or 0 for t in ext.stated_totals if re.search(r"tax", t.get("label", ""), re.I)]
+    # n lines printed to the cent can miss their printed total by half a cent each at most
+    tol = min(max(0.05, 0.0005 * abs(total)), bound(len(ext.rows)))
+    tax_rows =[parse_number(t.get("amount")) or 0 for t in ext.stated_totals if re.search(r"tax", t.get("label", ""), re.I)]
     targets = {"sum of lines": total, "sum before tax": non_tax, "sum plus stated tax": total + sum(tax_rows)}
     for t, amt in sorted(cands, key=lambda x: -abs(x[1])):
         for name, val in targets.items():
@@ -186,6 +199,61 @@ def _stated_totals(ext: Extraction, total: float, non_tax: float) -> tuple[Check
     t, amt = max(cands, key=lambda x: abs(x[1]))
     return Check("stated_total", "fail", f"Stated {t['label']!r} {amt:,.2f} vs extracted {total:,.2f} "
                  f"(diff {total - amt:,.2f})", -0.35), False
+
+
+RATE = re.compile(r"1\s*([A-Z]{3})\s*=\s*(\d+(?:\.\d+)?)\s*([A-Z]{3})")
+
+
+def _converted(ext: Extraction) -> Check | None:
+    """A bill that prints an exchange rate and amounts in both currencies: each amount x the rate is the other
+    printed amount, to the cent."""
+    rate = next((RATE.search(str(f.get("value"))) for k, f in (ext.fields or {}).items()
+                 if RATE.search(str(f.get("value")))), None)
+    rows = (ext.evidence or {}).get("converted") or []
+    if rate is None or not rows:
+        return None
+    src, r, dst = rate.group(1), float(rate.group(2)), rate.group(3)
+    test = [x for x in rows if x["other_currency"] == dst]
+    bad = [x for x in test if abs(round(x["amount"] * r, 2) - x["other"]) > 0.0101]
+    if not test:
+        return None
+    if bad:
+        where = "; ".join(f"{x['label'][:40]} {x['amount']:,.2f} {src} x {r} = {x['amount'] * r:,.2f}, printed "
+                          f"{x['other']:,.2f} {dst} ({x['src']})" for x in bad[:3])
+        return Check("currency", "fail", f"{len(bad)} of {len(test)} amounts do not convert at the printed rate: "
+                     f"{where}", -0.2)
+    return Check("currency", "pass", f"{len(test)} printed {dst} amounts = {src} amounts x {r} (the printed rate), "
+                 "to the cent", 0.05)
+
+
+def _duplicates(ev: dict) -> Check | None:
+    dup = ev.get("duplicate_lines") or []
+    if not dup:
+        return None
+    where = "; ".join(f"{d['label'][:40]} {d['amount']:,.2f} ({d['src']})" for d in dup[:3])
+    return Check("stated_total", "fail", f"{len(dup)} printed row(s) are lines more than once: {where}", -0.35)
+
+
+def _tree_total(rec: dict, total: float) -> tuple[Check, bool]:
+    """The tree's proof (tree._reconcile): printed total = lines + the rounding at each printed total between them,
+    to the cent, and no rounding larger than its parts allow."""
+    amount, rounding = rec["amount"], rec.get("rounding") or 0.0
+    unexplained = round(amount - total - rounding, 2)
+    head = f"Printed {rec['label'][:60]!r} {amount:,.2f}"
+
+    def brief(xs: list[dict]) -> str:
+        return "; ".join(f"{x['label'][:40]} {x['amount']:,.2f} vs its {x['parts']} part(s) {x['children']:,.2f} "
+                         f"({x['src']})" for x in xs[:3])
+    over = rec.get("over_bound") or []
+    if over:
+        return Check("stated_total", "fail", f"{head}: {len(over)} printed total(s) differ from their parts by more "
+                     f"than rounding: {brief(over)}", -0.35), False
+    if abs(unexplained) >= 0.005:
+        return Check("stated_total", "fail", f"{head} vs lines {total:,.2f} + rounding {rounding:,.2f}: "
+                     f"{unexplained:,.2f} is not explained (counted twice or not read)", -0.35), False
+    detail = f"{head} = lines {total:,.2f}" + (f" + rounding {rounding:,.2f} ({brief(rec.get('rounding_at') or [])})"
+                                               if abs(rounding) >= 0.005 else ", to the cent")
+    return Check("stated_total", "pass", detail, 0.35), True
 
 
 def _coverage(ext: Extraction) -> Check:
@@ -213,6 +281,35 @@ def _dual(ext: Extraction, alt: Extraction) -> Check:
                  f"vs {a:,.2f} / {len(ext.rows)} rows", -0.1)
 
 
+def _tree_checks(ev: dict, total: float) -> list[Check]:
+    """The tree of sums' evidence (tree.py): groups that add up or not, amounts nothing explains, views that agree."""
+    out = []
+    failed, ok = ev.get("subtotals_failed") or [], ev.get("subtotals_ok") or 0
+    scale = max(abs(total), 1.0)
+    if failed:
+        gap = ev.get("gap_amount") or 0.0
+        where = "; ".join(f"{f['label'][:40]} {f['amount']:,.2f} vs {f.get('children', 0):,.2f} ({f['src']})"
+                          for f in failed[:3])
+        st = "fail" if gap > 0.005 * scale else "warn"
+        out.append(Check("subtotals", st, f"{len(failed)} group(s) do not add up (difference {gap:,.2f}): {where}",
+                         -0.25 if st == "fail" else -0.05))
+    elif ok:
+        out.append(Check("subtotals", "pass", f"{ok} printed group total(s) equal the sum of their lines", 0.2))
+    n, amt = ev.get("unexplained_count") or 0, ev.get("unexplained_amount") or 0.0
+    if n == 0:
+        out.append(Check("amounts_explained", "pass", f"Every one of {ev.get('records', 0)} amounts is a line, a total "
+                         "or a repeat of one", 0.1))
+    else:
+        where = "; ".join(f"{u['label'][:40]} {u['amount']:,.2f} ({u['src']})" for u in (ev.get("unexplained") or [])[:3])
+        st = "warn" if amt <= 0.005 * scale else "fail"
+        out.append(Check("amounts_explained", st, f"{n} amount(s) ({amt:,.2f}) are not lines, totals or repeats: "
+                         f"{where}", -0.05 if st == "warn" else -0.25))
+    if ev.get("views_agree"):
+        out.append(Check("views_agree", "pass", f"{len(ev['views_agree'])} total(s) are broken down two ways that "
+                         "agree", 0.05))
+    return out
+
+
 def _plausibility(df: pd.DataFrame) -> list[Check]:
     out = []
     if "charge_start" in df and df["charge_start"].notna().any():
@@ -232,8 +329,24 @@ def _plausibility(df: pd.DataFrame) -> list[Check]:
     return out
 
 
+CRITICAL = ("rows", "stated_total", "row_coverage", "labels", "subtotals", "amounts_explained")
+INTERNAL = ("subtotals", "line_math", "row_coverage", "dual_extraction", "amounts_explained", "views_agree")
+
+
+def completeness(checks: list[Check], reconciled: bool) -> str:
+    """How well the result is proved: reconciled (a printed number proves it), consistent (nothing printed to test,
+    the internal checks pass), contradicted (a check failed), unchecked (nothing could be tested)."""
+    if any(c.status == "fail" and c.name in CRITICAL + ("line_math",) for c in checks):
+        return "contradicted"
+    if reconciled:
+        return "reconciled"
+    if any(c.status == "pass" and c.name in INTERNAL for c in checks):
+        return "consistent"
+    return "unchecked"
+
+
 def _summarize(checks: list[Check], conf: float, reconciled: bool, ext: Extraction) -> dict:
-    critical_fail = any(c.status == "fail" and c.name in ("rows", "stated_total", "row_coverage", "labels") for c in checks)
+    critical_fail = any(c.status == "fail" and c.name in CRITICAL for c in checks)
     if reconciled and conf >= 0.7 and not critical_fail:
         status = "reconciled"
     elif not critical_fail and conf >= 0.6:
@@ -241,4 +354,5 @@ def _summarize(checks: list[Check], conf: float, reconciled: bool, ext: Extracti
     else:
         status = "needs_review"
     return {"status": status, "confidence": round(conf, 2), "checks": [asdict(c) for c in checks],
+            "completeness": completeness(checks, reconciled),
             "feedback": [f"{c.name}: {c.detail}" for c in checks if c.status in ("fail", "warn")]}

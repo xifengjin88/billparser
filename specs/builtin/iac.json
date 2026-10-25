@@ -1,0 +1,15 @@
+{
+ "id": "iac",
+ "version": 1,
+ "trust": "builtin",
+ "source": "iac",
+ "detect": {
+  "text": "AWSTemplateFormatVersion|^\\s*resource\\s+\"aws_\\w+\"\\s+\"[\\w-]+\"|\"Type\"\\s*:\\s*\"AWS::"
+ },
+ "meta": {
+  "provider": "aws",
+  "kind": "inventory",
+  "format": "Infrastructure as code: CloudFormation (YAML or JSON) and Terraform",
+  "notes": "What the files launch, as resources with quantities (no prices): parameters and variables at their defaults, conditions, count, for_each, Auto Scaling desired capacity with the launch template's type. Free resources (VPC, security group, IAM) are excluded with the reason; a nested stack is a gap."
+ }
+}

@@ -1,0 +1,37 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+dist/
+build/
+
+# Settings and secrets (example.env is the template)
+.env
+.env.*
+!example.env
+
+# Local data: uploads, results, the SQLite file, nightly reports, the row model
+store/*
+!store/.gitkeep
+backups/
+
+# Built or learned at run time from data/raw
+data/catalog.msgpack
+data/synonyms.json
+data/resolution_cache.json
+
+# Sample files made by samples/make_samples.py
+samples/files/
+
+# Web app (web/.gitignore has the rest)
+web/node_modules/
+web/dist/
+
+# Editors and OS
+.idea/
+.vscode/*
+!.vscode/extensions.json
+.DS_Store

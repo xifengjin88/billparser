@@ -1,0 +1,4547 @@
+{
+ "openapi": "3.1.0",
+ "info": {
+  "title": "billparse",
+  "description": "HTTP API: upload a file, get the parsed document; read and manage the layout specs and the learning jobs.\n\n    uvicorn billparse.api:app --host 0.0.0.0 --port 8000        (the API page: GET /parse)\n    curl -F file=@invoice.pdf localhost:8000/parse\n\nThe paths and response models are invoice-parser's (invoiceparse/api.py and webapi.py), so its web app and clients\nwork unchanged. The store comes from the environment (DATABASE_URL, PARSER_DATA_DIR), as for the CLI. Parsing runs\nbillparse's pipeline: built-in specs, learned specs, the rule mapper, then (with ANTHROPIC_API_KEY) the LLM routes.\nWith AGENT_ENABLED=1, a file that no spec proves gets one from the agent during its upload (agent.py), and is read\nwith it; /learn/jobs lists every learning run. Learning costs money: it is off unless AGENT_ENABLED=1.\n",
+  "version": "1"
+ },
+ "paths": {
+  "/auth/me": {
+   "get": {
+    "tags": [
+     "auth"
+    ],
+    "summary": "Me",
+    "operationId": "me_auth_me_get",
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Me"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/auth/login": {
+   "get": {
+    "tags": [
+     "auth"
+    ],
+    "summary": "Login",
+    "operationId": "login_auth_login_get",
+    "parameters": [
+     {
+      "name": "next",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Next"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/auth/callback": {
+   "get": {
+    "tags": [
+     "auth"
+    ],
+    "summary": "Callback",
+    "operationId": "callback_auth_callback_get",
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      }
+     }
+    }
+   }
+  },
+  "/auth/invite": {
+   "post": {
+    "tags": [
+     "auth"
+    ],
+    "summary": "Invite",
+    "description": "Admit the signed-in person with an invite code (once: later sign-ins need no code).",
+    "operationId": "invite_auth_invite_post",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/InviteIn"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Me"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/auth/logout": {
+   "post": {
+    "tags": [
+     "auth"
+    ],
+    "summary": "Logout",
+    "operationId": "logout_auth_logout_post",
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Me"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/settings": {
+   "get": {
+    "tags": [
+     "web"
+    ],
+    "summary": "Settings",
+    "operationId": "settings_settings_get",
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Settings"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/parse/start": {
+   "post": {
+    "tags": [
+     "web"
+    ],
+    "summary": "Parse Start",
+    "description": "Start parsing a file and return at once; GET /parse/tasks/{sha256} says how it goes.",
+    "operationId": "parse_start_parse_start_post",
+    "parameters": [
+     {
+      "name": "force",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "boolean",
+       "default": false,
+       "title": "Force"
+      }
+     },
+     {
+      "name": "backend",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Backend"
+      }
+     },
+     {
+      "name": "fallback",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Fallback"
+      }
+     }
+    ],
+    "requestBody": {
+     "required": true,
+     "content": {
+      "multipart/form-data": {
+       "schema": {
+        "$ref": "#/components/schemas/Body_parse_start_parse_start_post"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ParseTask"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/parse/tasks": {
+   "get": {
+    "tags": [
+     "web"
+    ],
+    "summary": "Parse Tasks",
+    "operationId": "parse_tasks_parse_tasks_get",
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "items": {
+          "$ref": "#/components/schemas/ParseTask"
+         },
+         "type": "array",
+         "title": "Response Parse Tasks Parse Tasks Get"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/parse/tasks/{sha256}": {
+   "get": {
+    "tags": [
+     "web"
+    ],
+    "summary": "Parse Task",
+    "operationId": "parse_task_parse_tasks__sha256__get",
+    "parameters": [
+     {
+      "name": "sha256",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "title": "Sha256"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ParseTask"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/documents/{sha256}/reparse": {
+   "post": {
+    "tags": [
+     "web"
+    ],
+    "summary": "Reparse",
+    "description": "Parse the stored file again and run the agent for it again (a new spec, or an improve round on the spec that\nreads it), in the background. Paid when learning is on.",
+    "operationId": "reparse_documents__sha256__reparse_post",
+    "parameters": [
+     {
+      "name": "sha256",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "title": "Sha256"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ParseTask"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/documents/{sha256}/stop": {
+   "post": {
+    "tags": [
+     "web"
+    ],
+    "summary": "Stop Document",
+    "description": "Stop the learning or improving run of this file (the parse itself takes seconds and is not stopped).",
+    "operationId": "stop_document_documents__sha256__stop_post",
+    "parameters": [
+     {
+      "name": "sha256",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "title": "Sha256"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "additionalProperties": {
+          "type": "array",
+          "items": {
+           "type": "integer"
+          }
+         },
+         "title": "Response Stop Document Documents  Sha256  Stop Post"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/documents/{sha256}/parse-current": {
+   "post": {
+    "tags": [
+     "web"
+    ],
+    "summary": "Parse Current",
+    "description": "Parse the stored file again with the specs and code of today, in the background: no agent and no model\nrequest, so it is free.",
+    "operationId": "parse_current_documents__sha256__parse_current_post",
+    "parameters": [
+     {
+      "name": "sha256",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "title": "Sha256"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ParseTask"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/documents/{sha256}/view": {
+   "get": {
+    "tags": [
+     "web"
+    ],
+    "summary": "Document View",
+    "description": "Everything the result page shows, with every charge (the browser pages and filters them).",
+    "operationId": "document_view_documents__sha256__view_get",
+    "parameters": [
+     {
+      "name": "sha256",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "title": "Sha256"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/DocumentView"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/documents/{sha256}/charges/{charge_id}": {
+   "get": {
+    "tags": [
+     "web"
+    ],
+    "summary": "Charge Detail",
+    "operationId": "charge_detail_documents__sha256__charges__charge_id__get",
+    "parameters": [
+     {
+      "name": "sha256",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "title": "Sha256"
+      }
+     },
+     {
+      "name": "charge_id",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "title": "Charge Id"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ChargeDetail"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/documents/{sha256}": {
+   "delete": {
+    "tags": [
+     "web"
+    ],
+    "summary": "Delete Document",
+    "description": "Delete the result, its runs and the uploaded file. Layout specs and jobs stay.",
+    "operationId": "delete_document_documents__sha256__delete",
+    "parameters": [
+     {
+      "name": "sha256",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "title": "Sha256"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "additionalProperties": true,
+         "title": "Response Delete Document Documents  Sha256  Delete"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   },
+   "get": {
+    "summary": "Document",
+    "description": "The parsed document in the output contract (the approved version when there is one).",
+    "operationId": "document_documents__sha256__get",
+    "parameters": [
+     {
+      "name": "sha256",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "title": "Sha256"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "additionalProperties": true,
+         "title": "Response Document Documents  Sha256  Get"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/documents/{sha256}/source": {
+   "get": {
+    "tags": [
+     "web"
+    ],
+    "summary": "Source Info",
+    "operationId": "source_info_documents__sha256__source_get",
+    "parameters": [
+     {
+      "name": "sha256",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "title": "Sha256"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/SourceInfo"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/documents/{sha256}/source/table": {
+   "get": {
+    "tags": [
+     "web"
+    ],
+    "summary": "Source Table",
+    "description": "Rows `offset`..`offset+limit` of one table (0-based in the table), each with the role the parser gave it.\nRows past the stored 5,000 of a large table are read from the uploaded file.",
+    "operationId": "source_table_documents__sha256__source_table_get",
+    "parameters": [
+     {
+      "name": "sha256",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "title": "Sha256"
+      }
+     },
+     {
+      "name": "name",
+      "in": "query",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "title": "Name"
+      }
+     },
+     {
+      "name": "offset",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "integer",
+       "minimum": 0,
+       "default": 0,
+       "title": "Offset"
+      }
+     },
+     {
+      "name": "limit",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "integer",
+       "maximum": 2000,
+       "minimum": 1,
+       "default": 200,
+       "title": "Limit"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/SourceTable"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/documents/{sha256}/source/lines": {
+   "get": {
+    "tags": [
+     "web"
+    ],
+    "summary": "Source Lines",
+    "operationId": "source_lines_documents__sha256__source_lines_get",
+    "parameters": [
+     {
+      "name": "sha256",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "title": "Sha256"
+      }
+     },
+     {
+      "name": "page",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "integer"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Page"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "array",
+         "items": {
+          "$ref": "#/components/schemas/SourceLine"
+         },
+         "title": "Response Source Lines Documents  Sha256  Source Lines Get"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/documents/{sha256}/source/page.png": {
+   "get": {
+    "tags": [
+     "web"
+    ],
+    "summary": "Source Page",
+    "description": "A PDF page as an image: every line boxed by what the parser made of it, `focus_line` in yellow.",
+    "operationId": "source_page_documents__sha256__source_page_png_get",
+    "parameters": [
+     {
+      "name": "sha256",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "title": "Sha256"
+      }
+     },
+     {
+      "name": "page",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "integer",
+       "minimum": 1,
+       "default": 1,
+       "title": "Page"
+      }
+     },
+     {
+      "name": "focus_line",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "integer"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Focus Line"
+      }
+     },
+     {
+      "name": "colored",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "boolean",
+       "default": true,
+       "title": "Colored"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "image/png": {}
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/highlight/legend": {
+   "get": {
+    "tags": [
+     "web"
+    ],
+    "summary": "Highlight Legend",
+    "operationId": "highlight_legend_highlight_legend_get",
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "additionalProperties": true,
+         "type": "object",
+         "title": "Response Highlight Legend Highlight Legend Get"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/review/queue": {
+   "get": {
+    "tags": [
+     "web"
+    ],
+    "summary": "Review Queue",
+    "description": "Documents waiting for review, most money at risk first.",
+    "operationId": "review_queue_review_queue_get",
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "items": {
+          "$ref": "#/components/schemas/DocumentItem"
+         },
+         "type": "array",
+         "title": "Response Review Queue Review Queue Get"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/documents/{sha256}/review/preview": {
+   "post": {
+    "tags": [
+     "web"
+    ],
+    "summary": "Review Preview",
+    "description": "Apply the edits and check the totals again; nothing is saved.",
+    "operationId": "review_preview_documents__sha256__review_preview_post",
+    "parameters": [
+     {
+      "name": "sha256",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "title": "Sha256"
+      }
+     }
+    ],
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/ReviewEdits"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ReviewPreview"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/documents/{sha256}/review/approve": {
+   "post": {
+    "tags": [
+     "web"
+    ],
+    "summary": "Review Approve",
+    "description": "Approve the document with the edits: it goes to the gold set, its candidate spec is verified when no charge\nchanged, corrected service codes become synonyms. Every checklist item must be ticked.",
+    "operationId": "review_approve_documents__sha256__review_approve_post",
+    "parameters": [
+     {
+      "name": "sha256",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "title": "Sha256"
+      }
+     }
+    ],
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/ApproveRequest"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "additionalProperties": true,
+         "title": "Response Review Approve Documents  Sha256  Review Approve Post"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/learn/jobs/{job_id}/trace": {
+   "get": {
+    "tags": [
+     "web"
+    ],
+    "summary": "Job Trace Events",
+    "description": "Every step of the job: what Claude read, its reasoning summary, each spec it checked and the result.",
+    "operationId": "job_trace_events_learn_jobs__job_id__trace_get",
+    "parameters": [
+     {
+      "name": "job_id",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "integer",
+       "title": "Job Id"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "array",
+         "items": {
+          "type": "object",
+          "additionalProperties": true
+         },
+         "title": "Response Job Trace Events Learn Jobs  Job Id  Trace Get"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/costs": {
+   "get": {
+    "tags": [
+     "web"
+    ],
+    "summary": "Costs",
+    "operationId": "costs_costs_get",
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/CostsOut"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/mapping": {
+   "get": {
+    "tags": [
+     "web"
+    ],
+    "summary": "Mapping",
+    "operationId": "mapping_mapping_get",
+    "parameters": [
+     {
+      "name": "q",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "string",
+       "default": "",
+       "title": "Q"
+      }
+     },
+     {
+      "name": "provider",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Provider"
+      }
+     },
+     {
+      "name": "view",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "enum": [
+        "all",
+        "flagged",
+        "ambiguous"
+       ],
+       "type": "string",
+       "default": "all",
+       "title": "View"
+      }
+     },
+     {
+      "name": "offset",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "integer",
+       "minimum": 0,
+       "default": 0,
+       "title": "Offset"
+      }
+     },
+     {
+      "name": "limit",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "integer",
+       "maximum": 2000,
+       "minimum": 1,
+       "default": 200,
+       "title": "Limit"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/MappingPage"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/mapping/resolve": {
+   "get": {
+    "tags": [
+     "web"
+    ],
+    "summary": "Mapping Resolve",
+    "operationId": "mapping_resolve_mapping_resolve_get",
+    "parameters": [
+     {
+      "name": "label",
+      "in": "query",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "title": "Label"
+      }
+     },
+     {
+      "name": "provider",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Provider"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Resolution"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/aliases": {
+   "get": {
+    "tags": [
+     "web"
+    ],
+    "summary": "Aliases",
+    "operationId": "aliases_aliases_get",
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "items": {
+          "additionalProperties": true,
+          "type": "object"
+         },
+         "type": "array",
+         "title": "Response Aliases Aliases Get"
+        }
+       }
+      }
+     }
+    }
+   },
+   "post": {
+    "tags": [
+     "web"
+    ],
+    "summary": "Add Alias",
+    "operationId": "add_alias_aliases_post",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/AliasIn"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "additionalProperties": true,
+         "type": "object",
+         "title": "Response Add Alias Aliases Post"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/aliases/{provider}/{label_norm}": {
+   "delete": {
+    "tags": [
+     "web"
+    ],
+    "summary": "Delete Alias",
+    "operationId": "delete_alias_aliases__provider___label_norm__delete",
+    "parameters": [
+     {
+      "name": "provider",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "title": "Provider"
+      }
+     },
+     {
+      "name": "label_norm",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "title": "Label Norm"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "additionalProperties": true,
+         "title": "Response Delete Alias Aliases  Provider   Label Norm  Delete"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/health": {
+   "get": {
+    "summary": "Health",
+    "operationId": "health_health_get",
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "additionalProperties": true,
+         "type": "object",
+         "title": "Response Health Health Get"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/parse": {
+   "post": {
+    "summary": "Parse",
+    "description": "Parse one file (CSV, TSV, xlsx, JSON, YAML, Terraform, PDF, pptx, docx, text, zip).",
+    "operationId": "parse_parse_post",
+    "parameters": [
+     {
+      "name": "force",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "boolean",
+       "description": "parse again a file seen before; a learning or improving job of the file that ended without a spec runs again",
+       "default": false,
+       "title": "Force"
+      },
+      "description": "parse again a file seen before; a learning or improving job of the file that ended without a spec runs again"
+     }
+    ],
+    "requestBody": {
+     "required": true,
+     "content": {
+      "multipart/form-data": {
+       "schema": {
+        "$ref": "#/components/schemas/Body_parse_parse_post"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ParseResult"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/documents": {
+   "get": {
+    "summary": "Documents",
+    "operationId": "documents_documents_get",
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "items": {
+          "$ref": "#/components/schemas/DocumentItem"
+         },
+         "type": "array",
+         "title": "Response Documents Documents Get"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/specs": {
+   "get": {
+    "summary": "List Specs",
+    "operationId": "list_specs_specs_get",
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "items": {
+          "additionalProperties": true,
+          "type": "object"
+         },
+         "type": "array",
+         "title": "Response List Specs Specs Get"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/specs/{spec_id}": {
+   "get": {
+    "summary": "Get Spec",
+    "operationId": "get_spec_specs__spec_id__get",
+    "parameters": [
+     {
+      "name": "spec_id",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "title": "Spec Id"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "additionalProperties": true,
+         "title": "Response Get Spec Specs  Spec Id  Get"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   },
+   "put": {
+    "summary": "Put Spec",
+    "description": "Create a spec, or save a new version of it. A spec without a status is saved as a draft.",
+    "operationId": "put_spec_specs__spec_id__put",
+    "parameters": [
+     {
+      "name": "spec_id",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "title": "Spec Id"
+      }
+     }
+    ],
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "additionalProperties": true,
+        "title": "Spec"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "additionalProperties": true,
+         "title": "Response Put Spec Specs  Spec Id  Put"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/specs/{spec_id}/history": {
+   "get": {
+    "summary": "Spec History",
+    "operationId": "spec_history_specs__spec_id__history_get",
+    "parameters": [
+     {
+      "name": "spec_id",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "title": "Spec Id"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "array",
+         "items": {
+          "type": "object",
+          "additionalProperties": true
+         },
+         "title": "Response Spec History Specs  Spec Id  History Get"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/specs/{spec_id}/status": {
+   "patch": {
+    "summary": "Set Spec Status",
+    "operationId": "set_spec_status_specs__spec_id__status_patch",
+    "parameters": [
+     {
+      "name": "spec_id",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "title": "Spec Id"
+      }
+     }
+    ],
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/StatusChange"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "additionalProperties": true,
+         "title": "Response Set Spec Status Specs  Spec Id  Status Patch"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/specs/verify": {
+   "post": {
+    "summary": "Verify Spec",
+    "description": "Run the strict verifier: may this spec read this file? (Models off; nothing is saved.)",
+    "operationId": "verify_spec_specs_verify_post",
+    "requestBody": {
+     "content": {
+      "multipart/form-data": {
+       "schema": {
+        "$ref": "#/components/schemas/Body_verify_spec_specs_verify_post"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "additionalProperties": true,
+         "type": "object",
+         "title": "Response Verify Spec Specs Verify Post"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/specs/learn": {
+   "post": {
+    "summary": "Learn Spec",
+    "description": "Ask the agent for a spec for this file; save it as a draft when the code's checks prove it. Calls the Claude\nAPI: allowed only with AGENT_ENABLED=1. A file that a saved spec already reads is refused (409, no model call)\nunless `replace` is true. The new spec never overwrites a saved one: an id that exists gets a suffix.",
+    "operationId": "learn_spec_specs_learn_post",
+    "requestBody": {
+     "content": {
+      "multipart/form-data": {
+       "schema": {
+        "$ref": "#/components/schemas/Body_learn_spec_specs_learn_post"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "additionalProperties": true,
+         "type": "object",
+         "title": "Response Learn Spec Specs Learn Post"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/learn/jobs": {
+   "get": {
+    "summary": "Learn Jobs",
+    "description": "Every learning run: one per layout that no spec read (status, spec made, its status, cost).",
+    "operationId": "learn_jobs_learn_jobs_get",
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "items": {
+          "additionalProperties": true,
+          "type": "object"
+         },
+         "type": "array",
+         "title": "Response Learn Jobs Learn Jobs Get"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/learn/jobs/{job_id}": {
+   "get": {
+    "summary": "Learn Job",
+    "description": "One learning run, with the code's report on the spec the agent wrote.",
+    "operationId": "learn_job_learn_jobs__job_id__get",
+    "parameters": [
+     {
+      "name": "job_id",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "integer",
+       "title": "Job Id"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "additionalProperties": true,
+         "title": "Response Learn Job Learn Jobs  Job Id  Get"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/learn/jobs/{job_id}/retry": {
+   "post": {
+    "summary": "Learn Retry",
+    "description": "Let this layout be sent to Claude again on its next upload (or backfill).",
+    "operationId": "learn_retry_learn_jobs__job_id__retry_post",
+    "parameters": [
+     {
+      "name": "job_id",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "integer",
+       "title": "Job Id"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "additionalProperties": true,
+         "title": "Response Learn Retry Learn Jobs  Job Id  Retry Post"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/learn/jobs/{job_id}/stop": {
+   "post": {
+    "summary": "Learn Stop",
+    "description": "Stop a running job: it ends at its next step as failed, with what it cost so far, and the file keeps the\nresult it had before the run.",
+    "operationId": "learn_stop_learn_jobs__job_id__stop_post",
+    "parameters": [
+     {
+      "name": "job_id",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "integer",
+       "title": "Job Id"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "additionalProperties": true,
+         "title": "Response Learn Stop Learn Jobs  Job Id  Stop Post"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/learn/backfill": {
+   "post": {
+    "summary": "Learn Backfill",
+    "description": "Parse again every stored document that no spec proved, so each layout gets a spec. Calls the Claude API\nonce per new layout: allowed only with AGENT_ENABLED=1.",
+    "operationId": "learn_backfill_learn_backfill_post",
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "items": {
+          "additionalProperties": true,
+          "type": "object"
+         },
+         "type": "array",
+         "title": "Response Learn Backfill Learn Backfill Post"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/nightly": {
+   "post": {
+    "summary": "Nightly",
+    "description": "Run the nightly loop and answer with its report.",
+    "operationId": "nightly_nightly_post",
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "additionalProperties": true,
+         "type": "object",
+         "title": "Response Nightly Nightly Post"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/metrics": {
+   "get": {
+    "summary": "Get Metrics",
+    "operationId": "get_metrics_metrics_get",
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "additionalProperties": true,
+         "type": "object",
+         "title": "Response Get Metrics Metrics Get"
+        }
+       }
+      }
+     }
+    }
+   }
+  }
+ },
+ "components": {
+  "schemas": {
+   "AliasIn": {
+    "properties": {
+     "provider": {
+      "type": "string",
+      "enum": [
+       "aws",
+       "azure",
+       "gcp"
+      ],
+      "title": "Provider"
+     },
+     "label": {
+      "type": "string",
+      "title": "Label"
+     },
+     "code": {
+      "type": "string",
+      "title": "Code"
+     }
+    },
+    "type": "object",
+    "required": [
+     "provider",
+     "label",
+     "code"
+    ],
+    "title": "AliasIn"
+   },
+   "ApproveRequest": {
+    "properties": {
+     "rows": {
+      "additionalProperties": {
+       "additionalProperties": true,
+       "type": "object"
+      },
+      "type": "object",
+      "title": "Rows"
+     },
+     "added": {
+      "items": {
+       "additionalProperties": true,
+       "type": "object"
+      },
+      "type": "array",
+      "title": "Added"
+     },
+     "dropped_gaps": {
+      "items": {
+       "type": "integer"
+      },
+      "type": "array",
+      "title": "Dropped Gaps"
+     },
+     "header": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/HeaderEdit"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "note": {
+      "type": "string",
+      "title": "Note",
+      "default": ""
+     },
+     "checklist": {
+      "items": {
+       "type": "string"
+      },
+      "type": "array",
+      "title": "Checklist"
+     }
+    },
+    "type": "object",
+    "title": "ApproveRequest"
+   },
+   "Body_learn_spec_specs_learn_post": {
+    "properties": {
+     "file": {
+      "type": "string",
+      "contentMediaType": "application/octet-stream",
+      "title": "File"
+     },
+     "examples": {
+      "type": "string",
+      "title": "Examples",
+      "description": "ids of saved specs to show as examples (default: saved specs of similar files)",
+      "default": ""
+     },
+     "rounds": {
+      "type": "integer",
+      "title": "Rounds",
+      "default": 3
+     },
+     "dry_run": {
+      "type": "boolean",
+      "title": "Dry Run",
+      "description": "true: do not save the spec",
+      "default": false
+     },
+     "replace": {
+      "type": "boolean",
+      "title": "Replace",
+      "default": false
+     }
+    },
+    "type": "object",
+    "required": [
+     "file"
+    ],
+    "title": "Body_learn_spec_specs_learn_post"
+   },
+   "Body_parse_parse_post": {
+    "properties": {
+     "file": {
+      "type": "string",
+      "contentMediaType": "application/octet-stream",
+      "title": "File"
+     }
+    },
+    "type": "object",
+    "required": [
+     "file"
+    ],
+    "title": "Body_parse_parse_post"
+   },
+   "Body_parse_start_parse_start_post": {
+    "properties": {
+     "file": {
+      "type": "string",
+      "contentMediaType": "application/octet-stream",
+      "title": "File"
+     }
+    },
+    "type": "object",
+    "required": [
+     "file"
+    ],
+    "title": "Body_parse_start_parse_start_post"
+   },
+   "Body_verify_spec_specs_verify_post": {
+    "properties": {
+     "file": {
+      "type": "string",
+      "contentMediaType": "application/octet-stream",
+      "title": "File"
+     },
+     "spec": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Spec",
+      "description": "the spec JSON to check"
+     },
+     "spec_id": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Spec Id",
+      "description": "or the id of a saved spec"
+     }
+    },
+    "type": "object",
+    "required": [
+     "file"
+    ],
+    "title": "Body_verify_spec_specs_verify_post"
+   },
+   "ChargeDetail": {
+    "properties": {
+     "id": {
+      "type": "string",
+      "title": "Id"
+     },
+     "description": {
+      "type": "string",
+      "title": "Description"
+     },
+     "cite": {
+      "$ref": "#/components/schemas/CiteOut"
+     },
+     "fields": {
+      "items": {
+       "$ref": "#/components/schemas/FieldOut"
+      },
+      "type": "array",
+      "title": "Fields"
+     },
+     "attributes": {
+      "additionalProperties": true,
+      "type": "object",
+      "title": "Attributes"
+     }
+    },
+    "type": "object",
+    "required": [
+     "id",
+     "description",
+     "cite",
+     "fields",
+     "attributes"
+    ],
+    "title": "ChargeDetail"
+   },
+   "ChargeRow": {
+    "properties": {
+     "id": {
+      "type": "string",
+      "title": "Id"
+     },
+     "description": {
+      "type": "string",
+      "title": "Description"
+     },
+     "cost": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Cost"
+     },
+     "cost_exact": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Cost Exact"
+     },
+     "basis": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Basis"
+     },
+     "counted": {
+      "type": "boolean",
+      "title": "Counted"
+     },
+     "kind": {
+      "type": "string",
+      "title": "Kind"
+     },
+     "kind_by": {
+      "type": "string",
+      "title": "Kind By",
+      "default": ""
+     },
+     "service": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Service"
+     },
+     "service_code": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Service Code"
+     },
+     "region": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Region"
+     },
+     "account": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Account"
+     },
+     "instance_type": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Instance Type"
+     },
+     "operating_system": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Operating System"
+     },
+     "database_engine": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Database Engine"
+     },
+     "deployment_option": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Deployment Option"
+     },
+     "pricing_model": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Pricing Model"
+     },
+     "quantity": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Quantity"
+     },
+     "unit": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Unit"
+     },
+     "unit_price": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Unit Price"
+     },
+     "section": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Section"
+     },
+     "source": {
+      "type": "string",
+      "title": "Source"
+     },
+     "cite": {
+      "$ref": "#/components/schemas/CiteOut"
+     },
+     "has_gap": {
+      "type": "boolean",
+      "title": "Has Gap",
+      "default": false
+     }
+    },
+    "type": "object",
+    "required": [
+     "id",
+     "description",
+     "counted",
+     "kind",
+     "source",
+     "cite"
+    ],
+    "title": "ChargeRow"
+   },
+   "CiteOut": {
+    "properties": {
+     "label": {
+      "type": "string",
+      "title": "Label"
+     },
+     "page": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Page"
+     },
+     "line": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Line"
+     },
+     "table": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Table"
+     },
+     "row": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Row"
+     },
+     "column": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Column"
+     },
+     "text": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Text"
+     }
+    },
+    "type": "object",
+    "required": [
+     "label"
+    ],
+    "title": "CiteOut"
+   },
+   "CommitmentRow": {
+    "properties": {
+     "type": {
+      "type": "string",
+      "title": "Type"
+     },
+     "id": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Id"
+     },
+     "term": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Term"
+     },
+     "payment": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Payment"
+     },
+     "amount": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Amount"
+     },
+     "charges": {
+      "items": {
+       "type": "string"
+      },
+      "type": "array",
+      "title": "Charges"
+     }
+    },
+    "type": "object",
+    "required": [
+     "type",
+     "charges"
+    ],
+    "title": "CommitmentRow"
+   },
+   "ConfidenceOut": {
+    "properties": {
+     "level": {
+      "type": "string",
+      "enum": [
+       "high",
+       "medium",
+       "low"
+      ],
+      "title": "Level"
+     },
+     "reasons": {
+      "items": {
+       "type": "string"
+      },
+      "type": "array",
+      "title": "Reasons"
+     }
+    },
+    "type": "object",
+    "required": [
+     "level",
+     "reasons"
+    ],
+    "title": "ConfidenceOut"
+   },
+   "CostsOut": {
+    "properties": {
+     "runs": {
+      "items": {
+       "additionalProperties": true,
+       "type": "object"
+      },
+      "type": "array",
+      "title": "Runs"
+     },
+     "jobs": {
+      "items": {
+       "additionalProperties": true,
+       "type": "object"
+      },
+      "type": "array",
+      "title": "Jobs"
+     },
+     "prices": {
+      "additionalProperties": {
+       "additionalProperties": {
+        "type": "number"
+       },
+       "type": "object"
+      },
+      "type": "object",
+      "title": "Prices"
+     },
+     "totals": {
+      "additionalProperties": {
+       "type": "number"
+      },
+      "type": "object",
+      "title": "Totals"
+     }
+    },
+    "type": "object",
+    "required": [
+     "runs",
+     "jobs",
+     "prices",
+     "totals"
+    ],
+    "title": "CostsOut"
+   },
+   "DocumentItem": {
+    "properties": {
+     "sha256": {
+      "type": "string",
+      "title": "Sha256"
+     },
+     "name": {
+      "type": "string",
+      "title": "Name"
+     },
+     "fmt": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Fmt"
+     },
+     "uploaded_at": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Uploaded At"
+     },
+     "status": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Status"
+     },
+     "completeness": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Completeness"
+     },
+     "lane": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Lane"
+     },
+     "elapsed_ms": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Elapsed Ms"
+     },
+     "model_calls": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Model Calls"
+     },
+     "reviewed_at": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Reviewed At"
+     },
+     "money_at_risk": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Money At Risk"
+     },
+     "uploaded_by": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Uploaded By"
+     },
+     "total_ms": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Total Ms"
+     }
+    },
+    "type": "object",
+    "required": [
+     "sha256",
+     "name"
+    ],
+    "title": "DocumentItem"
+   },
+   "DocumentView": {
+    "properties": {
+     "sha256": {
+      "type": "string",
+      "title": "Sha256"
+     },
+     "name": {
+      "type": "string",
+      "title": "Name"
+     },
+     "fmt": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Fmt"
+     },
+     "status": {
+      "type": "string",
+      "title": "Status"
+     },
+     "lane": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Lane"
+     },
+     "specs_used": {
+      "items": {
+       "type": "string"
+      },
+      "type": "array",
+      "title": "Specs Used",
+      "default": []
+     },
+     "uploaded_at": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Uploaded At"
+     },
+     "reviewed_at": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Reviewed At"
+     },
+     "reviewer_note": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Reviewer Note"
+     },
+     "uploaded_by": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Uploaded By"
+     },
+     "total_ms": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Total Ms"
+     },
+     "elapsed_ms": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Elapsed Ms"
+     },
+     "model_calls": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Model Calls"
+     },
+     "showing_reviewed": {
+      "type": "boolean",
+      "title": "Showing Reviewed",
+      "default": false
+     },
+     "doc_type": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Doc Type"
+     },
+     "provider": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Provider"
+     },
+     "currency": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Currency"
+     },
+     "period_start": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Period Start"
+     },
+     "period_end": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Period End"
+     },
+     "page_count": {
+      "type": "integer",
+      "title": "Page Count",
+      "default": 1
+     },
+     "completeness": {
+      "type": "string",
+      "title": "Completeness"
+     },
+     "confidence": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/ConfidenceOut"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "counted_total": {
+      "type": "string",
+      "title": "Counted Total"
+     },
+     "money_at_risk": {
+      "type": "string",
+      "title": "Money At Risk"
+     },
+     "charges": {
+      "items": {
+       "$ref": "#/components/schemas/ChargeRow"
+      },
+      "type": "array",
+      "title": "Charges"
+     },
+     "totals": {
+      "items": {
+       "$ref": "#/components/schemas/TotalRow"
+      },
+      "type": "array",
+      "title": "Totals"
+     },
+     "gaps": {
+      "items": {
+       "$ref": "#/components/schemas/GapRow"
+      },
+      "type": "array",
+      "title": "Gaps"
+     },
+     "flags": {
+      "items": {
+       "$ref": "#/components/schemas/NoteRow"
+      },
+      "type": "array",
+      "title": "Flags"
+     },
+     "notes": {
+      "items": {
+       "$ref": "#/components/schemas/NoteRow"
+      },
+      "type": "array",
+      "title": "Notes"
+     },
+     "facts": {
+      "items": {
+       "$ref": "#/components/schemas/FactRow"
+      },
+      "type": "array",
+      "title": "Facts"
+     },
+     "commitments": {
+      "items": {
+       "$ref": "#/components/schemas/CommitmentRow"
+      },
+      "type": "array",
+      "title": "Commitments"
+     },
+     "runs": {
+      "items": {
+       "$ref": "#/components/schemas/RunOut"
+      },
+      "type": "array",
+      "title": "Runs"
+     },
+     "decider": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Decider"
+     },
+     "version": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Version"
+     },
+     "timings_ms": {
+      "additionalProperties": {
+       "type": "integer"
+      },
+      "type": "object",
+      "title": "Timings Ms"
+     },
+     "tables": {
+      "items": {
+       "additionalProperties": true,
+       "type": "object"
+      },
+      "type": "array",
+      "title": "Tables"
+     },
+     "llm_calls": {
+      "items": {
+       "additionalProperties": true,
+       "type": "object"
+      },
+      "type": "array",
+      "title": "Llm Calls"
+     },
+     "decider_errors": {
+      "items": {
+       "type": "string"
+      },
+      "type": "array",
+      "title": "Decider Errors"
+     },
+     "learned_spec": {
+      "anyOf": [
+       {
+        "additionalProperties": true,
+        "type": "object"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Learned Spec"
+     },
+     "improved_spec": {
+      "anyOf": [
+       {
+        "additionalProperties": true,
+        "type": "object"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Improved Spec"
+     },
+     "cost_usd": {
+      "additionalProperties": {
+       "type": "number"
+      },
+      "type": "object",
+      "title": "Cost Usd"
+     }
+    },
+    "type": "object",
+    "required": [
+     "sha256",
+     "name",
+     "status",
+     "completeness",
+     "counted_total",
+     "money_at_risk",
+     "charges",
+     "totals",
+     "gaps",
+     "flags",
+     "notes",
+     "facts",
+     "commitments",
+     "runs",
+     "timings_ms",
+     "tables",
+     "llm_calls",
+     "decider_errors",
+     "cost_usd"
+    ],
+    "title": "DocumentView"
+   },
+   "FactRow": {
+    "properties": {
+     "label": {
+      "type": "string",
+      "title": "Label"
+     },
+     "amount": {
+      "type": "string",
+      "title": "Amount"
+     },
+     "currency": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Currency"
+     },
+     "period": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Period"
+     },
+     "cite": {
+      "$ref": "#/components/schemas/CiteOut"
+     }
+    },
+    "type": "object",
+    "required": [
+     "label",
+     "amount",
+     "cite"
+    ],
+    "title": "FactRow"
+   },
+   "FieldOut": {
+    "properties": {
+     "field": {
+      "type": "string",
+      "title": "Field"
+     },
+     "value": {
+      "type": "string",
+      "title": "Value"
+     },
+     "origin": {
+      "type": "string",
+      "title": "Origin"
+     },
+     "source": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Source"
+     },
+     "confidence": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Confidence"
+     },
+     "cite": {
+      "$ref": "#/components/schemas/CiteOut"
+     }
+    },
+    "type": "object",
+    "required": [
+     "field",
+     "value",
+     "origin",
+     "cite"
+    ],
+    "title": "FieldOut"
+   },
+   "GapRow": {
+    "properties": {
+     "index": {
+      "type": "integer",
+      "title": "Index"
+     },
+     "kind": {
+      "type": "string",
+      "title": "Kind"
+     },
+     "message": {
+      "type": "string",
+      "title": "Message"
+     },
+     "field": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Field"
+     },
+     "ref": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Ref"
+     },
+     "amount": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Amount"
+     },
+     "candidates": {
+      "items": {
+       "type": "string"
+      },
+      "type": "array",
+      "title": "Candidates"
+     },
+     "cite": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/CiteOut"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     }
+    },
+    "type": "object",
+    "required": [
+     "index",
+     "kind",
+     "message",
+     "candidates"
+    ],
+    "title": "GapRow"
+   },
+   "HTTPValidationError": {
+    "properties": {
+     "detail": {
+      "items": {
+       "$ref": "#/components/schemas/ValidationError"
+      },
+      "type": "array",
+      "title": "Detail"
+     }
+    },
+    "type": "object",
+    "title": "HTTPValidationError"
+   },
+   "HeaderEdit": {
+    "properties": {
+     "doc_type": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Doc Type"
+     },
+     "provider": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Provider"
+     },
+     "currency": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Currency"
+     },
+     "period_start": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Period Start"
+     },
+     "period_end": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Period End"
+     },
+     "basis": {
+      "anyOf": [
+       {
+        "type": "string",
+        "enum": [
+         "billed",
+         "estimated",
+         "priced"
+        ]
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Basis"
+     }
+    },
+    "type": "object",
+    "title": "HeaderEdit"
+   },
+   "InviteIn": {
+    "properties": {
+     "code": {
+      "type": "string",
+      "title": "Code"
+     }
+    },
+    "type": "object",
+    "required": [
+     "code"
+    ],
+    "title": "InviteIn"
+   },
+   "MappingPage": {
+    "properties": {
+     "rows": {
+      "items": {
+       "$ref": "#/components/schemas/MappingRow"
+      },
+      "type": "array",
+      "title": "Rows"
+     },
+     "total": {
+      "type": "integer",
+      "title": "Total"
+     }
+    },
+    "type": "object",
+    "required": [
+     "rows",
+     "total"
+    ],
+    "title": "MappingPage"
+   },
+   "MappingRow": {
+    "properties": {
+     "provider": {
+      "type": "string",
+      "title": "Provider"
+     },
+     "code": {
+      "type": "string",
+      "title": "Code"
+     },
+     "name": {
+      "type": "string",
+      "title": "Name"
+     },
+     "match": {
+      "type": "string",
+      "title": "Match"
+     },
+     "aliases": {
+      "items": {
+       "type": "string"
+      },
+      "type": "array",
+      "title": "Aliases"
+     },
+     "note": {
+      "type": "string",
+      "title": "Note",
+      "default": ""
+     },
+     "was": {
+      "type": "string",
+      "title": "Was",
+      "default": ""
+     }
+    },
+    "type": "object",
+    "required": [
+     "provider",
+     "code",
+     "name",
+     "match",
+     "aliases"
+    ],
+    "title": "MappingRow"
+   },
+   "Me": {
+    "properties": {
+     "auth": {
+      "type": "string",
+      "enum": [
+       "off",
+       "google"
+      ],
+      "title": "Auth"
+     },
+     "state": {
+      "type": "string",
+      "enum": [
+       "ok",
+       "signed_out",
+       "invite_required"
+      ],
+      "title": "State"
+     },
+     "email": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Email"
+     },
+     "name": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Name"
+     },
+     "picture": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Picture"
+     },
+     "domain": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Domain"
+     }
+    },
+    "type": "object",
+    "required": [
+     "auth",
+     "state"
+    ],
+    "title": "Me"
+   },
+   "NoteRow": {
+    "properties": {
+     "message": {
+      "type": "string",
+      "title": "Message"
+     },
+     "where": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Where"
+     }
+    },
+    "type": "object",
+    "required": [
+     "message"
+    ],
+    "title": "NoteRow"
+   },
+   "ParseResult": {
+    "properties": {
+     "sha256": {
+      "type": "string",
+      "title": "Sha256"
+     },
+     "name": {
+      "type": "string",
+      "title": "Name"
+     },
+     "status": {
+      "type": "string",
+      "title": "Status"
+     },
+     "lane": {
+      "type": "string",
+      "title": "Lane"
+     },
+     "completeness": {
+      "type": "string",
+      "title": "Completeness"
+     },
+     "confidence": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Confidence"
+     },
+     "elapsed_ms": {
+      "type": "integer",
+      "title": "Elapsed Ms"
+     },
+     "model_calls": {
+      "type": "integer",
+      "title": "Model Calls"
+     },
+     "cached": {
+      "type": "boolean",
+      "title": "Cached"
+     },
+     "cost_usd": {
+      "additionalProperties": {
+       "type": "number"
+      },
+      "type": "object",
+      "title": "Cost Usd"
+     },
+     "document": {
+      "additionalProperties": true,
+      "type": "object",
+      "title": "Document"
+     }
+    },
+    "type": "object",
+    "required": [
+     "sha256",
+     "name",
+     "status",
+     "lane",
+     "completeness",
+     "confidence",
+     "elapsed_ms",
+     "model_calls",
+     "cached",
+     "cost_usd",
+     "document"
+    ],
+    "title": "ParseResult"
+   },
+   "ParseTask": {
+    "properties": {
+     "sha256": {
+      "type": "string",
+      "title": "Sha256"
+     },
+     "name": {
+      "type": "string",
+      "title": "Name"
+     },
+     "state": {
+      "type": "string",
+      "enum": [
+       "running",
+       "done",
+       "error"
+      ],
+      "title": "State"
+     },
+     "started": {
+      "type": "number",
+      "title": "Started"
+     },
+     "started_by": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Started By"
+     },
+     "finished": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Finished"
+     },
+     "error": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Error"
+     },
+     "progress": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Progress"
+     },
+     "status": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Status"
+     },
+     "lane": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Lane"
+     },
+     "completeness": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Completeness"
+     },
+     "confidence": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Confidence"
+     },
+     "charges": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Charges"
+     },
+     "counted_total": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Counted Total"
+     },
+     "gaps": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Gaps"
+     },
+     "elapsed_ms": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Elapsed Ms"
+     },
+     "total_ms": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Total Ms"
+     },
+     "model_calls": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Model Calls"
+     },
+     "cached": {
+      "anyOf": [
+       {
+        "type": "boolean"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Cached"
+     },
+     "cost_usd": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Cost Usd"
+     }
+    },
+    "type": "object",
+    "required": [
+     "sha256",
+     "name",
+     "state",
+     "started"
+    ],
+    "title": "ParseTask"
+   },
+   "Resolution": {
+    "properties": {
+     "code": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Code"
+     },
+     "name": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Name"
+     },
+     "how": {
+      "type": "string",
+      "title": "How"
+     },
+     "candidates": {
+      "items": {
+       "prefixItems": [
+        {
+         "type": "string"
+        },
+        {
+         "anyOf": [
+          {
+           "type": "string"
+          },
+          {
+           "type": "null"
+          }
+         ]
+        }
+       ],
+       "type": "array",
+       "maxItems": 2,
+       "minItems": 2
+      },
+      "type": "array",
+      "title": "Candidates"
+     }
+    },
+    "type": "object",
+    "required": [
+     "how",
+     "candidates"
+    ],
+    "title": "Resolution"
+   },
+   "ReviewEdits": {
+    "properties": {
+     "rows": {
+      "additionalProperties": {
+       "additionalProperties": true,
+       "type": "object"
+      },
+      "type": "object",
+      "title": "Rows"
+     },
+     "added": {
+      "items": {
+       "additionalProperties": true,
+       "type": "object"
+      },
+      "type": "array",
+      "title": "Added"
+     },
+     "dropped_gaps": {
+      "items": {
+       "type": "integer"
+      },
+      "type": "array",
+      "title": "Dropped Gaps"
+     },
+     "header": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/HeaderEdit"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     }
+    },
+    "type": "object",
+    "title": "ReviewEdits",
+    "description": "A person's changes to one document, sent whole each time (the server keeps no review session):\n`rows` edits charges by id (any of description, cost, kind, counted, service, service_code, delete),\n`added` are new charges, `dropped_gaps` the indexes of gaps marked resolved (of the stored document)."
+   },
+   "ReviewPreview": {
+    "properties": {
+     "view": {
+      "$ref": "#/components/schemas/DocumentView"
+     },
+     "changes": {
+      "additionalProperties": true,
+      "type": "object",
+      "title": "Changes"
+     }
+    },
+    "type": "object",
+    "required": [
+     "view",
+     "changes"
+    ],
+    "title": "ReviewPreview"
+   },
+   "RunOut": {
+    "properties": {
+     "id": {
+      "type": "integer",
+      "title": "Id"
+     },
+     "ts": {
+      "type": "number",
+      "title": "Ts"
+     },
+     "elapsed_ms": {
+      "type": "integer",
+      "title": "Elapsed Ms"
+     },
+     "model_calls": {
+      "type": "integer",
+      "title": "Model Calls"
+     },
+     "lane": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Lane"
+     },
+     "status": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Status"
+     },
+     "completeness": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Completeness"
+     },
+     "version": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Version"
+     },
+     "jev_cost_usd": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Jev Cost Usd"
+     },
+     "claude_cost_usd": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Claude Cost Usd"
+     },
+     "learn_cost_usd": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Learn Cost Usd"
+     },
+     "learn_job_id": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Learn Job Id"
+     },
+     "parsed_by": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Parsed By"
+     },
+     "total_ms": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Total Ms"
+     },
+     "quality": {
+      "anyOf": [
+       {
+        "additionalProperties": true,
+        "type": "object"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Quality"
+     }
+    },
+    "type": "object",
+    "required": [
+     "id",
+     "ts",
+     "elapsed_ms",
+     "model_calls"
+    ],
+    "title": "RunOut"
+   },
+   "Settings": {
+    "properties": {
+     "decision_backend": {
+      "type": "string",
+      "title": "Decision Backend"
+     },
+     "decision_fallback": {
+      "type": "string",
+      "title": "Decision Fallback"
+     },
+     "backends": {
+      "items": {
+       "type": "string"
+      },
+      "type": "array",
+      "title": "Backends"
+     },
+     "keys": {
+      "additionalProperties": {
+       "type": "boolean"
+      },
+      "type": "object",
+      "title": "Keys"
+     },
+     "learner_enabled": {
+      "type": "boolean",
+      "title": "Learner Enabled"
+     },
+     "max_upload_mb": {
+      "type": "integer",
+      "title": "Max Upload Mb"
+     },
+     "kinds": {
+      "items": {
+       "type": "string"
+      },
+      "type": "array",
+      "title": "Kinds"
+     },
+     "doc_types": {
+      "items": {
+       "type": "string"
+      },
+      "type": "array",
+      "title": "Doc Types"
+     },
+     "checklist": {
+      "items": {
+       "additionalProperties": {
+        "type": "string"
+       },
+       "type": "object"
+      },
+      "type": "array",
+      "title": "Checklist"
+     }
+    },
+    "type": "object",
+    "required": [
+     "decision_backend",
+     "decision_fallback",
+     "backends",
+     "keys",
+     "learner_enabled",
+     "max_upload_mb",
+     "kinds",
+     "doc_types",
+     "checklist"
+    ],
+    "title": "Settings"
+   },
+   "SourceInfo": {
+    "properties": {
+     "fmt": {
+      "type": "string",
+      "title": "Fmt"
+     },
+     "page_count": {
+      "type": "integer",
+      "title": "Page Count"
+     },
+     "has_pdf": {
+      "type": "boolean",
+      "title": "Has Pdf"
+     },
+     "tables": {
+      "items": {
+       "$ref": "#/components/schemas/TableInfo"
+      },
+      "type": "array",
+      "title": "Tables"
+     },
+     "lines": {
+      "type": "integer",
+      "title": "Lines"
+     }
+    },
+    "type": "object",
+    "required": [
+     "fmt",
+     "page_count",
+     "has_pdf",
+     "tables",
+     "lines"
+    ],
+    "title": "SourceInfo"
+   },
+   "SourceLine": {
+    "properties": {
+     "page": {
+      "type": "integer",
+      "title": "Page"
+     },
+     "line": {
+      "type": "integer",
+      "title": "Line"
+     },
+     "text": {
+      "type": "string",
+      "title": "Text"
+     },
+     "role": {
+      "type": "string",
+      "title": "Role"
+     },
+     "top": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Top"
+     }
+    },
+    "type": "object",
+    "required": [
+     "page",
+     "line",
+     "text",
+     "role"
+    ],
+    "title": "SourceLine"
+   },
+   "SourceRow": {
+    "properties": {
+     "row": {
+      "type": "integer",
+      "title": "Row"
+     },
+     "cells": {
+      "items": {
+       "type": "string"
+      },
+      "type": "array",
+      "title": "Cells"
+     },
+     "role": {
+      "type": "string",
+      "title": "Role"
+     }
+    },
+    "type": "object",
+    "required": [
+     "row",
+     "cells",
+     "role"
+    ],
+    "title": "SourceRow"
+   },
+   "SourceTable": {
+    "properties": {
+     "name": {
+      "type": "string",
+      "title": "Name"
+     },
+     "row_offset": {
+      "type": "integer",
+      "title": "Row Offset"
+     },
+     "col_letters": {
+      "type": "boolean",
+      "title": "Col Letters"
+     },
+     "columns": {
+      "items": {
+       "type": "string"
+      },
+      "type": "array",
+      "title": "Columns"
+     },
+     "total_rows": {
+      "type": "integer",
+      "title": "Total Rows"
+     },
+     "offset": {
+      "type": "integer",
+      "title": "Offset"
+     },
+     "rows": {
+      "items": {
+       "$ref": "#/components/schemas/SourceRow"
+      },
+      "type": "array",
+      "title": "Rows"
+     },
+     "truncated": {
+      "type": "boolean",
+      "title": "Truncated"
+     },
+     "from_file": {
+      "type": "boolean",
+      "title": "From File",
+      "default": false
+     }
+    },
+    "type": "object",
+    "required": [
+     "name",
+     "row_offset",
+     "col_letters",
+     "columns",
+     "total_rows",
+     "offset",
+     "rows",
+     "truncated"
+    ],
+    "title": "SourceTable"
+   },
+   "StatusChange": {
+    "properties": {
+     "status": {
+      "type": "string",
+      "enum": [
+       "trusted",
+       "draft",
+       "disabled"
+      ],
+      "title": "Status"
+     }
+    },
+    "type": "object",
+    "required": [
+     "status"
+    ],
+    "title": "StatusChange"
+   },
+   "TableInfo": {
+    "properties": {
+     "name": {
+      "type": "string",
+      "title": "Name"
+     },
+     "row_offset": {
+      "type": "integer",
+      "title": "Row Offset"
+     },
+     "col_letters": {
+      "type": "boolean",
+      "title": "Col Letters",
+      "default": false
+     },
+     "truncated": {
+      "type": "boolean",
+      "title": "Truncated",
+      "default": false
+     },
+     "rows": {
+      "type": "integer",
+      "title": "Rows"
+     }
+    },
+    "type": "object",
+    "required": [
+     "name",
+     "row_offset",
+     "rows"
+    ],
+    "title": "TableInfo"
+   },
+   "TotalRow": {
+    "properties": {
+     "id": {
+      "type": "string",
+      "title": "Id"
+     },
+     "label": {
+      "type": "string",
+      "title": "Label"
+     },
+     "printed": {
+      "type": "string",
+      "title": "Printed"
+     },
+     "computed": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Computed"
+     },
+     "status": {
+      "type": "string",
+      "title": "Status"
+     },
+     "level": {
+      "type": "string",
+      "title": "Level"
+     },
+     "section": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Section"
+     },
+     "lines": {
+      "type": "integer",
+      "title": "Lines"
+     },
+     "cite": {
+      "$ref": "#/components/schemas/CiteOut"
+     }
+    },
+    "type": "object",
+    "required": [
+     "id",
+     "label",
+     "printed",
+     "status",
+     "level",
+     "lines",
+     "cite"
+    ],
+    "title": "TotalRow"
+   },
+   "ValidationError": {
+    "properties": {
+     "loc": {
+      "items": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "integer"
+        }
+       ]
+      },
+      "type": "array",
+      "title": "Location"
+     },
+     "msg": {
+      "type": "string",
+      "title": "Message"
+     },
+     "type": {
+      "type": "string",
+      "title": "Error Type"
+     },
+     "input": {
+      "title": "Input"
+     },
+     "ctx": {
+      "type": "object",
+      "title": "Context"
+     }
+    },
+    "type": "object",
+    "required": [
+     "loc",
+     "msg",
+     "type"
+    ],
+    "title": "ValidationError"
+   }
+  }
+ }
+}

@@ -1,0 +1,35 @@
+{
+ "id": "aws-invoice-pdf",
+ "version": 2,
+ "trust": "builtin",
+ "source": "tree",
+ "detect": {
+  "text": "Detail for Consolidated Bill"
+ },
+ "meta": {
+  "provider": "aws",
+  "kind": "cost_lines",
+  "cost_basis": "billed",
+  "format": "AWS invoice PDF (consolidated bill: Detail for Consolidated Bill, then a part per linked account)",
+  "notes": "Read by service from the consolidated detail: each service's Charges, Savings Plan, Credits and each tax as lines; the service total (tax included) is checked. The per linked account part repeats the same money and is left out. The charges under a 'Savings Plans for ...' heading are the plan's fee (Purchase: a commitment fee), each kept with that plan."
+ },
+ "tree": {
+  "skip_from": "^(LINKED ACCOUNT ALLOCATION|Activity By Account|Summary for Linked Account)\\b"
+ },
+ "context": {
+  "charge_types": [
+   [
+    "Tax",
+    "\\b(sales tax|VAT|GST|HST|PST|QST|CT|consumption tax|tax)\\b"
+   ],
+   [
+    "Purchase",
+    "^savings plans? for\\b"
+   ],
+   [
+    "Credit",
+    "^(credits?|savings plan|discount|refund)\\b"
+   ]
+  ]
+ }
+}

@@ -14,6 +14,7 @@ Always call resolve_many() with the unique values of a column, not row by row.
 from __future__ import annotations
 
 import json
+import re
 from collections.abc import Callable, Iterable
 from dataclasses import asdict, dataclass
 from pathlib import Path
@@ -21,7 +22,9 @@ from pathlib import Path
 from rapidfuzz import fuzz, process
 
 from .catalog import PROVIDERS, Catalog
-from .normalize import code_key, norm, norm_loose
+from .normalize import azure_head, code_key, norm, norm_loose
+
+CATALOG_KEY = "__catalog__"
 
 
 @dataclass
@@ -29,6 +32,7 @@ class Resolution:
     raw: str
     service_key: str | None
     service: str | None = None
+    service_code: str | None = None                  # the provider's id: AmazonEC2, an Azure serviceId, a GCP id
     provider: str | None = None
     category: str | None = None
     method: str = "unresolved"
@@ -53,6 +57,10 @@ class Resolver:
         self.synonyms: dict[str, str] = _read(self.syn_path)
         self.cache: dict[str, dict] = _read(self.cache_path)
         self._dirty = False
+        # fuzzy and prefix picks hold only for the catalog they were made with: a new catalog can have a better
+        # exact match, so a rebuilt catalog starts a new cache (reviewed picks are synonyms, kept apart)
+        if self.cache.get(CATALOG_KEY) != {"built_at": catalog.built_at}:
+            self.cache, self._dirty = {CATALOG_KEY: {"built_at": catalog.built_at}}, True
         # Fuzzy choice lists per provider. Plain lists are much faster for RapidFuzz.
         self._small = _split_by_provider(self.cat.names)      # hundreds per provider
         self._large = _split_by_provider(self.cat.products)   # tens of thousands (Azure)
@@ -114,16 +122,25 @@ class Resolver:
             if (key := self.synonyms.get(sk)):
                 return self._remember(ck, self._make(raw, key, "synonym", 100))
 
-        # 4. exact normalized name. If it matches different services in different
-        #    providers ("Kubernetes"), it's ambiguous: return candidates, don't guess.
-        hits = {key for p in provs for n in (norm(raw), norm_loose(raw))
-                for table in (self.cat.names, self.cat.products)
-                if (key := table.get(f"{p}:{n}"))}
-        if len(hits) == 1:
-            return self._remember(ck, self._make(raw, hits.pop(), "name", 100))
-        if len(hits) > 1:
-            return Resolution(raw=raw, service_key=None, method="ambiguous",
-                              candidates=[(k, 100.0) for k in sorted(hits)])
+        # 4. exact normalized name, then the loose name (prefixes and filler words removed) only when the
+        #    exact one has no hit: "Microsoft Fabric" is not "Service Fabric". If one key matches different
+        #    services in different providers ("Kubernetes"), it's ambiguous: return candidates, don't guess.
+        for n in (norm(raw), norm_loose(raw)):
+            hits = {key for p in provs for table in (self.cat.names, self.cat.products)
+                    if (key := table.get(f"{p}:{n}"))}
+            if len(hits) == 1:
+                return self._remember(ck, self._make(raw, hits.pop(), "name", 100))
+            if len(hits) > 1:
+                return Resolution(raw=raw, service_key=None, method="ambiguous",
+                                  candidates=[(k, 100.0) for k in sorted(hits)])
+
+        # 4a. a person's alias as a word prefix: an alias "Veeam" covers "Veeam Veeam Data Cloud Vault"
+        words = norm(raw).split()
+        for k in range(min(6, len(words) - 1), 0, -1):
+            pre = " ".join(words[:k])
+            for sk in [*(f"{p}|{pre}" for p in provs), f"*|{pre}"]:
+                if (key := self.synonyms.get(sk)):
+                    return self._remember(ck, self._make(raw, key, "synonym-prefix", 95))
 
         # 4b. longest word prefix that is a known name: "Amazon EC2 m5.xlarge" -> "ec2",
         #     "Virtual Machines D4s v5 East US" -> "virtual machines"
@@ -136,6 +153,18 @@ class Resolver:
                 return self._remember(ck, self._make(raw, hits.pop(), "prefix", 95))
             if len(hits) > 1:
                 break
+
+        # 4c. a Microsoft invoice product name ("Az DDOS Prot-NW Prot Plan-1 Hr"): its service part, short words
+        #     written out, as a name and then as a word prefix ("azure ddos protection")
+        azure = provider == "azure" or (provider is None and re.match(r"\s*az(?:\s|sql)", raw, re.I))
+        if azure and (head := azure_head(raw)) and head != norm(raw):
+            for n in dict.fromkeys((head, norm_loose(head))):
+                if (key := self.cat.names.get(f"azure:{n}") or self.cat.products.get(f"azure:{n}")):
+                    return self._remember(ck, self._make(raw, key, "abbrev", 95))
+            hw = norm_loose(head).split()
+            for k in range(min(5, len(hw)), 0, -1):
+                if (key := self.cat.names.get(f"azure:{' '.join(hw[:k])}")):
+                    return self._remember(ck, self._make(raw, key, "abbrev", 90))
 
         # 5. fuzzy
         cands = self._fuzzy(raw, provs)
@@ -156,13 +185,28 @@ class Resolver:
         if service_key not in self.cat.services:
             raise KeyError(f"Unknown service key: {service_key}")
         self.synonyms[f"{provider or '*'}|{norm(raw)}"] = service_key
-        # drop stale cache entries for this string
+        # drop stale cache entries for this string, and for longer labels it now covers as a word prefix (step 4a)
         n = norm(raw)
-        for k in [k for k in self.cache if k.endswith(f"|{n}")]:
+        for k in [k for k in self.cache if k.endswith(f"|{n}") or f"|{n} " in k]:
             del self.cache[k]
         self.syn_path.write_text(json.dumps(self.synonyms, indent=1, sort_keys=True))
         self._dirty = True
         self.flush()
+
+    def remove_synonym(self, provider: str | None, label_norm: str) -> bool:
+        """Forget a correction (its key as add_synonym wrote it: provider or '*', and the normalized label)."""
+        if self.synonyms.pop(f"{provider or '*'}|{label_norm}", None) is None:
+            return False
+        self.syn_path.write_text(json.dumps(self.synonyms, indent=1, sort_keys=True))
+        return True
+
+    def key_for_code(self, code: str, provider: str | None = None) -> str | None:
+        """The service with this code (AmazonEC2, an Azure serviceId or productId, a GCP id), or None."""
+        for p in [provider] if provider else list(PROVIDERS):
+            if (key := self.cat.codes.get(f"{p}:{code_key(code)}")):
+                return key
+        return next((k for k, s in self.cat.services.items()
+                     if s.get("code") == code and (not provider or s["provider"] == provider)), None)
 
     def flush(self) -> None:
         if self._dirty:
@@ -195,7 +239,7 @@ class Resolver:
 
     def _make(self, raw: str, key: str, method: str, score: float) -> Resolution:
         s = self.cat.services.get(key, {})
-        return Resolution(raw=raw, service_key=key, service=s.get("name"),
+        return Resolution(raw=raw, service_key=key, service=s.get("name"), service_code=s.get("code"),
                           provider=s.get("provider"), category=s.get("category"),
                           method=method, score=round(float(score), 1))
 

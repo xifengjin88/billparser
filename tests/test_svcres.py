@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 
 import pytest
@@ -56,3 +57,52 @@ def test_dominant_provider_inference(resolver):
 def test_fuzzy_results_are_cached(resolver):
     resolver.resolve_many(["Big Query"])
     assert resolver.resolve("Big Query").method.startswith("cache:")
+
+
+def test_exact_name_wins_over_a_loose_name(tmp_path):
+    """"Microsoft Fabric" is its own service: the loose key of "Service Fabric" (prefixes removed) must not tie it."""
+    raw = tmp_path / "raw"
+    raw.mkdir()
+    for f in ("aws_services.json", "gcp_services.json"):
+        (raw / f).write_text((RAW / f).read_text())
+    rows = [("P1", "Fabric Capacity", "Microsoft Fabric", "Data"), ("P2", "Service Fabric Cluster", "Service Fabric", "Compute")]
+    (raw / "azure_products.json").write_text(json.dumps({
+        pid: {"productId": pid, "productName": prod, "serviceName": svc, "serviceId": pid + "S", "serviceFamily": fam}
+        for pid, prod, svc, fam in rows}))
+    cat = build(raw)
+    cat.save(tmp_path / "catalog.msgpack")
+    res = Resolver(Catalog.load(tmp_path / "catalog.msgpack"), tmp_path)
+    assert res.resolve("Microsoft Fabric").service == "Microsoft Fabric"
+    assert res.resolve("Service Fabric").service == "Service Fabric"
+
+
+def test_a_rebuilt_catalog_starts_a_new_cache(tmp_path):
+    cat = build(RAW)
+    cat.save(tmp_path / "catalog.msgpack")
+    res = Resolver(Catalog.load(tmp_path / "catalog.msgpack"), tmp_path)
+    res.cache["*|old label"] = {"service_key": "azure:Storage", "method": "fuzzy", "score": 93.0}
+    res._dirty = True
+    res.flush()
+    assert Resolver(Catalog.load(tmp_path / "catalog.msgpack"), tmp_path).resolve("old label").method == "cache:fuzzy"
+    cat.built_at += 1                                  # a rebuild
+    cat.save(tmp_path / "catalog.msgpack")
+    assert Resolver(Catalog.load(tmp_path / "catalog.msgpack"), tmp_path).resolve("old label").method != "cache:fuzzy"
+
+
+def test_a_resolved_service_has_its_code_and_name(resolver):
+    aws = resolver.resolve("EC2-Other")
+    assert (aws.service_code, aws.service) == ("AmazonEC2", "Amazon Elastic Compute Cloud")
+    azure = resolver.resolve("Premium SSD Managed Disks")
+    assert azure.service == "Storage" and azure.service_code                  # the Azure serviceId
+    gcp = resolver.resolve("BigQuery")
+    assert gcp.service_code == "24E6-581D-38E5"
+
+
+def test_marketplace_sellers_and_an_alias_as_a_word_prefix(resolver):
+    """Each cloud has a Marketplace service; an alias to it covers every product name that starts with the alias."""
+    key = resolver.key_for_code("Marketplace", "azure")
+    assert key == "azure:Marketplace"
+    assert resolver.resolve("Acme Backup Pro 10TB", "azure").service_key is None
+    resolver.add_synonym("Acme Backup", key, provider="azure")
+    r = resolver.resolve("Acme Backup Pro 10TB", "azure")
+    assert (r.service, r.category, r.method) == ("Marketplace", "Marketplace", "synonym-prefix")

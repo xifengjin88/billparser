@@ -1,8 +1,7 @@
 """Label each row of a located table: item, group_header, continuation, subtotal,
 total, header_repeat, note, blank.
 
-Rules first. Every labeled row also yields a feature dict, saved to the learning
-store so a classifier can replace these rules once there are enough labels.
+Rules only. Every labeled row also yields a feature dict (the features the rules read).
 """
 
 from __future__ import annotations
@@ -56,9 +55,7 @@ def _vertical_sum(formula: str) -> bool:
 
 
 def classify(f: dict) -> str:
-    """Rule-based labeler. Swap for a trained model via set_model()."""
-    if _MODEL is not None:
-        return _MODEL(f)
+    """Rule-based labeler."""
     if f["n_cells"] == 0:
         return "blank"
     if f["header_overlap"] >= 0.6:
@@ -79,12 +76,3 @@ def classify(f: dict) -> str:
     if f["has_label"] and f["prev"] in ("", "header_repeat", "group_header", "subtotal") and f["n_cells"] == 1:
         return "group_header"
     return "note"
-
-
-_MODEL = None
-
-
-def set_model(predict_fn) -> None:
-    """Install a trained classifier: predict_fn(features: dict) -> label."""
-    global _MODEL
-    _MODEL = predict_fn

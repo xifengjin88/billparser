@@ -1,0 +1,45 @@
+# Development: hot reload. Used by `make dev`:
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build --watch
+# The code is mounted into the containers: a change restarts the API (uvicorn --reload) and shows at once in the
+# web app (the Vite dev server). A change to the dependencies rebuilds the image.
+
+services:
+  api:
+    command: ["uvicorn", "billparse.api:app", "--host", "0.0.0.0", "--port", "8000",
+              "--reload", "--reload-dir", "/app/billparse", "--reload-dir", "/app/svcres"]
+    volumes:
+      - ./billparse:/app/billparse
+      - ./svcres:/app/svcres
+      - ./specs:/app/specs
+      - ./migrations:/app/migrations
+    environment:
+      WATCHFILES_FORCE_POLLING: "true"   # file events from the Mac do not always reach the container
+    develop:
+      watch:
+        - action: rebuild
+          path: ./pyproject.toml
+        - action: rebuild
+          path: ./uv.lock
+
+  web:                                # the Vite dev server: a change under web/src shows at once
+    build:
+      context: ./web
+      target: dev
+    image: billparse-web:dev
+    ports: !override
+      - "${WEB_PORT:-8090}:5173"
+      - "5174:5173"
+    environment:
+      API_URL: http://api:8000
+      VITE_POLL: "1"
+    volumes:
+      - ./web/src:/web/src
+      - ./web/public:/web/public
+      - ./web/index.html:/web/index.html
+      - ./web/vite.config.ts:/web/vite.config.ts
+    develop:
+      watch:
+        - action: rebuild
+          path: ./web/package.json
+        - action: rebuild
+          path: ./web/pnpm-lock.yaml

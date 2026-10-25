@@ -14,12 +14,13 @@ import pandas as pd
 
 from . import expr
 from .docmodel import Document, Region
-from .layout import extract_fields, extract_lines, extract_table, norm_h
+from .layout import _row_to_cols, build_columns, extract_fields, extract_lines, extract_table, find_header, norm_h
+from .mapper import map_columns
 from .transforms import CANONICAL, TRANSFORMS, apply_transforms, default_transforms, parse_number
 
 ALLOWED_TOP = {"id", "version", "trust", "extends", "detect", "meta", "source", "table", "columns",
                "derive", "reshape", "filters", "fields", "lines", "totals", "fingerprint", "stats",
-               "created_at", "parent", "notes"}
+               "created_at", "parent", "notes", "tree", "context"}
 
 
 class SpecError(ValueError):
@@ -36,6 +37,7 @@ class Extraction:
     source_rows: int = 0
     warnings: list[str] = field(default_factory=list)
     spec_id: str = ""
+    evidence: dict = field(default_factory=dict)     # tree source: subtotals, views, unexplained amounts
 
 
 # ---------------------------------------------------------------- validation of spec shape
@@ -57,8 +59,23 @@ def check_spec(spec: dict) -> None:
         expr.validate(e)
     for p in spec.get("lines") or []:
         re.compile(p["pattern"])
-    if not (spec.get("columns") or spec.get("lines")):
+    if not (spec.get("columns") or spec.get("lines") or spec.get("source") in ("tree", "iac")):
         raise SpecError("Spec maps no columns")
+    if spec.get("tree") is not None:
+        if not isinstance(spec["tree"], dict):
+            raise SpecError("tree must be an object of options")
+        from .tree import check_options
+        problems = check_options(spec["tree"])
+        if problems:
+            raise SpecError("; ".join(problems))
+    if spec.get("context") is not None:
+        from .context import check_context
+        problems = check_context(spec["context"])
+        if problems:
+            raise SpecError("; ".join(problems))
+    text_rx = (spec.get("detect") or {}).get("text")
+    if text_rx is not None:
+        re.compile(text_rx)
 
 
 def merge(base: dict, child: dict) -> dict:
@@ -72,9 +89,15 @@ def merge(base: dict, child: dict) -> dict:
 
 
 # ---------------------------------------------------------------- detection
-def detect_score(spec: dict, headers: list[str]) -> float:
-    """0 if the spec can't apply to these headers, else higher = better match."""
+def detect_score(spec: dict, headers: list[str], text: str = "") -> float:
+    """0 if the spec can't apply to these headers (or this text, for layouts with no table header), else higher =
+    better match."""
     d = spec.get("detect") or {}
+    if d.get("text"):
+        if not text or not re.search(d["text"], text, re.I | re.M):
+            return 0.0
+        if not (d.get("required") or d.get("any_of") or d.get("any_regex")):
+            return 2.0
     hn = {norm_h(h) for h in headers}
     req = [norm_h(h) for h in d.get("required", [])]
     if any(r not in hn for r in req):
@@ -96,10 +119,19 @@ def detect_score(spec: dict, headers: list[str]) -> float:
 
 
 # ---------------------------------------------------------------- run
-def run(spec: dict, doc: Document) -> Extraction:
+def run(spec: dict, doc: Document, catalog_dir=None) -> Extraction:
     source = spec.get("source", "auto")
     regions = doc.regions
     fields = extract_fields(regions, spec.get("fields") or {})
+    if source == "tree":
+        return _tree(spec, doc, fields, catalog_dir)
+    if source == "iac":                                 # CloudFormation or Terraform: an inventory (iac.py)
+        from . import iac
+        res = iac.read(doc)
+        ext = Extraction(rows=iac.rows(res), fields=fields, spec_id=spec.get("id", ""),
+                         evidence={"excluded": res.excluded, "gaps": res.gaps})
+        ext.warnings += [f"{g['name']}: {g['message']} ({g['src']})" for g in res.gaps]
+        return ext
     if source == "lines" or (source == "auto" and spec.get("lines") and not spec.get("table")):
         raw = extract_lines(regions, spec["lines"])
         ext = Extraction(rows=pd.DataFrame(), fields=fields, source_rows=len(raw))
@@ -135,6 +167,35 @@ def run(spec: dict, doc: Document) -> Extraction:
     return ext
 
 
+def _tree(spec: dict, doc: Document, fields: dict, catalog_dir) -> Extraction:
+    """The tree of sums (tree.py): lines with their context, and the evidence that they are complete."""
+    from . import context, tree
+    t = tree.read(doc.regions, spec.get("tree") or {})
+    rows = context.lines_frame(t.lines, catalog_dir, t.currency, spec.get("context") or {})
+    for fld, c in (spec.get("columns") or {}).items():             # a spec can still set or override a field
+        if "const" in c:
+            rows[fld] = c["const"]
+        elif c.get("from") and c["from"][0] in rows:
+            rows[fld] = rows[c["from"][0]]
+    rows = _filter(spec, _derive(spec, rows))
+    meta = spec.get("meta") or {}
+    if meta.get("provider"):
+        rows["provider"] = meta["provider"]
+    fields = {**t.facts, **fields}                     # the spec's own fields win over the printed header fields
+    ext = Extraction(rows=rows.reset_index(drop=True), fields=fields, source_rows=0,
+                     evidence=t.evidence, spec_id=spec.get("id", ""))
+    rec = t.evidence.get("reconcile") or {}
+    top = rec if rec.get("src") else t.evidence.get("top_total")   # the printed total the lines are proved against
+    if top:
+        ext.stated_totals.append({"label": top["label"], "amount": top["amount"], "kind": "tree_total",
+                                  "src": top["src"], **({"lines": rec["lines"], "rounding": rec["rounding"]}
+                                                       if rec.get("src") else {})})
+    _totals_from_fields(spec, ext)
+    if rows.empty:
+        ext.warnings.append("No rows extracted")
+    return ext
+
+
 def _frame(spec: dict, regions: list[Region]) -> tuple[Extraction, pd.DataFrame | None]:
     frames = [r for r in regions if r.is_frame]
     if not frames:
@@ -146,7 +207,28 @@ def _frame(spec: dict, regions: list[Region]) -> tuple[Extraction, pd.DataFrame 
     return Extraction(rows=pd.DataFrame(), source_rows=len(raw)), raw
 
 
+def _inventory_grid(spec: dict, regions: list[Region]) -> tuple[Extraction, pd.DataFrame | None]:
+    """An inventory sheet (resources with no cost): every non-empty row below the header row is a row."""
+    expect = [h for c in (spec.get("columns") or {}).values() for h in _from_list(c) if not h.startswith("_")]
+    records = []
+    for region in regions:
+        if region.is_frame or not region.rows:
+            continue
+        hdr = find_header(region, None, expect)
+        if hdr is None:
+            continue
+        cols = build_columns(region, hdr)
+        for row in region.rows[hdr + 1:]:
+            vals = _row_to_cols(row, cols, region.kind)
+            if any(str(v).strip() for v in vals.values()):
+                records.append({**vals, "_src": f"{region.name}:{row.index}"})
+    raw = pd.DataFrame(records)
+    return Extraction(rows=pd.DataFrame(), source_rows=len(raw)), (raw if records else None)
+
+
 def _grid(spec: dict, regions: list[Region]) -> tuple[Extraction, pd.DataFrame | None]:
+    if (spec.get("meta") or {}).get("kind") == "inventory":
+        return _inventory_grid(spec, regions)
     cols = spec.get("columns") or {}
     amount_h = _from_list(cols.get("billed_cost")) or ["amount", "cost", "total", "charges", "price"]
     label_h = (_from_list(cols.get("service_raw")) + _from_list(cols.get("description"))) or ["description"]
@@ -204,12 +286,14 @@ def _find_col(df: pd.DataFrame, names: list[str]) -> str | None:
 
 def _map_columns(spec: dict, raw: pd.DataFrame, ext: Extraction) -> pd.DataFrame:
     out = pd.DataFrame(index=raw.index)
+    used: set = set()
     for fld, c in (spec.get("columns") or {}).items():
         if "const" in c:
             out[fld] = c["const"]
             continue
         if c.get("coalesce"):                                   # first non-blank across columns, per row
             srcs = [x for x in (_find_col(raw, [n]) for n in _from_list(c)) if x is not None]
+            used.update(srcs)
             if srcs:
                 merged = raw[srcs[0]].where(raw[srcs[0]].astype(str).str.strip().ne(""), None)
                 for x in srcs[1:]:
@@ -225,12 +309,39 @@ def _map_columns(spec: dict, raw: pd.DataFrame, ext: Extraction) -> pd.DataFrame
             if c.get("required"):
                 ext.warnings.append(f"Required column for {fld} not found: {_from_list(c)}")
             continue
+        used.add(src)
         steps = c.get("t") if c.get("t") is not None else default_transforms(fld)
         out[fld] = apply_transforms(raw[src].where(raw[src].notna(), None), steps)
+    _keep_unmapped(raw, out, used)
     for meta_col in ("_src", "_group"):
         if meta_col in raw:
             out[meta_col] = raw[meta_col]
     return out
+
+
+NEVER_ADDED = {"billed_cost", "tax", "unit_price"}   # money columns: a second cost changes the sum; a price can be list or net
+
+
+def _keep_unmapped(raw: pd.DataFrame, out: pd.DataFrame, used: set) -> None:
+    """The columns the spec did not map are not lost: a header the mapper's rules know fills a field the spec left
+    empty (never a cost), and every other column goes in the line's extra text ("Header: value | ...")."""
+    left = [c for c in raw.columns if c not in used and not str(c).startswith("_") and str(c).strip()
+            and raw[c].astype(str).str.strip().replace({"nan": "", "None": ""}).ne("").any()]
+    if not left:
+        return
+    chosen, _, _ = map_columns({c: raw[c].head(200).tolist() for c in left})
+    for fld, col in chosen.items():
+        if fld in NEVER_ADDED or fld in out:
+            continue
+        out[fld] = apply_transforms(raw[col].where(raw[col].notna(), None), default_transforms(fld))
+        left.remove(col)
+    if not left:
+        return
+    parts = [raw[c].map(lambda v, c=c: "" if v is None or (isinstance(v, float) and v != v) or str(v).strip() == ""
+                        else f"{c}: {str(v).strip()}") for c in left]
+    extra = parts[0].str.cat(parts[1:], sep=" | ") if len(parts) > 1 else parts[0]
+    extra = extra.str.replace(r"( \| )+", " | ", regex=True).str.strip(" |")
+    out["_extra"] = extra.where(extra.ne(""), None)
 
 
 def _derive(spec: dict, rows: pd.DataFrame) -> pd.DataFrame:

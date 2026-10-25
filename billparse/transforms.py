@@ -6,6 +6,7 @@ ones; your team adds them in code (see CUSTOM_TRANSFORMS) when a pattern recurs.
 
 from __future__ import annotations
 
+import calendar
 import json
 import re
 from collections.abc import Callable
@@ -35,6 +36,13 @@ CANONICAL = {
     "invoice_id": "Invoice number",
     "provider": "aws, azure, gcp, or other",
     "tax": "Tax amount on the line",
+    "instance_type": "Instance or VM size (m5.xlarge, db.r6g.large, Standard_D4s_v5, n2-standard-8)",
+    "database_engine": "Database engine (MySQL, Aurora PostgreSQL, SQL Server, ...)",
+    "operating_system": "Operating system (Linux, Windows, RHEL, ...)",
+    "deployment_option": "Deployment (Single-AZ, Multi-AZ)",
+    "pricing_model": "On Demand, Reserved, Savings Plan, Spot, Commitment",
+    "usage_type": "Provider usage type (USE1-BoxUsage:m5.xlarge, APS3-TimedStorage-ByteHrs)",
+    "commitment_id": "Reservation, savings plan or commitment ID",
 }
 NUMERIC = {"billed_cost", "effective_cost", "list_cost", "credits", "quantity", "unit_price", "tax"}
 DATES = {"charge_start", "charge_end"}
@@ -101,7 +109,7 @@ def t_number(s: pd.Series, decimal: str = ".") -> pd.Series:
     need = num.isna() & s.notna()
     if need.any():
         num = num.astype(float)
-        num[need] = s[need].map(lambda v: parse_number(v, decimal))
+        num[need] = s[need].map(lambda v: parse_number(v, decimal)).astype(float)   # None -> NaN
     return num.astype(float)
 
 
@@ -216,3 +224,23 @@ def default_transforms(field: str) -> list:
     if field == "charge_type":
         return ["strip", "charge_type"]
     return ["strip"]
+
+
+_MONTHS = {m: i for i, m in enumerate(["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov",
+                                       "dec"], 1)}
+_PERIOD = re.compile(r"^\s*(?:(?P<y>\d{4})[-/](?P<m>\d{1,2})|(?P<mn>[A-Za-z]{3})[a-z]*[\s-]+(?P<y2>\d{4}))\s*$")
+
+
+def period_of(text) -> tuple[str, str] | None:
+    """A month written as a label ("2026-01", "2026/1", "Jan 2026", "January-2026") -> (first day, last day)."""
+    if text is None or not isinstance(text, str):
+        return None
+    m = _PERIOD.match(text)
+    if not m:
+        return None
+    year = int(m["y"] or m["y2"])
+    month = int(m["m"]) if m["m"] else _MONTHS.get((m["mn"] or "").lower()[:3])
+    if not month or not 1 <= month <= 12:
+        return None
+    last = calendar.monthrange(year, month)[1]
+    return f"{year:04d}-{month:02d}-01", f"{year:04d}-{month:02d}-{last:02d}"

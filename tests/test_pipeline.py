@@ -233,12 +233,132 @@ def test_redaction():
 
 def test_api(make_pipe, tmp_path, monkeypatch):
     from fastapi.testclient import TestClient
+
     import billparse.api as api
-    monkeypatch.setattr(api, "pipe", make_pipe())
-    client = TestClient(api.app)
-    with open(FILES / "summary_invoice.pdf", "rb") as fh:
-        r = client.post("/parse", files={"file": ("summary_invoice.pdf", fh, "application/pdf")})
-    assert r.status_code == 200 and r.json()["status"] == "reconciled"
-    sha = r.json()["sha256"]
-    assert client.get(f"/results/{sha}/rows").status_code == 200
-    assert client.get("/specs").status_code == 200
+    pipe = make_pipe()
+    api.app.dependency_overrides[api.get_store] = lambda: pipe.store
+    api.app.dependency_overrides[api.get_pipeline] = lambda: pipe
+    try:
+        client = TestClient(api.app)
+        with open(FILES / "summary_invoice.pdf", "rb") as fh:
+            r = client.post("/parse", files={"file": ("summary_invoice.pdf", fh, "application/pdf")})
+        body = r.json()
+        assert r.status_code == 200 and body["status"] == "auto_accepted" and body["completeness"] == "reconciled"
+        assert body["document"]["charges"] and body["lane"] == "rules"
+        assert client.get(f"/documents/{body['sha256']}").json()["sha256"] == body["sha256"]
+        assert client.get("/specs").status_code == 200
+        assert client.get("/health").json()["database"] == "sqlite"
+    finally:
+        api.app.dependency_overrides.clear()
+
+
+def test_a_spec_keeps_the_columns_it_does_not_map():
+    """A spec maps what it knows; the other columns are not lost: known headers fill empty fields (never a cost),
+    the rest goes in the line's extra text."""
+    from billparse.docmodel import load_bytes
+    from billparse.spec import run
+    csv = ("ServiceName,CostUSD,ChargeType,Quantity,UnitOfMeasure,Meter,ResourceGroup,TaxUSD\n"
+           "Virtual Machines,10.5,Usage,24,1 Hour,D4s v5,rg-web,1.0\n"
+           "SaaS,4.0,Purchase,,,,rg-mail,0\n")
+    spec = {"source": "frame", "columns": {"service_raw": {"from": ["ServiceName"]}, "billed_cost": {"from": ["CostUSD"]}}}
+    rows = run(spec, load_bytes(csv.encode(), "export.csv")).rows
+    assert list(rows["billed_cost"]) == [10.5, 4.0] and "tax" not in rows
+    assert list(rows["charge_type"]) == ["Usage", "Purchase"]
+    assert rows["quantity"][0] == 24 and rows["unit"][0] == "1 Hour" and rows["description"][0] == "D4s v5"
+    assert "ResourceGroup: rg-web" in rows["_extra"][0] and "TaxUSD: 1.0" in rows["_extra"][0]
+
+
+def test_lines_carry_the_service_code_and_name(tmp_path):
+    """Every matched line has the catalog's service code and name; a label no service matches has neither."""
+    from billparse.analyze import resolve_services
+    import pandas as pd
+    rows = pd.DataFrame({"service_raw": ["Amazon Elastic Compute Cloud", "AmazonS3", "Team lunch"],
+                         "billed_cost": [10.0, 5.0, 1.0]})
+    raw = tmp_path / "data" / "raw"
+    raw.mkdir(parents=True)
+    for f in (ROOT / "tests" / "fixtures" / "raw").glob("*.json"):
+        shutil.copy(f, raw / f.name)
+    analyze_mod._RESOLVER = None
+    resolve_services(rows, tmp_path / "data")
+    analyze_mod._RESOLVER = None
+    assert list(rows["service_code"][:2]) == ["AmazonEC2", "AmazonS3"]
+    assert list(rows["service_name"][:2]) == ["Amazon Elastic Compute Cloud", "Amazon Simple Storage Service"]
+    assert pd.isna(rows["service_code"][2]) and pd.isna(rows["service_name"][2])
+    assert rows["service"][2] == "Team lunch"                 # summaries still show the printed label
+
+
+def test_quantity_and_unit_are_read_from_a_line_under_headings():
+    """A bill line under its headings ("$0.0188 per ... 4,216.07 Hrs", path "EC2 > US East") gets every detail."""
+    import pandas as pd
+
+    from billparse.attributes import extract
+    rows = pd.DataFrame({"description": ["$0.0188 per On Demand Linux t3a.small Instance Hour 4,216.07 Hrs"],
+                         "billed_cost": [79.26], "_path": ["Elastic Compute Cloud > US East (N. Virginia)"]})
+    extract(rows)
+    r = rows.iloc[0]
+    assert (r["quantity"], r["unit"], r["unit_price"]) == (4216.07, "Hrs", 0.0188)
+    assert (r["instance_type"], r["operating_system"], r["pricing_model"]) == ("t3a.small", "Linux", "On Demand")
+
+
+def test_a_price_per_block_of_units_is_a_price_per_unit():
+    """"$0.0055 per 1,000 requests" is 0.0000055 a request, so quantity x unit price is the cost."""
+    from billparse.attributes import from_text
+    cases = [("$0.0055 per 1,000 PUT, COPY, POST, or LIST requests 7,275,083 Requests", 40.01),
+             ("$0.60 per million requests processed 33,040,241 Request", 19.82),
+             ("USD 0.22 per 1 million I/O requests for Aurora MySQL 33,384,496 IOs", 7.34),
+             ("$0.03 per 10000 KMS requests in Asia Pacific (Mumbai) 1 Requests", 0.00),
+             ("$0.0188 per On Demand Linux t3a.small Instance Hour 4,216.07 Hrs", 79.26)]
+    for text, cost in cases:
+        d = from_text(text)
+        assert round(d["quantity"] * d["unit_price"], 2) == cost, (text, d)
+    assert from_text(cases[0][0])["price_per"] == "$0.0055 per 1,000"
+
+
+def test_a_month_written_as_the_description_becomes_the_period():
+    """LLM rows from a table with a column per month: the month is the period, not the description."""
+    import pandas as pd
+
+    from billparse.pipeline import _periods_out_of_descriptions
+    df = _periods_out_of_descriptions(pd.DataFrame({"service_raw": ["BigQuery", "BigQuery", "BigQuery"],
+                                                    "description": ["2026-01", "Feb 2026", "Storage"],
+                                                    "billed_cost": [1.0, 2.0, 3.0]}))
+    assert list(df["charge_start"][:2]) == ["2026-01-01", "2026-02-01"] and df["charge_end"][1] == "2026-02-28"
+    assert df["description"][:2].isna().all() and df["description"][2] == "Storage" and pd.isna(df["charge_start"][2])
+
+
+def test_a_weak_match_to_another_provider_is_tried_again_within_the_files_provider():
+    import pandas as pd
+
+    from billparse.analyze import _one_provider
+    from svcres.resolver import Resolution
+
+    def hit(provider, method, service="S"):
+        return Resolution(raw="x", service_key=f"{provider}:{service}", service=service, provider=provider, method=method)
+
+    class Res:                                          # the provider's own catalog has no "Cloud Composer"
+        def resolve_many(self, values, provider):
+            return {v: Resolution(raw=v, service_key=None) for v in values}
+    rows = pd.DataFrame({"service_raw": ["BigQuery", "Cloud SQL", "Cloud Storage", "Cloud Composer"]})
+    picked = pd.Series([hit("gcp", "name"), hit("gcp", "name"), hit("gcp", "code"), hit("azure", "cache:prefix")])
+    out = _one_provider(rows, picked, Res())
+    assert [r.provider if r else None for r in out] == ["gcp", "gcp", "gcp", None]
+
+
+def test_fees_keep_their_area_and_their_own_kind():
+    """Support is a support fee on every bill; a Marketplace line is Marketplace money even when its name matches a
+    service; a commitment with no service takes its area from its name; the category x kind table keeps them apart."""
+    import pandas as pd
+
+    from billparse.analyze import _by_category_and_type, _fees_and_areas
+    rows = pd.DataFrame({
+        "service": ["AWS Support (Business)", "Claude (Amazon Bedrock Edition)", None, "Amazon EC2", "Amazon EC2"],
+        "description": ["Charges", "AWS Marketplace software usage", "Compute savings plan", "Usage", "Usage"],
+        "category": ["Support", "AI + Machine Learning", None, "Compute", "Compute"],
+        "charge_type": [None, None, "Purchase", None, "Tax"],
+        "billed_cost": [100.0, 0.15, 30.0, 70.0, 7.0]})
+    _fees_and_areas(rows)
+    assert rows["charge_type"][0] == "Support" and pd.isna(rows["charge_type"][1]) and rows["charge_type"][2] == "Purchase"
+    assert list(rows["category"][:3]) == ["Support", "Marketplace", "Compute"]
+    table = {r["category"]: r for r in _by_category_and_type(rows)}
+    assert table["Compute"] == {"category": "Compute", "commitment_fee": 30.0, "tax": 7.0, "usage": 70.0, "total": 107.0}
+    assert table["Support"]["support_fee"] == 100.0 and table["Marketplace"]["marketplace"] == 0.15

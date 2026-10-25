@@ -1,0 +1,66 @@
+# billparse with PostgreSQL:  docker compose up --build   (or: make up)
+#   API: http://localhost:8010/parse     web app: http://localhost:8090   (API_PORT, WEB_PORT; other ports than
+#   invoice-parser's, so both stacks run side by side)
+# Settings (ANTHROPIC_API_KEY, AUTH, ...) come from .env when it exists; see example.env.
+name: billparse
+
+services:
+  db:
+    build: ./docker/db
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-billparse}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-billparse}
+      POSTGRES_DB: ${POSTGRES_DB:-billparse}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      - "127.0.0.1:5434:5432"          # for psql from this machine only
+    restart: unless-stopped
+    healthcheck:                       # make reset-db waits for it (up --wait)
+      test: ["CMD-SHELL", "pg_isready -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\""]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  api:
+    image: billparse:local             # built here, never pulled from a registry
+    build: .
+    pull_policy: build
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-billparse}:${POSTGRES_PASSWORD:-billparse}@db:5432/${POSTGRES_DB:-billparse}
+      PARSER_DATA_DIR: /data/store
+      CATALOG_DIR: /data/catalog
+    volumes:
+      - billparse-data:/data           # uploads, result rows, nightly reports, the catalog and its synonyms
+    ports:
+      - "${API_PORT:-8010}:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 5s
+      timeout: 3s
+      start_period: 30s
+      retries: 10
+    restart: unless-stopped
+
+  web:
+    build:
+      context: ./web
+      target: serve
+    image: billparse-web:local
+    pull_policy: build
+    ports:
+      - "${WEB_PORT:-8090}:80"
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+  billparse-data:

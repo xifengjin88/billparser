@@ -1,17 +1,342 @@
 {
- "AmazonEC2": {
+ "A4B": {
   "names": [
-   "Amazon Elastic Compute Cloud"
+   "Alexa for Business"
   ]
  },
- "AmazonS3": {
+ "ACM": {
   "names": [
-   "Amazon Simple Storage Service"
+   "AWS Certificate Manager"
   ]
  },
- "AmazonRDS": {
+ "AMSOperations": {
   "names": [
-   "Amazon Relational Database Service"
+   "AWS Support Managed Services"
+  ]
+ },
+ "AWSAmplify": {
+  "names": [
+   "AWS Amplify"
+  ]
+ },
+ "AWSAppFabric": {
+  "names": [
+   "AWS AppFabric"
+  ]
+ },
+ "AWSAppRunner": {
+  "names": [
+   "AWS App Runner"
+  ]
+ },
+ "AWSAppStudio": {
+  "names": [
+   "AWS App Studio"
+  ]
+ },
+ "AWSAppSync": {
+  "names": [
+   "AWS AppSync"
+  ]
+ },
+ "AWSApplicationMigrationSvc": {
+  "names": [
+   "AWS Application Migration Service"
+  ]
+ },
+ "AWSB2Bi": {
+  "names": [
+   "AWS B2B Data Interchange"
+  ]
+ },
+ "AWSBCMPricingCalculator": {
+  "names": [
+   "AWS Pricing Calculator"
+  ]
+ },
+ "AWSBackup": {
+  "names": [
+   "AWS Backup"
+  ]
+ },
+ "AWSBillingConductor": {
+  "names": [
+   "AWS Billing Conductor"
+  ]
+ },
+ "AWSBudgets": {
+  "names": [
+   "AWS Budgets"
+  ]
+ },
+ "AWSCertificateManager": {
+  "names": [
+   "AWS Certificate Manager"
+  ]
+ },
+ "AWSCleanRooms": {
+  "names": [
+   "AWS Clean Rooms"
+  ]
+ },
+ "AWSCloudFormation": {
+  "names": [
+   "AWS CloudFormation"
+  ]
+ },
+ "AWSCloudMap": {
+  "names": [
+   "AWS Cloud Map"
+  ]
+ },
+ "AWSCloudTrail": {
+  "names": [
+   "AWS CloudTrail"
+  ]
+ },
+ "AWSCloudWAN": {
+  "names": [
+   "AWS Cloud WAN"
+  ]
+ },
+ "AWSCodeArtifact": {
+  "names": [
+   "AWS CodeArtifact"
+  ]
+ },
+ "AWSCodeCommit": {
+  "names": [
+   "AWS CodeCommit"
+  ]
+ },
+ "AWSCodeDeploy": {
+  "names": [
+   "AWS CodeDeploy"
+  ]
+ },
+ "AWSCodePipeline": {
+  "names": [
+   "AWS CodePipeline"
+  ]
+ },
+ "AWSComputeOptimizer": {
+  "names": [
+   "AWS Compute Optimizer"
+  ]
+ },
+ "AWSConfig": {
+  "names": [
+   "AWS Config"
+  ]
+ },
+ "AWSCostExplorer": {
+  "names": [
+   "AWS Cost Explorer"
+  ]
+ },
+ "AWSCountdown": {
+  "names": [
+   "AWS Countdown"
+  ]
+ },
+ "AWSDataExchange": {
+  "names": [
+   "AWS Data Exchange"
+  ]
+ },
+ "AWSDataSync": {
+  "names": [
+   "AWS DataSync"
+  ]
+ },
+ "AWSDataTransfer": {
+  "names": [
+   "AWS Data Transfer"
+  ]
+ },
+ "AWSDataTransferTerminal": {
+  "names": [
+   "AWS Data Transfer Terminal"
+  ]
+ },
+ "AWSDatabaseMigrationSvc": {
+  "names": [
+   "AWS Database Migration Service"
+  ]
+ },
+ "AWSDeepRacer": {
+  "names": [
+   "AWS DeepRacer"
+  ]
+ },
+ "AWSDeveloperSupport": {
+  "names": [
+   "AWS Support (Developer)"
+  ]
+ },
+ "AWSDeviceFarm": {
+  "names": [
+   "AWS Device Farm"
+  ]
+ },
+ "AWSDirectConnect": {
+  "names": [
+   "AWS Direct Connect"
+  ]
+ },
+ "AWSDirectoryService": {
+  "names": [
+   "AWS Directory Service"
+  ]
+ },
+ "AWSELB": {
+  "names": [
+   "Elastic Load Balancing"
+  ]
+ },
+ "AWSElasticDisasterRecovery": {
+  "names": [
+   "AWS Elastic Disaster Recovery"
+  ]
+ },
+ "AWSElementalInference": {
+  "names": [
+   "AWS Elemental Inference"
+  ]
+ },
+ "AWSElementalMediaConvert": {
+  "names": [
+   "AWS Elemental MediaConvert"
+  ]
+ },
+ "AWSElementalMediaLive": {
+  "names": [
+   "AWS Elemental MediaLive"
+  ]
+ },
+ "AWSElementalMediaPackage": {
+  "names": [
+   "AWS Elemental MediaPackage"
+  ]
+ },
+ "AWSElementalMediaStore": {
+  "names": [
+   "AWS Elemental MediaStore"
+  ]
+ },
+ "AWSElementalMediaTailor": {
+  "names": [
+   "AWS Elemental MediaTailor"
+  ]
+ },
+ "AWSEndUserMessaging3pFees": {
+  "names": [
+   "AWS End User Messaging Third Party Fees"
+  ]
+ },
+ "AWSEnterpriseOnRamp": {
+  "names": [
+   "AWS Enterprise On Ramp"
+  ]
+ },
+ "AWSEntityResolution": {
+  "names": [
+   "AWS Entity Resolution"
+  ]
+ },
+ "AWSEvents": {
+  "names": [
+   "CloudWatch Events"
+  ]
+ },
+ "AWSFIS": {
+  "names": [
+   "AWS Fault Injection Simulator"
+  ]
+ },
+ "AWSFMS": {
+  "names": [
+   "AWS Firewall Manager"
+  ]
+ },
+ "AWSGlobalAccelerator": {
+  "names": [
+   "AWS Global Accelerator"
+  ]
+ },
+ "AWSGlue": {
+  "names": [
+   "AWS Glue"
+  ]
+ },
+ "AWSGlueElasticViews": {
+  "names": [
+   "AWS Glue Elastic Views"
+  ]
+ },
+ "AWSGreengrass": {
+  "names": [
+   "AWS Greengrass"
+  ]
+ },
+ "AWSGroundStation": {
+  "names": [
+   "AWS Ground Station"
+  ]
+ },
+ "AWSIAMAccessAnalyzer": {
+  "names": [
+   "AWS Identity and Access Management Access Analyzer"
+  ]
+ },
+ "AWSIncidentDetectionResponse": {
+  "names": [
+   "AWS Incident Detection And Response"
+  ]
+ },
+ "AWSInterconnect": {
+  "names": [
+   "AWS Interconnect"
+  ]
+ },
+ "AWSIoT": {
+  "names": [
+   "AWS IoT"
+  ]
+ },
+ "AWSIoT1Click": {
+  "names": [
+   "AWS IoT 1 Click"
+  ]
+ },
+ "AWSIoTAnalytics": {
+  "names": [
+   "AWS IoT Analytics"
+  ]
+ },
+ "AWSIoTEvents": {
+  "names": [
+   "AWS IoT Events"
+  ]
+ },
+ "AWSIoTFleetWise": {
+  "names": [
+   "AWS IoT FleetWise"
+  ]
+ },
+ "AWSIoTSiteWise": {
+  "names": [
+   "AWS IoT SiteWise"
+  ]
+ },
+ "AWSIoTThingsGraph": {
+  "names": [
+   "AWS IoT Things Graph"
+  ]
+ },
+ "AWSLakeFormation": {
+  "names": [
+   "AWS Lake Formation"
   ]
  },
  "AWSLambda": {
@@ -19,24 +344,344 @@
    "AWS Lambda"
   ]
  },
+ "AWSM2": {
+  "names": [
+   "AWS Mainframe Modernization"
+  ]
+ },
+ "AWSMDC": {
+  "names": [
+   "AWS Modular Data Center"
+  ]
+ },
+ "AWSManagedServices": {
+  "names": [
+   "AWS Managed Services"
+  ]
+ },
+ "AWSMediaConnect": {
+  "names": [
+   "AWS Elemental MediaConnect"
+  ]
+ },
+ "AWSMigrationHubRefactorSpaces": {
+  "names": [
+   "AWS Migration Hub Refactor Spaces"
+  ]
+ },
+ "AWSNSM": {
+  "names": [
+   "AWS Network Security Manager"
+  ]
+ },
+ "AWSNetworkFirewall": {
+  "names": [
+   "AWS Network Firewall"
+  ]
+ },
+ "AWSOutposts": {
+  "names": [
+   "AWS Outposts"
+  ]
+ },
+ "AWSPCS": {
+  "names": [
+   "AWS Parallel Computing Service"
+  ]
+ },
+ "AWSPrivate5G": {
+  "names": [
+   "AWS Private 5G"
+  ]
+ },
+ "AWSQueueService": {
+  "names": [
+   "Amazon Simple Queue Service"
+  ]
+ },
+ "AWSR53AppRecoveryController": {
+  "names": [
+   "AWS Route 53 Application Recovery Controller"
+  ]
+ },
+ "AWSRTBFabric": {
+  "names": [
+   "AWS RTB Fabric"
+  ]
+ },
+ "AWSResilienceHub": {
+  "names": [
+   "AWS Resilience Hub"
+  ]
+ },
+ "AWSRoboMaker": {
+  "names": [
+   "AWS RoboMaker"
+  ]
+ },
+ "AWSSecretsManager": {
+  "names": [
+   "AWS Secrets Manager"
+  ]
+ },
+ "AWSSecurityHub": {
+  "names": [
+   "AWS Security Hub"
+  ]
+ },
+ "AWSSecurityIncidentResponse": {
+  "names": [
+   "AWS Security Incident Response"
+  ]
+ },
+ "AWSServiceCatalog": {
+  "names": [
+   "AWS Service Catalog"
+  ]
+ },
+ "AWSShield": {
+  "names": [
+   "AWS Shield"
+  ]
+ },
+ "AWSStorageGateway": {
+  "names": [
+   "AWS Storage Gateway"
+  ]
+ },
+ "AWSStorageGatewayDeepArchive": {
+  "names": [
+   "AWS Storage Gateway Deep Archive"
+  ]
+ },
+ "AWSSupplyChain": {
+  "names": []
+ },
+ "AWSSupportBusiness": {
+  "names": [
+   "AWS Support (Business)"
+  ]
+ },
+ "AWSSupportEnterprise": {
+  "names": [
+   "AWS Support (Enterprise)"
+  ]
+ },
+ "AWSSupportEssential": {
+  "names": [
+   "AWS Business Support+"
+  ]
+ },
+ "AWSSystemsManager": {
+  "names": [
+   "AWS Systems Manager"
+  ]
+ },
+ "AWSTelcoNetworkBuilder": {
+  "names": [
+   "AWS Telco Network Builder"
+  ]
+ },
+ "AWSTransfer": {
+  "names": [
+   "AWS Transfer Family"
+  ]
+ },
+ "AWSTransform": {
+  "names": [
+   "AWS Transform"
+  ]
+ },
+ "AWSUnifiedOperations": {
+  "names": [
+   "AWS Unified Operations"
+  ]
+ },
+ "AWSWickr": {
+  "names": [
+   "AWS Wickr"
+  ]
+ },
+ "AWSWisdom": {
+  "names": [
+   "Q in Connect"
+  ]
+ },
+ "AWSXRay": {
+  "names": [
+   "AWS X-Ray"
+  ]
+ },
+ "AlexaTopSites": {
+  "names": [
+   "Alexa Top Sites"
+  ]
+ },
+ "AlexaWebInfoService": {
+  "names": [
+   "Alexa Web Information Service"
+  ]
+ },
+ "AmazonA2I": {
+  "names": [
+   "Amazon Augmented AI"
+  ]
+ },
+ "AmazonApiGateway": {
+  "names": [
+   "Amazon API Gateway"
+  ]
+ },
+ "AmazonAppStream": {
+  "names": [
+   "Amazon WorkSpaces Applications"
+  ]
+ },
+ "AmazonAthena": {
+  "names": [
+   "Amazon Athena"
+  ]
+ },
+ "AmazonBedrock": {
+  "names": [
+   "Amazon Bedrock"
+  ]
+ },
+ "AmazonBedrockAgentCore": {
+  "names": [
+   "Amazon Bedrock AgentCore"
+  ]
+ },
+ "AmazonBedrockFoundationModels": {
+  "names": [
+   "Claude (100K) (Amazon Bedrock Edition)",
+   "Claude (Amazon Bedrock Edition)",
+   "Claude 3 Haiku (Amazon Bedrock Edition)",
+   "Claude 3 Opus (Amazon Bedrock Edition)",
+   "Claude 3 Sonnet (Amazon Bedrock Edition)",
+   "Claude 3.5 Haiku (Amazon Bedrock Edition)",
+   "Claude 3.5 Sonnet (Amazon Bedrock Edition)",
+   "Claude 3.5 Sonnet v2 (Amazon Bedrock Edition)",
+   "Claude 3.7 Sonnet (Amazon Bedrock Edition)",
+   "Claude Fable 5 (Amazon Bedrock Edition)",
+   "Claude Fable 5.1 (Amazon Bedrock Edition)",
+   "Claude Haiku 4.5 (Amazon Bedrock Edition)",
+   "Claude Haiku 5.5 (Amazon Bedrock Edition)",
+   "Claude Instant (100K) (Amazon Bedrock Edition)",
+   "Claude Instant (Amazon Bedrock Edition)",
+   "Claude Mythos 5 (Amazon Bedrock Edition)",
+   "Claude Mythos 5.1 (Amazon Bedrock Edition)",
+   "Claude Mythos Preview (Amazon Bedrock Edition)",
+   "Claude Opus 4 (Amazon Bedrock Edition)",
+   "Claude Opus 4.1 (Amazon Bedrock Edition)",
+   "Claude Opus 4.5 (Amazon Bedrock Edition)",
+   "Claude Opus 4.6 (Amazon Bedrock Edition)",
+   "Claude Opus 4.7 (Amazon Bedrock Edition)",
+   "Claude Opus 4.8 (Amazon Bedrock Edition)",
+   "Claude Opus 5 (Amazon Bedrock Edition)",
+   "Claude Opus 5.5 (Amazon Bedrock Edition)",
+   "Claude Sonnet 4 (Amazon Bedrock Edition)",
+   "Claude Sonnet 4.5 (Amazon Bedrock Edition)",
+   "Claude Sonnet 4.6 (Amazon Bedrock Edition)",
+   "Claude Sonnet 5 (Amazon Bedrock Edition)",
+   "Claude Sonnet 5.5 (Amazon Bedrock Edition)",
+   "Cohere Command R (Amazon Bedrock Edition)",
+   "Cohere Command R+ (Amazon Bedrock Edition)",
+   "Cohere Embed 3 Model - English (Amazon Bedrock Edition)",
+   "Cohere Embed 4 Model (Amazon Bedrock Edition)",
+   "Cohere Embed Model 3 - Multilingual (Amazon Bedrock Edition)",
+   "Cohere Generate Model - Command (Amazon Bedrock Edition)",
+   "Cohere Generate Model - Command-Light (Amazon Bedrock Edition)",
+   "Cohere Rerank v3.5 (Amazon Bedrock Edition)",
+   "Jamba 1.5 Large (Amazon Bedrock Edition)",
+   "Jamba 1.5 Mini (Amazon Bedrock Edition)",
+   "Jamba-Instruct (Amazon Bedrock Edition)",
+   "Jurassic-2 Mid (Amazon Bedrock Edition)",
+   "Jurassic-2 Ultra (Amazon Bedrock Edition)",
+   "Luma Ray2 (Amazon Bedrock Edition)",
+   "Meta Llama 2 Chat 13B (Amazon Bedrock Edition)",
+   "Meta Llama 2 Chat 70B (Amazon Bedrock Edition)",
+   "OpenAI GPT-6 Astra (Amazon Bedrock Edition)",
+   "Palmyra X4 (Amazon Bedrock Edition)",
+   "Palmyra X5 (Amazon Bedrock Edition)",
+   "Stable Diffusion 3 Large v1.0 (Amazon Bedrock Edition)",
+   "Stable Diffusion 3.5 Large v1.0 (Amazon Bedrock Edition)",
+   "Stable Image Core (Amazon Bedrock Edition)",
+   "Stable Image Ultra (Amazon Bedrock Edition)",
+   "TwelveLabs Marengo Embed 2.7 (Amazon Bedrock Edition)",
+   "TwelveLabs Marengo Embed 3.0 (Amazon Bedrock Edition)",
+   "TwelveLabs Pegasus 1.2 (Amazon Bedrock Edition)",
+   "TwelveLabs Pegasus 1.5 (Amazon Bedrock Edition)"
+  ]
+ },
+ "AmazonBedrockService": {
+  "names": [
+   "Amazon Bedrock Service"
+  ]
+ },
+ "AmazonBraket": {
+  "names": [
+   "Amazon Braket"
+  ]
+ },
+ "AmazonChime": {
+  "names": [
+   "Amazon Chime"
+  ]
+ },
+ "AmazonChimeBusinessCalling": {
+  "names": [
+   "Amazon Chime Business Calling a service sold by AMCS LLC"
+  ]
+ },
+ "AmazonChimeCallMe": {
+  "names": [
+   "Amazon Chime Call Me"
+  ]
+ },
+ "AmazonChimeCallMeAMCS": {
+  "names": [
+   "Amazon Chime Call Me a service sold by AMCS LLC"
+  ]
+ },
+ "AmazonChimeDialInAMCS": {
+  "names": [
+   "Amazon Chime Dial In a service sold by AMCS LLC"
+  ]
+ },
+ "AmazonChimeDialin": {
+  "names": [
+   "Amazon Chime Dialin"
+  ]
+ },
+ "AmazonChimeFeatures": {
+  "names": [
+   "Amazon Chime Features"
+  ]
+ },
+ "AmazonChimeServices": {
+  "names": [
+   "Amazon Chime Services"
+  ]
+ },
+ "AmazonChimeVoiceConnector": {
+  "names": [
+   "Amazon Chime Voice Connector a service sold by AMCS LLC"
+  ]
+ },
+ "AmazonCloudDirectory": {
+  "names": [
+   "Amazon Cloud Directory"
+  ]
+ },
  "AmazonCloudFront": {
   "names": [
    "Amazon CloudFront"
   ]
  },
- "AmazonDynamoDB": {
+ "AmazonCloudSearch": {
   "names": [
-   "Amazon DynamoDB"
-  ]
- },
- "AmazonEKS": {
-  "names": [
-   "Amazon Elastic Container Service for Kubernetes"
-  ]
- },
- "AmazonVPC": {
-  "names": [
-   "Amazon Virtual Private Cloud"
+   "Amazon CloudSearch"
   ]
  },
  "AmazonCloudWatch": {
@@ -44,9 +689,729 @@
    "AmazonCloudWatch"
   ]
  },
- "AWSDataTransfer": {
+ "AmazonCodeWhisperer": {
   "names": [
-   "AWS Data Transfer"
+   "Amazon CodeWhisperer"
+  ]
+ },
+ "AmazonCognito": {
+  "names": [
+   "Amazon Cognito"
+  ]
+ },
+ "AmazonCognitoSync": {
+  "names": [
+   "Amazon Cognito Sync"
+  ]
+ },
+ "AmazonConnect": {
+  "names": [
+   "Amazon Connect"
+  ]
+ },
+ "AmazonConnectCases": {
+  "names": [
+   "AmazonConnectCases"
+  ]
+ },
+ "AmazonConnectTalent": {
+  "names": [
+   "Amazon Connect Talent"
+  ]
+ },
+ "AmazonConnectVoiceID": {
+  "names": [
+   "Amazon Connect Voice ID"
+  ]
+ },
+ "AmazonDAX": {
+  "names": [
+   "DynamoDB Accelerator (DAX)"
+  ]
+ },
+ "AmazonDataZone": {
+  "names": [
+   "Amazon DataZone"
+  ]
+ },
+ "AmazonDeadline": {
+  "names": [
+   "Amazon Deadline Cloud"
+  ]
+ },
+ "AmazonDetective": {
+  "names": [
+   "Amazon Detective"
+  ]
+ },
+ "AmazonDevOpsGuru": {
+  "names": [
+   "Amazon DevOps Guru"
+  ]
+ },
+ "AmazonDocDB": {
+  "names": [
+   "Amazon DocumentDB (with MongoDB compatibility)"
+  ]
+ },
+ "AmazonDynamoDB": {
+  "names": [
+   "Amazon DynamoDB"
+  ]
+ },
+ "AmazonEC2": {
+  "names": [
+   "Amazon Elastic Compute Cloud"
+  ]
+ },
+ "AmazonEC2OCPULicenseFees": {
+  "names": [
+   "Amazon EC2 Optimize CPU License Included Third Party Fees"
+  ]
+ },
+ "AmazonECR": {
+  "names": [
+   "Amazon EC2 Container Registry (ECR)"
+  ]
+ },
+ "AmazonECRPublic": {
+  "names": [
+   "Amazon Elastic Container Registry Public"
+  ]
+ },
+ "AmazonECS": {
+  "names": [
+   "Amazon Elastic Container Service"
+  ]
+ },
+ "AmazonEFS": {
+  "names": [
+   "Amazon Elastic File System"
+  ]
+ },
+ "AmazonEI": {
+  "names": [
+   "Amazon Elastic Inference"
+  ]
+ },
+ "AmazonEKS": {
+  "names": [
+   "Amazon Elastic Container Service for Kubernetes"
+  ]
+ },
+ "AmazonEKSAnywhere": {
+  "names": [
+   "Amazon EKS Anywhere"
+  ]
+ },
+ "AmazonES": {
+  "names": [
+   "Amazon OpenSearch Service"
+  ]
+ },
+ "AmazonETS": {
+  "names": [
+   "Amazon Elastic Transcoder"
+  ]
+ },
+ "AmazonEVS": {
+  "names": [
+   "Elastic VMware Service"
+  ]
+ },
+ "AmazonEVSLicensesIncluded": {
+  "names": [
+   "Amazon EVS License Included Fees"
+  ]
+ },
+ "AmazonElastiCache": {
+  "names": [
+   "Amazon ElastiCache"
+  ]
+ },
+ "AmazonFSx": {
+  "names": [
+   "Amazon FSx"
+  ]
+ },
+ "AmazonFinSpace": {
+  "names": [
+   "Amazon FinSpace"
+  ]
+ },
+ "AmazonForecast": {
+  "names": [
+   "Amazon Forecast"
+  ]
+ },
+ "AmazonFraudDetector": {
+  "names": [
+   "Amazon Fraud Detector"
+  ]
+ },
+ "AmazonGameLift": {
+  "names": [
+   "Amazon GameLift"
+  ]
+ },
+ "AmazonGameLiftStreams": {
+  "names": [
+   "Amazon GameLift Streams"
+  ]
+ },
+ "AmazonGlacier": {
+  "names": [
+   "Amazon Glacier"
+  ]
+ },
+ "AmazonGrafana": {
+  "names": [
+   "Amazon Managed Grafana"
+  ]
+ },
+ "AmazonGuardDuty": {
+  "names": [
+   "Amazon GuardDuty"
+  ]
+ },
+ "AmazonHealthLake": {
+  "names": [
+   "Amazon HealthLake"
+  ]
+ },
+ "AmazonHoneycode": {
+  "names": [
+   "Amazon Honeycode"
+  ]
+ },
+ "AmazonIVS": {
+  "names": [
+   "Amazon Interactive Video Service"
+  ]
+ },
+ "AmazonIVSChat": {
+  "names": [
+   "Amazon IVS Chat"
+  ]
+ },
+ "AmazonInspector": {
+  "names": [
+   "Amazon Inspector"
+  ]
+ },
+ "AmazonInspectorV2": {
+  "names": [
+   "Amazon Inspector"
+  ]
+ },
+ "AmazonKendra": {
+  "names": [
+   "Amazon Kendra"
+  ]
+ },
+ "AmazonKinesis": {
+  "names": [
+   "Amazon Kinesis"
+  ]
+ },
+ "AmazonKinesisAnalytics": {
+  "names": [
+   "Amazon Kinesis Analytics"
+  ]
+ },
+ "AmazonKinesisFirehose": {
+  "names": [
+   "Amazon Kinesis Firehose"
+  ]
+ },
+ "AmazonKinesisVideo": {
+  "names": [
+   "Amazon Kinesis Video Streams"
+  ]
+ },
+ "AmazonKnowledgeBase": {
+  "names": [
+   "Amazon Bedrock Managed Knowledge Base"
+  ]
+ },
+ "AmazonLex": {
+  "names": [
+   "Amazon Lex"
+  ]
+ },
+ "AmazonLightsail": {
+  "names": [
+   "Amazon Lightsail"
+  ]
+ },
+ "AmazonLocationService": {
+  "names": [
+   "Amazon Location Service"
+  ]
+ },
+ "AmazonLookoutEquipment": {
+  "names": [
+   "Amazon Lookout for Equipment"
+  ]
+ },
+ "AmazonLookoutMetrics": {
+  "names": [
+   "Amazon Lookout for Metrics"
+  ]
+ },
+ "AmazonLookoutVision": {
+  "names": [
+   "Amazon Lookout for Vision"
+  ]
+ },
+ "AmazonMCS": {
+  "names": [
+   "Amazon Keyspaces (for Apache Cassandra)"
+  ]
+ },
+ "AmazonML": {
+  "names": [
+   "Amazon Machine Learning"
+  ]
+ },
+ "AmazonMQ": {
+  "names": [
+   "Amazon MQ"
+  ]
+ },
+ "AmazonMSK": {
+  "names": [
+   "Amazon Managed Streaming for Apache Kafka"
+  ]
+ },
+ "AmazonMWAA": {
+  "names": [
+   "Amazon Managed Workflows for Apache Airflow"
+  ]
+ },
+ "AmazonMacie": {
+  "names": [
+   "Amazon Macie"
+  ]
+ },
+ "AmazonManagedBlockchain": {
+  "names": [
+   "Amazon Managed Blockchain"
+  ]
+ },
+ "AmazonMedicalImaging": {
+  "names": [
+   "AWS HealthImaging"
+  ]
+ },
+ "AmazonMemoryDB": {
+  "names": [
+   "Amazon MemoryDB"
+  ]
+ },
+ "AmazonMonitron": {
+  "names": [
+   "Amazon Monitron"
+  ]
+ },
+ "AmazonNeptune": {
+  "names": [
+   "Amazon Neptune"
+  ]
+ },
+ "AmazonOmics": {
+  "names": [
+   "Amazon Omics"
+  ]
+ },
+ "AmazonPersonalize": {
+  "names": [
+   "Amazon Personalize"
+  ]
+ },
+ "AmazonPinpoint": {
+  "names": [
+   "AWS End User Messaging"
+  ]
+ },
+ "AmazonPolly": {
+  "names": [
+   "Amazon Polly"
+  ]
+ },
+ "AmazonPrometheus": {
+  "names": [
+   "Amazon Managed Service for Prometheus"
+  ]
+ },
+ "AmazonQ": {
+  "names": [
+   "Amazon Q"
+  ]
+ },
+ "AmazonQLDB": {
+  "names": [
+   "Amazon Quantum Ledger Database"
+  ]
+ },
+ "AmazonQuickSight": {
+  "names": [
+   "Amazon QuickSight"
+  ]
+ },
+ "AmazonQuickSuite": {
+  "names": [
+   "Amazon Quick Suite"
+  ]
+ },
+ "AmazonRDS": {
+  "names": [
+   "Amazon Relational Database Service"
+  ]
+ },
+ "AmazonRDSOCPULicenseFees": {
+  "names": [
+   "Amazon RDS Optimize CPU License Included Third Party Fees"
+  ]
+ },
+ "AmazonRedshift": {
+  "names": [
+   "Amazon Redshift"
+  ]
+ },
+ "AmazonRekognition": {
+  "names": [
+   "Amazon Rekognition"
+  ]
+ },
+ "AmazonRoute53": {
+  "names": [
+   "Amazon Route 53"
+  ]
+ },
+ "AmazonS3": {
+  "names": [
+   "Amazon Simple Storage Service"
+  ]
+ },
+ "AmazonS3GlacierDeepArchive": {
+  "names": [
+   "Amazon S3 Glacier Deep Archive"
+  ]
+ },
+ "AmazonSES": {
+  "names": [
+   "Amazon Simple Email Service"
+  ]
+ },
+ "AmazonSNS": {
+  "names": [
+   "Amazon Simple Notification Service"
+  ]
+ },
+ "AmazonSWF": {
+  "names": [
+   "Amazon Simple Workflow Service"
+  ]
+ },
+ "AmazonSageMaker": {
+  "names": [
+   "Amazon SageMaker"
+  ]
+ },
+ "AmazonSecurityLake": {
+  "names": [
+   "Amazon Security Lake"
+  ]
+ },
+ "AmazonSimpleDB": {
+  "names": [
+   "Amazon SimpleDB"
+  ]
+ },
+ "AmazonStates": {
+  "names": [
+   "AWS Step Functions"
+  ]
+ },
+ "AmazonSumerian": {
+  "names": [
+   "Amazon Sumerian"
+  ]
+ },
+ "AmazonTextract": {
+  "names": [
+   "Amazon Textract"
+  ]
+ },
+ "AmazonTimestream": {
+  "names": [
+   "Amazon Timestream"
+  ]
+ },
+ "AmazonVPC": {
+  "names": [
+   "Amazon Virtual Private Cloud"
+  ]
+ },
+ "AmazonVerifiedPermissions": {
+  "names": [
+   "Amazon Verified Permissions"
+  ]
+ },
+ "AmazonWAM": {
+  "names": [
+   "Amazon WorkSpaces Application Manager"
+  ]
+ },
+ "AmazonWorkDocs": {
+  "names": [
+   "Amazon WorkDocs"
+  ]
+ },
+ "AmazonWorkLink": {
+  "names": [
+   "Amazon WorkLink"
+  ]
+ },
+ "AmazonWorkMail": {
+  "names": [
+   "AmazonWorkMail"
+  ]
+ },
+ "AmazonWorkSpaces": {
+  "names": [
+   "Amazon WorkSpaces"
+  ]
+ },
+ "AmazonWorkSpacesInstances": {
+  "names": [
+   "Amazon WorkSpaces Instances"
+  ]
+ },
+ "AmazonWorkSpacesThinClient": {
+  "names": [
+   "Amazon WorkSpaces Thin Client"
+  ]
+ },
+ "AmazonWorkSpacesWeb": {
+  "names": [
+   "Amazon WorkSpaces Web"
+  ]
+ },
+ "AppFlow": {
+  "names": [
+   "Amazon AppFlow"
+  ]
+ },
+ "AuroraDSQL": {
+  "names": [
+   "Aurora DSQL"
+  ]
+ },
+ "CloudFrontPlans": {
+  "names": [
+   "CloudFront Flat-Rate Plans"
+  ]
+ },
+ "CloudHSM": {
+  "names": [
+   "AWS CloudHSM"
+  ]
+ },
+ "CodeBuild": {
+  "names": [
+   "CodeBuild"
+  ]
+ },
+ "CodeCatalyst": {
+  "names": [
+   "CodeCatalyst"
+  ]
+ },
+ "CodeGuru": {
+  "names": [
+   "CodeGuru"
+  ]
+ },
+ "ContactCenterTelecomm": {
+  "names": [
+   "Contact Center Telecommunications (service sold by AMCS, LLC)"
+  ]
+ },
+ "ContactCenterTelecommKR": {
+  "names": [
+   "Contact Center Telecommunications Korea"
+  ]
+ },
+ "ContactCenterTelecommZA": {
+  "names": [
+   "Contact Center Telecommunications South Africa"
+  ]
+ },
+ "ContactLensAmazonConnect": {
+  "names": [
+   "Contact Lens for Amazon Connect"
+  ]
+ },
+ "CustomerProfiles": {
+  "names": [
+   "Amazon Connect Customer Profiles"
+  ]
+ },
+ "DevOpsAgent": {
+  "names": [
+   "AWSDevOpsAgent"
+  ]
+ },
+ "ElasticMapReduce": {
+  "names": [
+   "Amazon Elastic MapReduce"
+  ]
+ },
+ "IngestionService": {
+  "names": [
+   "AWS Import/Export"
+  ]
+ },
+ "IngestionServiceSnowball": {
+  "names": [
+   "AWS Import/Export Snowball"
+  ]
+ },
+ "IoTDeviceDefender": {
+  "names": [
+   "AWS IoT Device Defender"
+  ]
+ },
+ "IoTDeviceManagement": {
+  "names": [
+   "AWS IoT Device Management"
+  ]
+ },
+ "IoTTwinMaker": {
+  "names": [
+   "AWS IoT TwinMaker"
+  ]
+ },
+ "Kiro": {
+  "names": [
+   "Kiro"
+  ]
+ },
+ "NovaAct": {
+  "names": [
+   "NovaAct"
+  ]
+ },
+ "OpsWorks": {
+  "names": [
+   "AWS OpsWorks"
+  ]
+ },
+ "OracleDbAtAWS": {
+  "names": [
+   "Oracle Database@AWS"
+  ]
+ },
+ "PaymentCryptography": {
+  "names": [
+   "AWS Payment Cryptography"
+  ]
+ },
+ "SSMSAP": {
+  "names": [
+   "AWS Systems Manager for SAP"
+  ]
+ },
+ "SecAgent": {
+  "names": [
+   "AWS Security Agent"
+  ]
+ },
+ "SimSpaceWeaver": {
+  "names": [
+   "AWS SimSpace Weaver"
+  ]
+ },
+ "SnowballExtraDays": {
+  "names": [
+   "AWS Snowball Extra Days"
+  ]
+ },
+ "VMwareCloudOnAWS": {
+  "names": [
+   "VMware Cloud on AWS"
+  ]
+ },
+ "auditmanager": {
+  "names": [
+   "AWS Audit Manager"
+  ]
+ },
+ "awsagentregistry": {
+  "names": [
+   "AWS Agent Registry"
+  ]
+ },
+ "awskms": {
+  "names": [
+   "AWS Key Management Service"
+  ]
+ },
+ "awswaf": {
+  "names": [
+   "AWS WAF"
+  ]
+ },
+ "comprehend": {
+  "names": [
+   "Amazon Comprehend"
+  ]
+ },
+ "comprehendmedical": {
+  "names": [
+   "Comprehend Medical"
+  ]
+ },
+ "datapipeline": {
+  "names": [
+   "AWS Data Pipeline"
+  ]
+ },
+ "healthagent": {
+  "names": [
+   "Health Agent"
+  ]
+ },
+ "mobileanalytics": {
+  "names": [
+   "Amazon Mobile Analytics"
+  ]
+ },
+ "nimble": {
+  "names": [
+   "Amazon Nimble Studio"
+  ]
+ },
+ "repostspace": {
+  "names": [
+   "AWS re:Post Private"
+  ]
+ },
+ "researchstudio": {
+  "names": [
+   "Amazon Bio Discovery"
+  ]
+ },
+ "transcribe": {
+  "names": [
+   "Amazon Transcribe"
+  ]
+ },
+ "translate": {
+  "names": [
+   "Amazon Translate"
   ]
  }
 }

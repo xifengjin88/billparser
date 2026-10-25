@@ -13,6 +13,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import threading
 from typing import Protocol
 
 import requests
@@ -21,6 +22,41 @@ from .transforms import CANONICAL, TRANSFORMS
 
 API_URL = "https://api.anthropic.com/v1/messages"
 DEFAULT_MODEL = os.environ.get("BILLPARSE_MODEL", "claude-sonnet-5-5")
+# USD per million tokens (input, output): estimates for limits and run costs, not a bill
+PRICES = {"claude-opus-5-5": (4.0, 20.0), "claude-sonnet-5-5": (2.0, 10.0), "claude-haiku-5-5": (0.10, 0.50),
+          "claude-fable-5-1": (10.0, 50.0)}
+
+
+def cost_of(usage: dict, model: str) -> float:
+    """The cost of one call from its usage (cache writes at the input price, cache reads at a tenth of it)."""
+    pin, pout = PRICES.get(model, PRICES["claude-opus-5-5"])
+    tokens_in = (usage.get("input_tokens") or 0) + (usage.get("cache_creation_input_tokens") or 0) \
+        + 0.1 * (usage.get("cache_read_input_tokens") or 0)
+    return (tokens_in * pin + (usage.get("output_tokens") or 0) * pout) / 1e6
+
+
+# The model and effort choices the upload page lists (Backend: the spec route; Fallback: the agent), "model:effort".
+DEFAULT_CHOICES = "haiku-5-5:low,haiku-5-5:medium,sonnet-5-5:medium,sonnet-5-5:high,opus-5-5:medium,opus-5-5:high"
+EFFORTS = ("low", "medium", "high", "xhigh", "max")
+
+
+def llm_choices() -> list[str]:
+    """LLM_CHOICES from the environment (comma separated), each a valid choice."""
+    raw = os.environ.get("LLM_CHOICES") or DEFAULT_CHOICES
+    return [c.strip() for c in raw.split(",") if c.strip() and parse_choice(c.strip()) is not None]
+
+
+def parse_choice(choice: str | None) -> tuple[str, str | None] | None:
+    """'sonnet-5-5:high' -> ('claude-sonnet-5-5', 'high'); 'opus-5-5' -> ('claude-opus-5-5', None). None for the
+    defaults ('', 'claude') and for text that is not a known model with a valid effort."""
+    if not choice or choice in ("claude", "none"):
+        return None
+    model, _, effort = choice.partition(":")
+    model = model.strip() if model.strip().startswith("claude-") else f"claude-{model.strip()}"
+    effort = effort.strip() or None
+    if model not in PRICES or (effort is not None and effort not in EFFORTS):
+        return None
+    return model, effort
 
 
 class LLMUnavailable(RuntimeError):
@@ -32,19 +68,35 @@ class LLM(Protocol):
 
 
 class AnthropicLLM:
-    def __init__(self, api_key: str | None = None, model: str = DEFAULT_MODEL):
+    """The spec and extraction calls. Settings (env): BILLPARSE_MODEL, BILLPARSE_EFFORT (low | medium | high | xhigh |
+    max; empty: the model's default), BILLPARSE_MAX_TOKENS (the least output allowed: thinking counts in it),
+    BILLPARSE_LLM_TIMEOUT (seconds). What the calls cost is counted per thread (parses run in parallel)."""
+
+    def __init__(self, api_key: str | None = None, model: str | None = None, effort: str | None = None):
         self.api_key = api_key or os.environ.get("ANTHROPIC_API_KEY")
         if not self.api_key:
             raise LLMUnavailable("ANTHROPIC_API_KEY not set")
-        self.model = model
+        self.model = model or os.environ.get("BILLPARSE_MODEL") or DEFAULT_MODEL
+        self.effort = effort or (os.environ.get("BILLPARSE_EFFORT") or "").strip() or None
+        self.max_tokens = int(os.environ.get("BILLPARSE_MAX_TOKENS") or 16000)
+        self.timeout = float(os.environ.get("BILLPARSE_LLM_TIMEOUT") or 300)
+        self._local = threading.local()
+
+    def spent(self) -> float:
+        """USD spent by this thread's calls so far."""
+        return getattr(self._local, "cost", 0.0)
 
     def complete(self, system: str, user: str, max_tokens: int = 4000) -> str:
-        r = requests.post(API_URL, timeout=120, headers={
-            "x-api-key": self.api_key, "anthropic-version": "2023-06-01", "content-type": "application/json"},
-            json={"model": self.model, "max_tokens": max_tokens, "system": system,
-                  "messages": [{"role": "user", "content": user}]})
+        body = {"model": self.model, "max_tokens": max(max_tokens, self.max_tokens), "system": system,
+                "messages": [{"role": "user", "content": user}]}
+        if self.effort:
+            body["output_config"] = {"effort": self.effort}
+        r = requests.post(API_URL, timeout=self.timeout, json=body, headers={
+            "x-api-key": self.api_key, "anthropic-version": "2023-06-01", "content-type": "application/json"})
         r.raise_for_status()
-        return "".join(b.get("text", "") for b in r.json()["content"])
+        out = r.json()
+        self._local.cost = self.spent() + cost_of(out.get("usage") or {}, out.get("model") or self.model)
+        return "".join(b.get("text", "") for b in out["content"] if b.get("type") == "text")
 
 
 def default_llm() -> LLM | None:
@@ -132,9 +184,12 @@ def generate_spec(llm: LLM, preview: dict, examples: list[tuple[str, dict]],
 # ---------------------------------------------------------------- direct extraction
 EXTRACT_GUIDE = """Extract every billable line item from this cloud bill text into JSON.
 Return {"rows": [{"service_raw": str, "description": str|null, "billed_cost": number,
-"quantity": number|null, "unit": str|null, "unit_price": number|null}], "total": number|null}.
+"quantity": number|null, "unit": str|null, "unit_price": number|null,
+"charge_start": "YYYY-MM-DD"|null, "charge_end": "YYYY-MM-DD"|null}], "total": number|null}.
 billed_cost exactly as printed (negative for credits). Include tax lines as rows with service_raw "Tax".
 Do not include subtotal or total lines as rows. Put the invoice grand total in "total".
+A table with one column per period (2026-01, Feb 2026, Q1...): one row per line and period, the period in
+charge_start and charge_end (its first and last day), never in description; a "Total" column is not a period.
 Return ONLY JSON."""
 
 

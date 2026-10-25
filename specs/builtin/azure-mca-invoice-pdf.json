@@ -1,0 +1,36 @@
+{
+ "id": "azure-mca-invoice-pdf",
+ "version": 1,
+ "trust": "builtin",
+ "source": "tree",
+ "detect": {
+  "text": "Charge Start Date - Charge End Date"
+ },
+ "meta": {
+  "provider": "azure",
+  "kind": "cost_lines",
+  "cost_basis": "billed",
+  "format": "Microsoft Customer Agreement invoice PDF (Details By Section: purchases and usage charges)",
+  "notes": "Each purchase is a product heading, a column header printed on several rows, and one row per charge period (Unit Price, Qty, Charges/Credits, Sales Tax, Tax Amount, Total including Tax). Usage charges are printed by service family (Compute, Storage...), each with its period below. The header rows are not text of the lines; the Total is split into the charge and its tax. Proved by Charges, Credits, Subtotal, Sales Tax and Total (including Tax). The note rows under a charge (license change, subscription quantity, invoice number) and the period under a usage family belong to the charge above (tree.trailer); a charge with no name of its own is the next charge of the product above."
+ },
+ "tree": {
+  "ignore": "^(Total|Unit .*|Charges/ .*|Purchases .*|Charge Start Date - Charge End Date.*|Charges Tax Amount Total.*|Section Name .*)$",
+  "trailer": "^(License change|Total subscription qty|Invoice number:|Pro-rated)|\\d{2}/\\d{2}/\\d{4}\\s*-\\s*\\d{2}/\\d{2}/\\d{4}"
+ },
+ "context": {
+  "charge_types": [
+   [
+    "Tax",
+    "\\b(sales tax|tax amount|VAT|GST|HST)\\b"
+   ],
+   [
+    "Purchase",
+    "\\b(savings plan|reserved|reservation)\\b"
+   ],
+   [
+    "Support",
+    "\\bsupport\\b"
+   ]
+  ]
+ }
+}

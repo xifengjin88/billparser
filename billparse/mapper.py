@@ -21,7 +21,11 @@ from .transforms import parse_number
 
 HEADER_RULES: dict[str, list[tuple[str, float]]] = {
     "billed_cost": [(r"\b(extended|line total|net amount|billed cost|total cost|cost|amount|amt|charges?|subtotal|total)\b", 2.5),
+                    (r"\b(monthly|mtd|month to date|current month)\b", 2.0),
                     (r"\b(value|spend|price total)\b", 1.5)],
+    "instance_type": [(r"\b(instance type|vm size|machine type|instance size|size|sku|flavor|profile)\b", 2.5)],
+    "operating_system": [(r"\b(operating system|os|platform)\b", 3.0)],
+    "database_engine": [(r"\b(database engine|db engine|engine)\b", 3.0)],
     "unit_price": [(r"\b(unit price|unit cost|unit rate|effective price|price per|rate)\b", 3.0), (r"^price$", 2.5)],
     "quantity": [(r"\b(qty|quantity|usage quantity|units used|hours|consumed)\b", 3.0), (r"\busage\b", 1.5)],
     "unit": [(r"\b(unit of measure|uom|usage unit|unit)\b", 2.5)],
@@ -38,6 +42,10 @@ HEADER_RULES: dict[str, list[tuple[str, float]]] = {
     "charge_type": [(r"\b(charge type|line item type|cost type|type)\b", 2.5)],
     "tax": [(r"\b(tax|vat|gst)\b", 3.0)],
     "invoice_id": [(r"\b(invoice no|invoice number|invoice id|invoice)\b", 2.5)],
+    "pricing_model": [(r"\b(pricing model|purchase option|pricing plan|commitment type|purchase type)\b", 3.5)],
+    "usage_type": [(r"\b(usage type)\b", 3.5)],
+    "deployment_option": [(r"\b(deployment option|deployment type|availability)\b", 3.0)],
+    "commitment_id": [(r"\b(reservation id|savings plan id|commitment id|benefit id|reservation arn|savings plan arn)\b", 3.5)],
 }
 NEGATIVE = {
     "billed_cost": r"\b(unit|rate|list|tax|qty|quantity|per|code|id|date|currency|type)\b",
@@ -47,10 +55,14 @@ NEGATIVE = {
     "unit": r"\b(price|cost|rate)\b",
 }
 NUMERIC_FIELDS = {"billed_cost", "unit_price", "quantity", "tax"}
-TEXT_FIELDS = {"service_raw", "description", "unit", "region", "account_name", "charge_type", "currency"}
+TEXT_FIELDS = {"service_raw", "description", "unit", "region", "account_name", "charge_type", "currency",
+               "instance_type", "operating_system", "database_engine", "pricing_model", "usage_type",
+               "deployment_option", "commitment_id"}
+INVENTORY_FIELDS = {"instance_type", "operating_system", "database_engine"}
 MONTH_RX = re.compile(r"^(jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\.?(\s*['-]?\s*\d{2,4})?$|"
                       r"^\d{4}[-/]\d{1,2}$|^\d{1,2}[-/]\d{4}$", re.I)
 CODE_RX = re.compile(r"^[A-Z0-9][A-Z0-9_\-:/]{5,}$")
+CAMEL = re.compile(r"(?<=[a-z0-9])(?=[A-Z])|(?<=[A-Z])(?=[A-Z][a-z])")
 TOTALISH = re.compile(r"\b(sub\s*total|subtotal|total|amount due|balance due)\b", re.I)
 
 
@@ -62,6 +74,7 @@ class Profile:
     code: float
     distinct: float
     avg_len: float
+    letters: float = 0.0                              # share of values with a letter ("1 Hour" is a unit)
 
 
 def profile(values: list) -> Profile:
@@ -74,11 +87,12 @@ def profile(values: list) -> Profile:
     dates = pd.to_datetime(pd.Series(vals), errors="coerce", format="mixed")
     date = float(dates.notna().mean()) if num < 0.9 or any("-" in v or "/" in v for v in vals) else 0.0
     code = sum(1 for v in vals if CODE_RX.match(v) and not is_numberish(v)) / n
-    return Profile(num, cur, date, code, len(set(vals)) / n, sum(map(len, vals)) / n)
+    letters = sum(1 for v in vals if re.search(r"[A-Za-z]", v)) / n
+    return Profile(num, cur, date, code, len(set(vals)) / n, sum(map(len, vals)) / n, letters)
 
 
 def header_score(field: str, header: str) -> float:
-    h = norm_h(header)
+    h = norm_h(CAMEL.sub(" ", str(header)))           # "ChargeType" reads as "charge type"
     best = 0.0
     for rx, w in HEADER_RULES[field]:
         if re.search(rx, h):
@@ -98,6 +112,8 @@ def value_score(field: str, p: Profile) -> float:
         return 1.5 if p.date > 0.7 else -5.0
     if field == "product_code":
         return 1.0 if p.code > 0.6 else -2.0
+    if field == "unit":                               # "1 Hour", "1 GB/Month", "10K": numbers with a letter
+        return 0.5 if p.letters > 0.8 else -5.0     # (pandas reads "1 Hour" as a date: no date test)
     if field in TEXT_FIELDS:
         if p.numeric > 0.5 or p.date > 0.7:
             return -5.0
@@ -140,15 +156,35 @@ def map_columns(columns: dict[str, list]) -> tuple[dict[str, str], float, dict]:
 
 
 # ---------------------------------------------------------------- spec builders
+TREE_SPEC = {"source": "tree", "meta": {"kind": "cost_lines", "cost_basis": "billed", "layout": "tree"}, "tree": {}}
+
+
+def propose_all(doc: Document) -> list[tuple[dict, float]]:
+    """Every rule-based spec worth trying, best first. Documents of pages and text lines (PDF, text) first try the
+    tree of sums (tree.py), which reads totals, subtotals and lines from their amounts."""
+    out: list[tuple[dict, float]] = []
+    if any(r.kind == "page" and r.rows for r in doc.regions):
+        out.append((dict(TREE_SPEC, tree={}), 0.7))
+    spec, conf = propose(doc)
+    if spec:
+        out.append((spec, conf))
+    return out
+
+
 def propose(doc: Document) -> tuple[dict | None, float]:
     """Best rule-based spec for a document, with confidence 0..1."""
     best: tuple[dict | None, float] = (None, 0.0)
+    best_size = (0, 0)
     for region in doc.regions:
         if region.scanned:
             continue
         cand = _propose_frame(region) if region.is_frame else _propose_grid(region)
-        if cand and cand[1] > best[1]:
-            best = cand
+        if not cand:
+            continue
+        # near-equal confidence: the table that fills more fields, then has more rows (the detail, not a pivot of it)
+        size = (len(cand[0].get("columns") or {}), len(region.df) if region.is_frame else len(region.rows))
+        if cand[1] > best[1] + 0.05 or (cand[1] >= best[1] - 0.05 and size > best_size):
+            best, best_size = cand, size
     if best[1] < 0.6 and doc.file_type == "pdf":
         lines = propose_lines(doc)
         if lines and lines[1] > best[1]:
@@ -168,7 +204,7 @@ def _propose_frame(region: Region) -> tuple[dict, float] | None:
         return pivot
     chosen, conf, _ = map_columns(cols)
     if "billed_cost" not in chosen:
-        return None
+        return _inventory(chosen, "frame", list(cols))
     return _spec_from_mapping(chosen, source="frame", headers=list(cols)), conf
 
 
@@ -188,13 +224,27 @@ def _propose_grid(region: Region) -> tuple[dict, float] | None:
         return pivot
     chosen, conf, _ = map_columns(samples)
     if "billed_cost" not in chosen:
-        return None
+        return _inventory(chosen, "grid", [c.name for c in cols])
     has_bold_groups = any(r.bold and not any(is_numberish(c.text) for c in r.cells)
                           for r in region.rows[hdr + 1: hdr + 80])
     spec = _spec_from_mapping(chosen, source="grid", headers=[c.name for c in cols], groups=True)
     if has_bold_groups:
         spec["notes"] = "Group headers detected; carried into service_raw when no service column exists."
     return spec, conf
+
+
+def _inventory(chosen: dict[str, str], source: str, headers: list[str]) -> tuple[dict, float] | None:
+    """A table of resources with no cost (VM sizes, OS, regions): read as an inventory, not dropped."""
+    if not (INVENTORY_FIELDS & set(chosen)):
+        return None
+    key = next(f for f in ("instance_type", "database_engine", "operating_system") if f in chosen)
+    spec = {"source": source, "detect": {"required": [chosen[key]]},
+            "meta": {"kind": "inventory", "cost_basis": "none"},
+            "columns": {f: {"from": [h]} for f, h in chosen.items()},
+            "filters": [{"drop_if_blank": key}]}
+    if source == "grid":
+        spec["table"] = {"continuation": "drop", "multi_page": True}
+    return spec, 0.6
 
 
 def _spec_from_mapping(chosen: dict[str, str], source: str, headers: list[str], groups: bool = False) -> dict:

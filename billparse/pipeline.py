@@ -7,10 +7,15 @@ Routing tries the cheapest lane first and stops at the first acceptable result:
   4. LLM spec       (retrieval of similar verified specs as examples, up to N repair rounds)
   5. LLM extract    (read rows directly, then derive a deterministic spec from them)
 Every route's result is validated the same way.
+
+When no route proves the file (its cost lines do not reconcile) and the agent is on (AGENT_ENABLED=1 and a key),
+the parse goes on with the agent step (agent.py): the agent writes a spec for the file's layout, the code checks
+it, and a proved spec is saved and the file is read again with it. Callers see one parse and its final result.
 """
 
 from __future__ import annotations
 
+import json
 import time
 import traceback
 from dataclasses import dataclass, field
@@ -18,24 +23,29 @@ from pathlib import Path
 
 import pandas as pd
 
+from . import agent as agent_mod
+from . import contract
 from . import llm as llm_mod
 from .analyze import analyze, resolve_services
+from .attributes import extract as extract_attributes
+from .attributes import normalize_regions
 from .docmodel import Document, load_bytes
 from .fingerprint import fingerprint, similarity, table_headers
 from .induce import derive_spec
-from .mapper import propose
-from .rowclass import set_model
+from .mapper import propose, propose_all
+from .settings import catalog_dir, data_dir
 from .spec import Extraction, SpecError, check_spec, detect_score, run
 from .store import Store
+from .transforms import period_of
 from .validate import clean_rows, validate
 
-ROOT = Path(__file__).resolve().parents[1]
+ATTRIBUTE_ROWS = 100_000            # larger files are exports with their own attribute columns
 
 
 @dataclass
 class Settings:
-    store_dir: Path = ROOT / "store"
-    catalog_dir: Path = ROOT / "data"
+    store_dir: Path = field(default_factory=data_dir)          # PARSER_DATA_DIR
+    catalog_dir: Path = field(default_factory=catalog_dir)     # CATALOG_DIR
     use_llm: bool = True
     max_repairs: int = 3
     accept_confidence: float = 0.7
@@ -43,6 +53,7 @@ class Settings:
     reuse_similarity: float = 0.8
     retain_docs: bool = True
     examples_k: int = 3
+    use_agent: bool = field(default_factory=agent_mod.enabled)  # AGENT_ENABLED=1 and ANTHROPIC_API_KEY
 
 
 @dataclass
@@ -65,18 +76,68 @@ class Attempt:
 
 
 class Pipeline:
-    def __init__(self, settings: Settings | None = None, llm: llm_mod.LLM | None = None):
+    def __init__(self, settings: Settings | None = None, llm: llm_mod.LLM | None = None, store: Store | None = None,
+                 agent_llm: agent_mod.AgentLLM | None = None):
         self.s = settings or Settings()
-        self.store = Store(self.s.store_dir, retain_docs=self.s.retain_docs)
+        self.agent_llm = agent_llm                       # tests give a fake; None: the Claude API
+        self.agent_limits: agent_mod.Limits | None = None   # this pipeline's agent model and effort (None: from env)
+        self.choice_note: str | None = None              # the model choices of this run, recorded with it
+        self.store = store or Store(self.s.store_dir, retain_docs=self.s.retain_docs)
         self.llm = llm if llm is not None else (llm_mod.default_llm() if self.s.use_llm else None)
-        _load_row_model(self.s.store_dir)
 
     # ------------------------------------------------------------ public
     def parse_file(self, path: str | Path, force: bool = False) -> dict:
         p = Path(path)
         return self.parse_bytes(p.read_bytes(), p.name, force=force)
 
-    def parse_bytes(self, data: bytes, name: str, force: bool = False) -> dict:
+    def parse_bytes(self, data: bytes, name: str, force: bool = False, on_step=None, agent: bool = True,
+                    user: str | None = None, run: bool = True) -> dict:
+        """Parse one file and return its result. on_step(name) is told when the parse starts a step that can be
+        long ("learning": the agent writes a spec for the layout). agent=False: never run the agent step.
+        run=False: no run is recorded (the agent's own parse of the file it proved)."""
+        t0 = time.perf_counter()
+        spent = getattr(self.llm, "spent", None)         # what this thread's LLM calls cost, before and after
+        before = spent() if spent else 0.0
+        result = self._parse(data, name, force)
+        if spent and spent() > before:
+            result["claude_cost_usd"] = round(spent() - before, 6)
+        job = None
+        if agent and self.s.use_agent and not result.get("cached") and agent_mod.needs_agent(result):
+            job_id = agent_mod.enqueue_for(self, result)    # one job per layout (a retried job is queued again)
+            if job_id is not None:
+                if on_step is not None:
+                    on_step("learning")
+                job = agent_mod.run_job(self, job_id, llm=self.agent_llm, limits=self.agent_limits)
+                if job["status"] == "proved":           # else the first pass stands
+                    result = self.store.get_result(result["sha256"]) or result
+        if run and not result.get("cached"):
+            self._record_run(result, job, int((time.perf_counter() - t0) * 1000), user)
+        return result
+
+    def _save_contract(self, doc: Document, summary: dict, rows: pd.DataFrame) -> dict:
+        """The result in invoice-parser's contract (contract.py), kept beside the lines; returns what the lists show."""
+        out, meta, bundle = contract.build(summary, rows, doc)
+        sha = doc.sha256
+        self.store.save_part(sha, "doc", out.model_dump_json(exclude_none=True))
+        self.store.save_part(sha, "meta", json.dumps(meta, default=str))
+        self.store.save_part(sha, "bundle", json.dumps(bundle, default=str))
+        return {"lane": meta["lane"], "completeness": out.completeness,
+                "confidence": out.confidence.level if out.confidence else None, "charges": len(out.charges),
+                "gaps": len(out.gaps), "counted_total": str(out.counted_total()),
+                "money_at_risk": float(contract.money_at_risk(out))}
+
+    def _record_run(self, result: dict, job: dict | None, total_ms: int, user: str | None) -> None:
+        c = result.get("contract") or {}
+        self.store.add_run({
+            "sha256": result["sha256"], "name": result.get("file"), "elapsed_ms": int((result.get("seconds") or 0) * 1000),
+            "total_ms": total_ms, "model_calls": int(result.get("llm_calls") or 0), "lane": c.get("lane"),
+            "status": contract.status_of(result.get("status")), "completeness": c.get("completeness"),
+            "version": f"billparse · {self.choice_note}" if self.choice_note else "billparse",
+            "jev_cost_usd": None, "claude_cost_usd": result.get("claude_cost_usd"),
+            "learn_cost_usd": job["cost_usd"] if job else None, "learn_job_id": job["id"] if job else None,
+            "parsed_by": user})
+
+    def _parse(self, data: bytes, name: str, force: bool) -> dict:
         t0 = time.perf_counter()
         doc = load_bytes(data, name)
         if not force and (cached := self.store.get_result(doc.sha256)):
@@ -112,20 +173,27 @@ class Pipeline:
         # final pass: resolve services, re-validate with resolution share, analyze
         rows = best.ext.rows
         share = resolve_services(rows, self.s.catalog_dir)
+        if best.verdict.get("status") == "auxiliary":           # an inventory, a price sheet: not cost lines
+            return self._finish(doc, best, attempts, dict(best.verdict, completeness="consistent"), fp, share, t0)
         alt = self._alt_extraction(doc, best)
         verdict = validate(best.ext, alt=alt, resolved_share=share)
+        if best.route == "llm_extract_direct" and verdict.get("completeness") == "consistent":
+            verdict["completeness"] = "unchecked"           # rows the LLM wrote, no printed total tested them
         return self._finish(doc, best, attempts, verdict, fp, share, t0)
 
     # ------------------------------------------------------------ routes (generators of attempts)
     def _builtin(self, doc, fp, headers, attempts):
-        scored = sorted(((detect_score(s, headers), s) for s in self.store.builtin_specs()), key=lambda x: -x[0])
+        text = doc_text(doc)
+        scored = sorted(((detect_score(s, headers, text), s) for s in self.store.builtin_specs(include_disabled=False)),
+                        key=lambda x: -x[0])
         if scored and scored[0][0] > 0:
             yield self._try("builtin", scored[0][1], doc)
 
     def _learned(self, doc, fp, headers, attempts):
         cands: dict[str, float] = {}
+        text = doc_text(doc)
         for spec in self.store.learned_specs():
-            d = detect_score(spec, headers)
+            d = detect_score(spec, headers, text)
             if d > 0:
                 cands[spec["id"]] = max(cands.get(spec["id"], 0), 1.0 + d / 10)
         for sid, sfp in self.store.fingerprints():
@@ -137,13 +205,34 @@ class Pipeline:
                     cands[sid] = max(cands.get(sid, 0), sim)
         for sid, _ in sorted(cands.items(), key=lambda x: -x[1])[:3]:
             spec = self.store.get_spec(sid)
-            if spec and spec.get("trust") != "builtin":
+            if spec and spec.get("trust") not in ("builtin", "disabled"):   # a disabled spec is kept, never used
                 yield self._try("learned", spec, doc)
 
+    @staticmethod
+    def _printed_totals(attempts) -> list[dict]:
+        """The document's printed total that the tree of sums found: it checks every other reading of the same file
+        (a mapper proposal, an LLM spec, the LLM's own rows), so none of them passes with no total to test."""
+        return [t for a in attempts if a.ext is not None for t in a.ext.stated_totals if t.get("kind") == "tree_total"]
+
+    @staticmethod
+    def _all_printed_totals(attempts) -> list[dict]:
+        """Every total that a route read from the file (a total row, a header field, the tree's total), each once:
+        rows the LLM wrote itself are tested against them, so the LLM cannot pass a total every spec failed."""
+        out, seen = [], set()
+        for a in attempts:
+            for t in (a.ext.stated_totals if a.ext is not None else []):
+                if t.get("kind") in ("subtotal", "document_total", "llm_claim"):
+                    continue
+                key = (str(t.get("label")), str(t.get("amount")))
+                if key not in seen:
+                    seen.add(key)
+                    out.append(dict(t, kind="document_total"))
+        return out
+
     def _mapper(self, doc, fp, headers, attempts):
-        spec, conf = propose(doc)
-        if spec:
-            att = self._try("mapper", spec, doc)
+        for spec, conf in propose_all(doc):
+            found = self._printed_totals(attempts)
+            att = self._try("mapper", spec, doc, extra_totals=found)
             att.verdict["mapper_confidence"] = conf
             yield att
 
@@ -162,7 +251,7 @@ class Pipeline:
                 feedback = [f"Spec rejected: {e}"]
                 yield Attempt("llm_spec", spec, error=str(e), llm_calls=1)
                 continue
-            att = self._try("llm_spec", spec, doc)
+            att = self._try("llm_spec", spec, doc, extra_totals=self._printed_totals(attempts))
             att.llm_calls = 1
             yield att
             if self._accept(att):
@@ -181,16 +270,18 @@ class Pipeline:
         spec, agree = derive_spec(doc, rows)
         if spec and agree >= 0.9:
             spec.setdefault("notes", f"Derived from LLM extraction (agreement {agree:.0%})")
-            att = self._try("llm_extract_derived", spec, doc)
+            att = self._try("llm_extract_derived", spec, doc, extra_totals=self._printed_totals(attempts))
             att.llm_calls = 1
             yield att
             return
         # no deterministic spec reproduces the rows: use the LLM rows directly (never reused)
-        df = pd.DataFrame(rows)
+        df = _periods_out_of_descriptions(pd.DataFrame(rows))
         if not df.empty and "billed_cost" in df:
             df["billed_cost"] = pd.to_numeric(df["billed_cost"], errors="coerce")
-            ext = Extraction(rows=df, stated_totals=([{"label": "llm total", "amount": out["total"], "kind": "field"}]
-                                                     if out.get("total") is not None else []))
+            # the LLM's own sum is not printed: it proves nothing (kept as a claim); the tree's printed total checks it
+            ext = Extraction(rows=df, stated_totals=self._all_printed_totals(attempts)
+                             + ([{"label": "llm total", "amount": out["total"], "kind": "llm_claim"}]
+                                if out.get("total") is not None else []))
             clean_rows(ext)
             att = Attempt("llm_extract_direct", None, ext=ext, llm_calls=1)
             att.verdict = validate(ext)
@@ -198,11 +289,16 @@ class Pipeline:
             yield att
 
     # ------------------------------------------------------------ helpers
-    def _try(self, route: str, spec: dict, doc: Document) -> Attempt:
+    def _try(self, route: str, spec: dict, doc: Document, extra_totals: list[dict] | None = None) -> Attempt:
         att = Attempt(route, spec)
         try:
-            att.ext = run(spec, doc)
+            att.ext = run(spec, doc, self.s.catalog_dir)
+            if extra_totals and spec.get("source") != "tree":
+                att.ext.stated_totals += [dict(t, kind="document_total") for t in extra_totals]
             clean_rows(att.ext)
+            normalize_regions(att.ext.rows)
+            if len(att.ext.rows) <= ATTRIBUTE_ROWS:
+                extract_attributes(att.ext.rows)
             kind = (spec.get("meta") or {}).get("kind", "cost_lines")
             if kind != "cost_lines":
                 att.verdict = {"status": "auxiliary", "confidence": 1.0 if not att.ext.rows.empty else 0.0,
@@ -286,10 +382,13 @@ class Pipeline:
         summary = {
             "file": doc.name, "sha256": doc.sha256, "file_type": doc.file_type, "kind": kind,
             "status": verdict["status"], "confidence": verdict["confidence"],
+            "completeness": verdict.get("completeness"), "evidence": (best.ext.evidence if best and best.ext else {}),
             "spec": spec_info, "rows": len(rows),
             "service_resolution": round(share, 3) if share is not None else None,
-            "stated_totals": [{k: v for k, v in t.items() if k != "src"} for t in stated][:10],
+            "stated_totals": [{k: (v if k != "src" or v is None else str(v)) for k, v in t.items()} for t in stated][:10],
             "header_fields": {k: v["value"] for k, v in (best.ext.fields.items() if best and best.ext else [])},
+            "header_field_src": {k: str(v["src"]) for k, v in (best.ext.fields.items() if best and best.ext else [])
+                                 if v.get("src") is not None},
             "checks": verdict.get("checks", []),
             "warnings": _warnings(best),
             "analysis": analysis,
@@ -297,19 +396,49 @@ class Pipeline:
             "llm_calls": sum(a.llm_calls for a in attempts),
             "seconds": round(time.perf_counter() - t0, 3),
         }
+        summary["contract"] = self._save_contract(doc, summary, rows)
         self.store.save_result(doc.sha256, summary, rows)
         self.store.append("records", {"ts": time.time(), "sha": doc.sha256, "file": doc.name, "fingerprint": fp,
                                       "route": spec_info and spec_info["route"], "spec": spec_info,
                                       "status": summary["status"], "confidence": summary["confidence"],
                                       "attempts": summary["attempts"], "llm_calls": summary["llm_calls"]})
-        if best and best.ext and best.ext.labels and summary["status"] == "reconciled":
-            for lab in best.ext.labels:                         # silver labels for the row classifier
-                self.store.append("labels", {"sha": doc.sha256, **lab})
         if summary["status"] in ("needs_review", "unsupported"):
             self.store.append("review", {"ts": time.time(), "sha": doc.sha256, "file": doc.name,
                                          "status": summary["status"], "open": True,
                                          "feedback": verdict.get("feedback", [])[:8]})
         return summary
+
+
+def _periods_out_of_descriptions(df: pd.DataFrame) -> pd.DataFrame:
+    """Rows the LLM wrote from a table with a column per month sometimes carry the month as their description:
+    the month goes to charge_start / charge_end, and the description is left empty."""
+    if df.empty or "description" not in df:
+        return df
+    found = df["description"].map(period_of)
+    hit = found.notna() & (df["charge_start"].isna() if "charge_start" in df else True)
+    if not hit.any():
+        return df
+    df = df.copy()
+    for col, i in (("charge_start", 0), ("charge_end", 1)):
+        if col not in df:
+            df[col] = None
+        df.loc[hit, col] = found[hit].map(lambda p, i=i: p[i])
+    df.loc[hit, "description"] = None
+    return df
+
+
+def doc_text(doc: Document, max_chars: int = 20000) -> str:
+    """The text of the first pages and sheets, one row per line: what a spec's detect.text is matched against."""
+    out, n = [], 0
+    for r in doc.regions:
+        if r.is_frame:
+            continue
+        for row in r.rows:
+            out.append(row.text)
+            n += len(row.text) + 1
+            if n >= max_chars:
+                return "\n".join(out)
+    return "\n".join(out)
 
 
 # ---------------------------------------------------------------- previews
@@ -340,11 +469,3 @@ def _public(spec: dict) -> dict:
     return {k: v for k, v in spec.items() if k not in ("stats", "fingerprint", "created_at", "version")}
 
 
-def _load_row_model(store_dir: Path) -> None:
-    p = Path(store_dir) / "models" / "rowclass.joblib"
-    if p.exists():
-        try:
-            from .learn import load_row_model
-            set_model(load_row_model(p))
-        except Exception:                                       # noqa: BLE001  fall back to rules
-            set_model(None)
