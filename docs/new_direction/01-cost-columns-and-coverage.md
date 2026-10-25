@@ -200,3 +200,47 @@ New tests, in a new file `tests/test_cost_types.py`, using the `make_pipe` fixtu
 - Do not look up or compute any price. Prices are tasks 04–05.
 - Do not change what `billed_cost` holds for any format; totals reconciliation depends on it.
 - Do not drop negation lines.
+
+## Decisions agreed with the user (2026-10-25)
+
+These decisions change or add to the steps above. Where they differ, the decisions win.
+
+1. **Rule E1 implementation.** A transform gets one column, and rule E1 needs four. So add one named function to
+   `expr.FUNCS`: `cur_effective(line_type_raw, billed_cost, ri_effective, sp_effective)`, called from a `derive` in
+   both CUR specs. No change to the expression grammar. Specs (and the LLM) can call it but cannot define functions.
+2. **Coverage values by line kind.**
+   - Usage lines: `on_demand`, `reserved`, `savings_plan`, `committed_use`, `spot`, or `unknown` (`unknown` means
+     the file does not show how the usage was priced).
+   - Commitment fee lines (`RIFee`, `SavingsPlanRecurringFee`, `SavingsPlanUpfrontFee`) and negation lines:
+     `reserved` or `savings_plan`.
+   - Tax, credit, refund, fee, discount and adjustment lines: **None** (the question does not apply). Never
+     `unknown`.
+3. **Spot in CUR, and coverage from text.**
+   - Map the CUR usage type (2.0 `line_item_usage_type`, legacy `lineItem/UsageType`) to `usage_type` as well. A
+     `Usage` line whose usage type contains `SpotUsage` gets `coverage = spot`.
+   - Files without a coverage column (invoices, custom files): a text fallback on usage lines only. "Savings Plan"
+     → `savings_plan`; "Reserved", "RI", "reservation" → `reserved`; "Spot" → `spot`; "CUD", "committed use" →
+     `committed_use`; "On Demand" → `on_demand`; no evidence → `unknown`. Origin `inferred`, source `text`. A column
+     always wins over text.
+4. **Origin of derived values.** The CUR effective cost selects a printed column per row, so it is `printed` and
+   cited to that column. The 0 on negation and fee lines, and every arithmetic result (Azure `PayGPrice × Quantity`,
+   Azure `UnitPrice × Quantity`, GCP `cost + credits`), are `inferred` with source `derived`.
+5. **Azure effective cost per row (replaces the whole-file rule E2).** `PricingModel` is printed on every row.
+   - `OnDemand` and `Spot` usage rows: `effective_cost` = cost in every export (printed).
+   - `Reservation` and `SavingsPlan` usage rows, `Purchase` rows and `UnusedReservation` / `UnusedSavingsPlan` rows:
+     the cost in an amortized export; empty in an actual export or when the export type cannot be told.
+   - No `PricingModel` column: `effective_cost` empty for the whole file.
+   - `Document.cost_basis` is still `actual`, `amortized` or `unknown` for the whole file.
+   - MACC, Azure Prepayment and Azure Hybrid Benefit are payment, contract or license programs, not commitments that
+     cover usage: such rows stay `on_demand`.
+   - Before coding the Azure part, check Microsoft's current documentation for the `PricingModel` values, the actual
+     vs amortized behavior of each row type, and how MACC and Prepayment appear in the export. If it differs from the
+     above, stop and tell the user.
+6. **GCP coverage.** A usage row whose `credits` contain a committed use discount type (for example
+   `COMMITTED_USAGE_DISCOUNT`, `COMMITTED_USAGE_DISCOUNT_DOLLAR_BASE`) gets `committed_use` (printed). Other GCP usage
+   rows stay `unknown`. Verify the credit type names in Google's documentation.
+7. **`Document.cost_types`** lists the cost types that come from the file: printed, or arithmetic on printed columns
+   of the same row (source `derived`). Values from the price catalog (task 05) never count. Each value's own `origin`
+   and `source` show the exact case.
+8. **Report.** List decisions 1–7 as decisions the task did not specify (rule 11), and every provider column and
+   value used, with whether its name was verified (rule 10).
