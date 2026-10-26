@@ -586,18 +586,24 @@ def build(recs: list[Record], opt: TreeOptions) -> list[Section]:
 def _complete(r: Record) -> bool:
     if not r.children:
         return False
-    if abs(r.value) < ZERO:                             # a $0.00 heading over $0.00 rows
-        return all(abs(k.value) < ZERO for k in r.children)
+    if abs(r.value) < ZERO:                             # a $0.00 heading over $0.00 rows, or over rows that cancel
+        return all(abs(k.value) < ZERO for k in r.children) or abs(r.acc) < ZERO
     return close(r.acc, r.value, len(r.children))
 
 
 def _exact_heads(recs: list[Record]) -> set[int]:
     """Rows that the rows right after them add up to, to the cent: the rows at the indent of the next row (deeper
     rows are their parts), until the sum reaches the row. Such a row is a heading, even when its group above is
-    already complete within rounding."""
+    already complete within rounding. A $0.00 row is a heading when the rows indented under it cancel out to $0.00
+    (a service whose charges a discount or credits cancel: "Amazon Bedrock USD 0.00" over "Charges 0.01" and
+    "Discount -0.01")."""
     out: set[int] = set()
     for j, r in enumerate(recs):
-        if r.amount is None or abs(r.value) < ZERO or j + 1 >= len(recs) or recs[j + 1].amount is None:
+        if r.amount is None or j + 1 >= len(recs) or recs[j + 1].amount is None:
+            continue
+        if abs(r.value) < ZERO:
+            if _cancel_under(r, recs[j + 1:j + 400]):
+                out.add(id(r))
             continue
         x1, s = recs[j + 1].x, 0.0
         for k in recs[j + 1:j + 400]:
@@ -616,14 +622,33 @@ def _exact_heads(recs: list[Record]) -> set[int]:
     return out
 
 
+def _cancel_under(r: Record, after: list[Record]) -> bool:
+    """The rows indented under r, at the indent of the first one, add up to $0.00 and are not all $0.00."""
+    first = next((k for k in after if k.amount is not None), None)
+    if first is None or first.x <= r.x + 2.0 or first.region != r.region:
+        return False
+    total, nonzero = 0.0, False
+    for k in after:
+        if k.amount is None:
+            continue
+        if k.x <= r.x + 2.0 or k.region != r.region:
+            break
+        if abs(k.x - first.x) <= 2.0:
+            total += k.value
+            nonzero = nonzero or abs(k.value) >= ZERO
+    return nonzero and abs(total) < ZERO
+
+
 def _fits(r: Record, top: Record, opt: TreeOptions, heads: set[int] = frozenset()) -> bool:  # type: ignore[assignment]
     """r may be a child of top: top has an amount, r is indented the same or deeper, and r's amount fits in what
     top still lacks."""
     if r.x < top.x - 2.0 or len(top.amounts) >= opt.table_row_amounts:
         return False                                    # a table row (several amounts) never heads a group
-    if abs(top.value) < ZERO:                           # a $0.00 heading: only $0.00 rows indented under it (the
-        return abs(r.value) < ZERO and (r.x > top.x + 2.0 or     # sums cannot tell more)
-                                        bool(top.children) and r.x >= top.children[-1].x - 2.0)
+    if abs(top.value) < ZERO:
+        if id(top) in heads:                            # a $0.00 heading whose rows cancel out: every row under it
+            return r.x > top.x + 2.0
+        return abs(r.value) < ZERO and (r.x > top.x + 2.0 or     # else only $0.00 rows indented under it (the
+                                        bool(top.children) and r.x >= top.children[-1].x - 2.0)   # sums cannot tell more)
     if top.children and _complete(top):
         if abs(r.value) < ZERO:
             return r.x >= top.children[-1].x - 2.0      # a zero row after a complete group
