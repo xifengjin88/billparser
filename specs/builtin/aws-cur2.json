@@ -17,7 +17,8 @@
   "provider": "aws",
   "kind": "cost_lines",
   "cost_basis": "billed",
-  "format": "AWS CUR 2.0 (also legacy CUR queried via Athena)"
+  "format": "AWS CUR 2.0 (also legacy CUR queried via Athena)",
+  "exact_columns": true
  },
  "columns": {
   "product_code": {
@@ -30,13 +31,15 @@
    "from": [
     "product_product_name",
     "line_item_product_code"
-   ]
+   ],
+   "coalesce": true
   },
   "description": {
    "from": [
     "line_item_line_item_description",
     "line_item_usage_type"
-   ]
+   ],
+   "coalesce": true
   },
   "billed_cost": {
    "from": [
@@ -76,8 +79,10 @@
   "region": {
    "from": [
     "product_region_code",
-    "product_region"
-   ]
+    "product_region",
+    "product_location"
+   ],
+   "coalesce": true
   },
   "account_id": {
    "from": [
@@ -125,9 +130,54 @@
     "strip",
     "coverage"
    ]
+  },
+  "instance_type": {
+   "from": [
+    "product_instance_type"
+   ]
+  },
+  "operating_system": {
+   "from": [
+    "product_operating_system"
+   ]
+  },
+  "database_engine": {
+   "from": [
+    "product_database_engine"
+   ]
+  },
+  "deployment_option": {
+   "from": [
+    "product_deployment_option"
+   ]
+  },
+  "pricing_model": {
+   "from": [
+    "pricing_term"
+   ]
+  },
+  "commitment_id": {
+   "from": [
+    "reservation_reservation_a_r_n",
+    "savings_plan_savings_plan_a_r_n"
+   ],
+   "coalesce": true
+  },
+  "sku_id": {
+   "from": [
+    "product_sku"
+   ]
+  },
+  "sku_price_id": {
+   "from": [
+    "pricing_rate_code"
+   ]
   }
  },
  "derive": {
-  "effective_cost": "cur_effective(line_type_raw, billed_cost, col(\"reservation_effective_cost\"), col(\"savings_plan_savings_plan_effective_cost\"))"
+  "effective_cost": "cur_effective(line_type_raw, billed_cost, col(\"reservation_effective_cost\"), col(\"savings_plan_savings_plan_effective_cost\"), col(\"reservation_unused_amortized_upfront_fee_for_billing_period\"), col(\"reservation_unused_recurring_fee\"), col(\"savings_plan_total_commitment_to_date\"), col(\"savings_plan_used_commitment\"))"
+ },
+ "maps": {
+  "product": "product_"
  }
 }

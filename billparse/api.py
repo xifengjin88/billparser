@@ -17,7 +17,6 @@ from .settings import configure_logging, load_env
 load_env()               # before the modules below read their settings from os.environ
 configure_logging()
 
-import hashlib  # noqa: E402
 import json  # noqa: E402
 import time  # noqa: E402
 from typing import Any, Literal  # noqa: E402
@@ -35,7 +34,7 @@ from .learn import metrics, run_nightly  # noqa: E402
 from .pipeline import Pipeline  # noqa: E402
 from .spec import SpecError, check_spec  # noqa: E402
 from .store import Store  # noqa: E402
-from .webapi import get_pipeline, get_store, read_upload  # noqa: E402
+from .webapi import get_pipeline, get_store, read_upload, save_upload  # noqa: E402
 
 # GET /parse shows the API page (Swagger UI); POST /parse parses a file
 app = FastAPI(title="billparse", version="1", description=__doc__ or "", docs_url="/parse", redoc_url=None)
@@ -93,11 +92,15 @@ def parse(request: Request, file: UploadFile = File(...),
                                                  "file that ended without a spec runs again"),
           pipe: Pipeline = Depends(get_pipeline)) -> ParseResult:
     """Parse one file (CSV, TSV, xlsx, JSON, YAML, Terraform, PDF, pptx, docx, text, zip)."""
-    data = read_upload(file)
+    path, sha, _ = save_upload(file, pipe.store)       # on disk, never whole in memory (a large export)
     if force:
-        _rerun_jobs(pipe.store, hashlib.sha256(data).hexdigest())
+        _rerun_jobs(pipe.store, sha)
     t0 = time.time()
-    r = pipe.parse_bytes(data, file.filename or "upload", force=force, user=auth.current_user(request))
+    try:
+        r = pipe.parse_path(path, file.filename or "upload", force=force, user=auth.current_user(request), move=True,
+                            sha=sha)
+    finally:
+        path.unlink(missing_ok=True)
     c = r.get("contract") or {}
     row = pipe.store.document(r["sha256"])
     job = pipe.store.agent_job_for(r["sha256"]) if not r.get("cached") else None
@@ -315,9 +318,9 @@ def learn_backfill(store: Store = Depends(get_store), pipe: Pipeline = Depends(g
     out = []
     for row in store.list_documents():
         summary = row.summary or {}
-        if not agent.needs_agent(summary) or (loaded := store.load_doc(row.sha256)) is None:
+        if not agent.needs_agent(summary) or (path := store.file_path(row.sha256)) is None:
             continue
-        r = pipe.parse_bytes(loaded[0], loaded[1], force=True)
+        r = pipe.parse_path(path, store.doc_name(row.sha256), force=True)
         out.append({"sha256": row.sha256, "name": row.name, "status": contract.status_of(r.get("status")),
                     "completeness": (r.get("contract") or {}).get("completeness")})
     return out

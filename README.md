@@ -113,7 +113,14 @@ column (CUR `DiscountedUsage` → reserved, Azure `PricingModel`, FOCUS `Pricing
 `CommitmentDiscountType`, GCP committed use discount credits, CUR `SpotUsage` usage types), and for files with no such
 column from the line's words ("Savings Plan", "Reserved", "Spot", "On Demand"; words that say the usage was billed
 at on-demand rates, such as "pay-as-you-go" or "not applied", win), marked `inferred` with source `text`.
-Lines that are not usage (tax, credit, fee) have no coverage. A Savings Plan negation line (it cancels covered usage
+Lines that are not usage (tax, credit, fee) have no coverage. In a CUR, the RI and Savings Plan fee lines carry
+the commitment that was not used (`reservation/UnusedRecurringFee` + unused upfront fee; Savings Plan total commitment
+− used commitment): that is their effective cost.
+
+**AWS CUR** (`specs/builtin/aws-cur-legacy.json`, `aws-cur2.json`). A fixed format: every field is read from the
+column of its exact name (`exact_columns`), legacy (`product/instanceType`) or 2.0 (`product_instance_type`, and the
+`product` map for engine, OS and deployment). Columns the spec does not name are kept as extra text, never guessed.
+The SKU (`product/sku`) and its exact price (`pricing/RateCode`) are `sku_id` and `sku_price_id`. A Savings Plan negation line (it cancels covered usage
 printed at the on-demand rate) is its own kind, `commitment_negation`: not usage and not a credit.
 
 **Validation** (`validate.py`). Evidence that moves a confidence score:
@@ -131,6 +138,20 @@ printed at the on-demand rate) is its own kind, `commitment_negation`: not usage
 Status: `reconciled` (total matched), `unreconciled` (no total, other checks fine; forecast
 ranges widen), `needs_review` (goes to the review queue), `auxiliary` (price sheets,
 recommendations), `unsupported` (scanned PDF).
+
+**Large files** (`bigfile.py`). A file of more than `LARGE_FILE_MB` uncompressed (CSV, CSV in gzip or zip,
+Parquet, Parquet in zip) is never read whole. The upload is copied to disk in 8 MB parts. The routes run on its first
+rows (`SAMPLE_ROWS`, fewer for a wide file: `SAMPLE_CELLS`); the accepted spec then reads the whole file in chunks
+(`CHUNK_ROWS`, fewer for a wide file: `CHUNK_CELLS`), each chunk through the same steps as a small file. Only the
+columns the spec names are read, and a line keeps no extra text of the other columns. A row with another number of
+fields than the header cannot be read: the row coverage check fails. A byte that is not valid in the file's encoding
+is replaced (with a warning). Agent jobs of large files are queued; the nightly loop runs them. The rows go to one Parquet file. Only sums stay in memory: the statistics the checks
+read (the same checks, names and weights as a small file) and the lines rolled up by service, region, account,
+charge type, coverage, month and the other keys of a charge. The analysis and the contract come from the rolled-up
+lines, so their sums are exact; a charge counts its lines in its `lines` attribute. The source viewer shows the
+first rows. Large parses run in their own pool (`LARGE_PARSE_WORKERS`); a waiting one shows `queued`.
+`scripts/bench_large.py` measures one: 5M CUR rows (1.5 GB CSV) in 76 s with 1.7 GB of memory, against 118 s and
+11 GB in memory.
 
 **Analysis** (`analyze.py`). Spend by service, category and provider, tax/credits/purchases
 separated, period detection, next-month and next-quarter forecast with a range that widens
@@ -183,5 +204,17 @@ Schema changes go through Alembic: change `billparse/db.py`, then
 - No OCR: scanned PDFs are detected and queued. Hook Azure Document Intelligence or Textract
   into `docmodel._read_pdf` to produce the same word-with-position rows.
 - Commitment savings are indicative ranges; monthly bills hide hourly usage.
-- Parses run in a thread pool in the API process (`PARSE_WORKERS`). A task is in memory: an API restart forgets
-  running tasks (never stored results). One API container only.
+- Parses run in a thread pool in the API process (`PARSE_WORKERS`), large files in a second pool
+  (`LARGE_PARSE_WORKERS`). A task is in memory: an API restart forgets running tasks (never stored results). One API
+  container only.
+- Large files (more than `LARGE_FILE_MB` uncompressed, default 100 MB): CSV and Parquet only, plain, in gzip, or as
+  the one file of a zip. A large Excel, PDF or JSON file is refused ("Export this report as CSV"), and so is a file
+  of more than `MAX_UNCOMPRESSED_GB` (default 50) uncompressed. A layout whose spec reshapes the table (a month per
+  column) or reads a grid cannot be read in chunks. The agent never runs inline on a large file: its job is queued, works on
+  the first rows, and runs in the nightly loop (with the agent on). A CSV row with another number of fields than the
+  header is not read and the row coverage check fails; a small file keeps a row with fewer fields.
+- Files just under `LARGE_FILE_MB` use the in-memory path, about 10 to 18 times the CSV size in memory (a 100 MB
+  CUR: about 1 to 2 GB). Set `LARGE_FILE_MB` from the memory a parse may use.
+- A large file's Azure cost basis is told chunk by chunk; chunks that disagree make it `unknown`, with a warning.
+  More than `CONTRACT_MAX_CHARGES` rolled-up lines: the smallest become one "other" line per service, charge type,
+  coverage and month.

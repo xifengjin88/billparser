@@ -24,7 +24,7 @@ from pathlib import Path
 import pandas as pd
 
 from . import agent as agent_mod
-from . import contract, coverage
+from . import bigfile, contract, coverage
 from . import llm as llm_mod
 from .analyze import analyze, resolve_services
 from .attributes import extract as extract_attributes
@@ -37,9 +37,7 @@ from .settings import catalog_dir, data_dir
 from .spec import Extraction, SpecError, check_spec, detect_score, run
 from .store import Store
 from .transforms import period_of
-from .validate import clean_rows, validate
-
-ATTRIBUTE_ROWS = 100_000            # larger files are exports with their own attribute columns
+from .validate import clean_rows, validate, validate_stats
 
 
 @dataclass
@@ -87,8 +85,28 @@ class Pipeline:
 
     # ------------------------------------------------------------ public
     def parse_file(self, path: str | Path, force: bool = False) -> dict:
+        return self.parse_path(path, force=force)
+
+    def parse_path(self, path: str | Path, name: str | None = None, force: bool = False, on_step=None,
+                   agent: bool = True, user: str | None = None, run: bool = True, move: bool = False,
+                   sha: str | None = None, info: bigfile.FileInfo | None = None) -> dict:
+        """Parse a file on disk. A small file is read into memory (parse_bytes); a large one (more than LARGE_FILE_MB
+        uncompressed) is read in chunks (bigfile.py), and its agent job, when it needs one, is queued, never run here.
+        move: the file is a temporary upload, moved into the store when kept. info: the file's classify() result, when
+        the caller has it."""
         p = Path(path)
-        return self.parse_bytes(p.read_bytes(), p.name, force=force)
+        name = name or p.name
+        info = info or bigfile.classify(p, name)
+        if not info.large:
+            return self.parse_bytes(p.read_bytes(), name, force=force, on_step=on_step, agent=agent, user=user,
+                                    run=run)
+        t0 = time.perf_counter()
+        result = self._parse_large(info, force, on_step, move, sha)
+        if agent and self.s.use_agent and not result.get("cached") and agent_mod.needs_agent(result):
+            agent_mod.enqueue_for(self, result)          # run later on the sample (cli: jobs drain), never inline
+        if run and not result.get("cached"):
+            self._record_run(result, None, int((time.perf_counter() - t0) * 1000), user)
+        return result
 
     def parse_bytes(self, data: bytes, name: str, force: bool = False, on_step=None, agent: bool = True,
                     user: str | None = None, run: bool = True) -> dict:
@@ -150,21 +168,7 @@ class Pipeline:
                                 {}, None, t0)
 
         fp = fingerprint(doc)
-        headers = table_headers(doc)
-        attempts: list[Attempt] = []
-        best = None
-        for route_fn in (self._builtin, self._learned, self._mapper, self._llm_spec, self._llm_extract):
-            for att in route_fn(doc, fp, headers, attempts):
-                attempts.append(att)
-                if self._accept(att):
-                    best = att
-                    break
-            if best:
-                break
-        if best is None:
-            ok = [a for a in attempts if a.ext is not None and not a.ext.rows.empty]
-            best = max(ok, key=lambda a: a.confidence) if ok else None
-
+        attempts, best = self._route(doc, fp)
         if best is None:
             verdict = {"status": "needs_review", "confidence": 0.0, "checks": [],
                        "feedback": ["No route produced rows"]}
@@ -180,6 +184,77 @@ class Pipeline:
         if best.route == "llm_extract_direct" and verdict.get("completeness") == "consistent":
             verdict["completeness"] = "unchecked"           # rows the LLM wrote, no printed total tested them
         return self._finish(doc, best, attempts, verdict, fp, share, t0)
+
+    def _route(self, doc: Document, fp: dict) -> tuple[list[Attempt], Attempt | None]:
+        """Every route, cheapest first, until one is accepted; else the most confident attempt with rows."""
+        headers = table_headers(doc)
+        attempts: list[Attempt] = []
+        for route_fn in (self._builtin, self._learned, self._mapper, self._llm_spec, self._llm_extract):
+            for att in route_fn(doc, fp, headers, attempts):
+                attempts.append(att)
+                if self._accept(att):
+                    return attempts, att
+        ok = [a for a in attempts if a.ext is not None and not a.ext.rows.empty]
+        return attempts, (max(ok, key=lambda a: a.confidence) if ok else None)
+
+    def _parse_large(self, info: bigfile.FileInfo, force: bool, on_step, move: bool, sha: str | None) -> dict:
+        """A large file: the routes on its sample, then the accepted spec over the whole file in chunks."""
+        t0 = time.perf_counter()
+        sha = sha or bigfile.sha256_of(info.path)
+        if not force and (cached := self.store.get_result(sha)):
+            self._keep(info, sha, move)
+            return {**cached, "cached": True}
+
+        def unsupported(doc: Document, why: str, best: Attempt | None = None, attempts=(), fp=None) -> dict:
+            verdict = {"status": "unsupported", "confidence": 0.0, "checks": [], "feedback": [why]}
+            out = self._finish(doc, best, list(attempts), verdict, fp or {}, None, t0, big=bigfile.Scan(warnings=[why]))
+            self._keep(info, sha, move)
+            return out
+        if info.refused:
+            return unsupported(Document(info.name, info.fmt, sha, []), info.refused)
+        try:
+            sample = bigfile.sample_doc(info, sha)
+        except bigfile.TooLarge as e:
+            return unsupported(Document(info.name, info.fmt, sha, []), str(e))
+        fp = fingerprint(sample)
+        attempts, best = self._route(sample, fp)
+        if best is None:
+            verdict = {"status": "needs_review", "confidence": 0.0, "checks": [],
+                       "feedback": ["No route produced rows (on the first rows of the file)"]}
+            out = self._finish(sample, None, attempts, verdict, fp, None, t0)
+            self._keep(info, sha, move)
+            return out
+        if (why := bigfile.unsupported_spec(best.route, best.spec)):
+            return unsupported(sample, why, None, attempts, fp)
+        if on_step is not None:
+            on_step("reading")
+        out_path = self.store.temp_path(".parquet")
+        try:
+            scan = bigfile.scan(best.spec, info, sample, self.s.catalog_dir, out_path, on_progress=on_step,
+                                unmapped=best.ext.unmapped if best.ext is not None else None)
+        except bigfile.TooLarge as e:
+            out_path.unlink(missing_ok=True)
+            return unsupported(Document(info.name, info.fmt, sha, []), str(e))
+        except BaseException:
+            out_path.unlink(missing_ok=True)
+            raise
+        kind = (best.spec.get("meta") or {}).get("kind", "cost_lines")
+        if kind != "cost_lines":
+            verdict = {"status": "auxiliary", "confidence": 1.0 if scan.rows else 0.0, "checks": [], "feedback": [],
+                       "kind": kind, "completeness": "consistent"}
+        else:
+            verdict = validate_stats(scan.stats, scan.stated_totals, scan.source_rows, scan.share, scan.skipped)
+            if self._accept(best) and verdict["status"] not in ("reconciled", "unreconciled"):
+                scan.note(f"The first {len(sample.regions[0].df):,} rows passed the checks with {best.route} spec "
+                          f"{best.spec.get('id') or ''}; the whole file did not: "
+                          + "; ".join(verdict.get("feedback") or [])[:300])
+        out = self._finish(sample, best, attempts, verdict, fp, scan.share if kind == "cost_lines" else None, t0,
+                           big=scan)
+        self._keep(info, sha, move)
+        return out
+
+    def _keep(self, info: bigfile.FileInfo, sha: str, move: bool) -> None:
+        self.store.save_doc_path(sha, info.path, info.name, move=move)
 
     # ------------------------------------------------------------ routes (generators of attempts)
     def _builtin(self, doc, fp, headers, attempts):
@@ -298,8 +373,7 @@ class Pipeline:
                 att.ext.stated_totals += [dict(t, kind="document_total") for t in extra_totals]
             clean_rows(att.ext)
             normalize_regions(att.ext.rows)
-            if len(att.ext.rows) <= ATTRIBUTE_ROWS:
-                extract_attributes(att.ext.rows)
+            extract_attributes(att.ext.rows, att.ext.warnings)
             coverage.apply(att.ext.rows)
             kind = (spec.get("meta") or {}).get("kind", "cost_lines")
             if kind != "cost_lines":
@@ -358,8 +432,15 @@ class Pipeline:
         return out
 
     def _finish(self, doc: Document, best: Attempt | None, attempts: list[Attempt], verdict: dict,
-                fp: dict, share: float | None, t0: float) -> dict:
+                fp: dict, share: float | None, t0: float, big: bigfile.Scan | None = None) -> dict:
+        """Save the spec, the result and its contract. big: a large file read in chunks; doc is its sample, and the
+        lines are the scan's rolled-up lines (the rows are in its Parquet file)."""
         rows = best.ext.rows if best and best.ext is not None else pd.DataFrame()
+        fields = best.ext.fields if best and best.ext is not None else {}
+        stated = best.ext.stated_totals if best and best.ext else []
+        n_rows = len(rows)
+        if big is not None:
+            rows, fields, stated, n_rows = big.rolled, big.fields, big.stated_totals, big.rows
         spec_info = None
         accepted = verdict.get("status") in ("reconciled", "unreconciled", "auxiliary")
         if best and best.spec is not None:
@@ -374,32 +455,37 @@ class Pipeline:
             if accepted and spec.get("id"):
                 total = float(rows["billed_cost"].sum()) if "billed_cost" in rows else 0.0
                 self.store.link(spec["id"], doc.sha256, fp,
-                                {"rows": len(rows), "total": round(total, 2), "confidence": verdict["confidence"]})
+                                {"rows": n_rows, "total": round(total, 2), "confidence": verdict["confidence"]})
 
         kind = verdict.get("kind") or ((best.spec or {}).get("meta") or {}).get("kind", "cost_lines") if best else None
         analysis = {}
         if kind == "cost_lines" and accepted and not rows.empty:
-            analysis = analyze(rows, verdict["confidence"], verdict["status"], best.ext.fields if best else {})
-        stated = best.ext.stated_totals if best and best.ext else []
+            analysis = analyze(rows, verdict["confidence"], verdict["status"], fields)
         summary = {
             "file": doc.name, "sha256": doc.sha256, "file_type": doc.file_type, "kind": kind,
             "status": verdict["status"], "confidence": verdict["confidence"],
-            "completeness": verdict.get("completeness"), "evidence": (best.ext.evidence if best and best.ext else {}),
-            "spec": spec_info, "rows": len(rows),
+            "completeness": verdict.get("completeness"),
+            "evidence": (best.ext.evidence if best and best.ext and big is None else {}),
+            "spec": spec_info, "rows": n_rows,
             "service_resolution": round(share, 3) if share is not None else None,
             "stated_totals": [{k: (v if k != "src" or v is None else str(v)) for k, v in t.items()} for t in stated][:10],
-            "header_fields": {k: v["value"] for k, v in (best.ext.fields.items() if best and best.ext else [])},
-            "header_field_src": {k: str(v["src"]) for k, v in (best.ext.fields.items() if best and best.ext else [])
-                                 if v.get("src") is not None},
+            "header_fields": {k: v["value"] for k, v in fields.items()},
+            "header_field_src": {k: str(v["src"]) for k, v in fields.items() if v.get("src") is not None},
             "checks": verdict.get("checks", []),
-            "warnings": _warnings(best),
+            "warnings": _warnings(best, big),
             "analysis": analysis,
             "attempts": [a.log() for a in attempts],
             "llm_calls": sum(a.llm_calls for a in attempts),
             "seconds": round(time.perf_counter() - t0, 3),
         }
+        if big is not None:
+            summary["large"] = {"source_rows": big.source_rows, "chunks": big.chunks, "rolled_lines": len(rows),
+                                "skipped_rows": big.skipped}
         summary["contract"] = self._save_contract(doc, summary, rows)
-        self.store.save_result(doc.sha256, summary, rows)
+        self.store.save_result(doc.sha256, summary, rows, rows_path=big.path if big and big.path
+                               and big.path.exists() else None)
+        if big is not None:
+            self.store.save_rolled(doc.sha256, rows)
         self.store.append("records", {"ts": time.time(), "sha": doc.sha256, "file": doc.name, "fingerprint": fp,
                                       "route": spec_info and spec_info["route"], "spec": spec_info,
                                       "status": summary["status"], "confidence": summary["confidence"],
@@ -457,10 +543,10 @@ def build_preview(doc: Document, max_rows: int = 40, max_regions: int = 4) -> di
     return {"file_type": doc.file_type, "regions": regions}
 
 
-def _warnings(best: Attempt | None) -> list[str]:
+def _warnings(best: Attempt | None, big: bigfile.Scan | None = None) -> list[str]:
     if best is None:
-        return []
-    out = list(best.ext.warnings) if best.ext else []
+        return list(big.warnings) if big is not None else []
+    out = list(big.warnings) if big is not None else list(best.ext.warnings) if best.ext else []
     note = ((best.spec or {}).get("meta") or {}).get("notes")
     if note:
         out.append(note)

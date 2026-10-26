@@ -11,6 +11,7 @@ import gzip
 import io
 import json
 import random
+import re
 import shutil
 import subprocess
 import tempfile
@@ -107,6 +108,103 @@ def aws_cur2_no_amortized() -> float:
                                                      "savings_plan_savings_plan_effective_cost")}
             for r in _cur_commitment_rows()]
     return _write_cur(rows, "aws_cur2_no_amortized.csv.gz")
+
+
+# legacy CUR names (a real export's header): the instance type, engine, SKU and rate code by name; the region code
+# empty on data transfer; unused commitment on the RI and Savings Plan fee lines; product columns the spec does not
+# name (product/sku must never be read as an instance type)
+LEGACY_SKU = {"ec2": "RVS26QBX9XP34QN6", "dt": "AQ7UHUN3VCX2B3GM", "rds": "6WSK9HTNPZXDNS5A", "c5": "JRTCKXETXFVB2RYV"}
+
+
+def _legacy_rows() -> list[dict]:
+    def row(d, typ, code, name, ut, unit, q, rate, cost, sku, **extra) -> dict:
+        r = {"identity/LineItemId": f"li-{len(rows)}", "bill/InvoiceId": "EUINUS26-654321",
+             "bill/PayerAccountId": "111122223333", "lineItem/UsageAccountId": "444455556666",
+             "lineItem/LineItemType": typ, "lineItem/UsageStartDate": f"{d}T00:00:00Z",
+             "lineItem/UsageEndDate": f"{d + timedelta(days=1)}T00:00:00Z", "lineItem/ProductCode": code,
+             "lineItem/UsageType": ut, "lineItem/UsageAmount": q, "lineItem/CurrencyCode": "USD",
+             "lineItem/UnblendedRate": rate, "lineItem/UnblendedCost": round(cost, 8),
+             "lineItem/LineItemDescription": f"{ut} {typ}", "product/ProductName": name,
+             "product/region": "us-east-1", "product/regionCode": "us-east-1", "product/sku": sku,
+             "product/instancesku": "", "product/vcpu": "", "pricing/RateCode": f"{sku}.JRTCKXETXF.6YS6EN2CT7" if sku else "",
+             "pricing/term": "OnDemand", "pricing/unit": unit, "pricing/publicOnDemandCost": round(cost, 8),
+             "resourceTags/user:Name": "web"}
+        r.update(extra)
+        return r
+    rows: list[dict] = []
+    ec2, rds = ("AmazonEC2", "Amazon Elastic Compute Cloud"), ("AmazonRDS", "Amazon Relational Database Service")
+    for d in DAYS[:2]:
+        rows.append(row(d, "Usage", *ec2, "USE1-BoxUsage:m5.xlarge", "Hrs", 24, 0.192, 24 * 0.192, LEGACY_SKU["ec2"],
+                        **{"product/instanceType": "m5.xlarge", "product/operatingSystem": "Linux", "product/vcpu": "4"}))
+        rows.append(row(d, "Usage", *ec2, "USE1-USW2-AWS-Out-Bytes", "GB", 10, 0.02, 0.2, LEGACY_SKU["dt"],
+                        **{"product/regionCode": "", "product/region": "us-west-2"}))
+        rows.append(row(d, "DiscountedUsage", *rds, "USE1-InstanceUsage:db.r6g.large", "Hrs", 24, 0.0, 0.0,
+                        LEGACY_SKU["rds"], **{"product/instanceType": "db.r6g.large",
+                                              "product/databaseEngine": "PostgreSQL",
+                                              "product/deploymentOption": "Multi-AZ", "pricing/term": "Reserved",
+                                              "pricing/publicOnDemandCost": 6.0, "reservation/ReservationARN": CUR_RI,
+                                              "reservation/EffectiveCost": 3.6}))
+        rows.append(row(d, "SavingsPlanCoveredUsage", *ec2, "USE1-BoxUsage:c5.large", "Hrs", 24, 0.085, 2.04,
+                        LEGACY_SKU["c5"], **{"product/instanceType": "c5.large", "savingsPlan/SavingsPlanARN": CUR_SP,
+                                             "savingsPlan/SavingsPlanEffectiveCost": 1.44}))
+        rows.append(row(d, "SavingsPlanNegation", *ec2, "USE1-BoxUsage:c5.large", "Hrs", 24, 0.085, -2.04,
+                        LEGACY_SKU["c5"], **{"savingsPlan/SavingsPlanARN": CUR_SP, "pricing/RateCode": "",
+                                             "pricing/publicOnDemandCost": ""}))
+    # the RI fee: 10.80 of commitment, 7.20 used by the two days above, 3.60 unused (1.00 upfront + 2.60 recurring)
+    rows.append(row(DAYS[0], "RIFee", *rds, "USE1-HeavyUsage:db.r6g.large", "Hrs", 72, 0.15, 10.8, LEGACY_SKU["ec2"],
+                    **{"reservation/ReservationARN": CUR_RI, "reservation/UnusedAmortizedUpfrontFeeForBillingPeriod": 1.0,
+                       "reservation/UnusedRecurringFee": 2.6, "pricing/term": "Reserved",
+                       "pricing/publicOnDemandCost": 0}))
+    # the Savings Plan fee: 4.32 committed to date, 2.88 used
+    rows.append(row(DAYS[0], "SavingsPlanRecurringFee", "ComputeSavingsPlans", "Savings Plans for AWS Compute usage",
+                    "ComputeSP:1yrNoUpfront", "", 0, 0, 4.32, "N3RQ9N6KR9HDPCZ9",
+                    **{"savingsPlan/SavingsPlanARN": CUR_SP, "savingsPlan/TotalCommitmentToDate": 4.32,
+                       "savingsPlan/UsedCommitment": 2.88, "pricing/publicOnDemandCost": 0}))
+    rows.append(row(DAYS[1], "Tax", *ec2, "", "", 0, 0, 1.5, "", **{"product/regionCode": "", "product/region": ""}))
+    return rows
+
+
+def aws_cur_legacy() -> float:
+    """A legacy CUR (lineItem/... names) with commitments and unused commitment on the fee lines."""
+    rows = _legacy_rows()
+    cols = list(dict.fromkeys(k for r in rows for k in r))
+    buf = io.StringIO()
+    pd.DataFrame(rows, columns=cols).to_csv(buf, index=False)
+    (OUT / "aws_cur_legacy.csv.gz").write_bytes(gzip.compress(buf.getvalue().encode()))
+    return round(sum(r["lineItem/UnblendedCost"] for r in rows), 2)
+
+
+def aws_cur2_product_map() -> float:
+    """CUR 2.0 whose engine, OS, deployment and product name are in the "product" map column (JSON text), with the
+    SKU, rate code, unused commitment columns and a usage account name."""
+    def snake(h: str) -> str:
+        group, name = h.split("/", 1)
+        group = {"lineItem": "line_item", "savingsPlan": "savings_plan"}.get(group, group)
+        return f"{group}_" + re.sub(r"(?<=[a-z0-9])([A-Z])", r"_\1", name).lower()
+    in_map = {"product/ProductName": "product_name", "product/operatingSystem": "operating_system",
+              "product/databaseEngine": "database_engine", "product/deploymentOption": "deployment_option",
+              "product/region": "region", "product/vcpu": "vcpu"}
+    out = []
+    for r in _legacy_rows():
+        o = {}
+        for k, v in r.items():
+            if k in in_map or k.startswith("resourceTags/") or k == "product/instancesku":
+                continue
+            o[{"product/regionCode": "product_region_code", "product/instanceType": "product_instance_type",
+               "reservation/ReservationARN": "reservation_reservation_a_r_n",
+               "savingsPlan/SavingsPlanARN": "savings_plan_savings_plan_a_r_n",
+               "pricing/RateCode": "pricing_rate_code", "identity/LineItemId": "identity_line_item_id",
+               "pricing/publicOnDemandCost": "pricing_public_on_demand_cost",
+               "savingsPlan/SavingsPlanEffectiveCost": "savings_plan_savings_plan_effective_cost",
+               }.get(k, snake(k))] = v
+        o["product"] = json.dumps({m: r[k] for k, m in in_map.items() if r.get(k) not in (None, "")})
+        o["line_item_usage_account_name"] = "prod"
+        out.append(o)
+    cols = list(dict.fromkeys(k for r in out for k in r))
+    buf = io.StringIO()
+    pd.DataFrame(out, columns=cols).to_csv(buf, index=False)
+    (OUT / "aws_cur2_product_map.csv.gz").write_bytes(gzip.compress(buf.getvalue().encode()))
+    return round(sum(r["line_item_unblended_cost"] for r in out), 2)
 
 
 def _azure_rows(amortized: bool) -> list[dict]:
@@ -499,7 +597,7 @@ if __name__ == "__main__":
         fn()
         print("ok", fn.__name__)
     for fn in (aws_cur2_commitments, aws_cur2_no_amortized, azure_amortized, azure_actual, focus_commitments,
-               gcp_commitments):
+               gcp_commitments, aws_cur_legacy, aws_cur2_product_map):
         print("ok", fn.__name__, "total", fn())
     german_xlsx(OUT / "german_invoice.xlsx")
     print("ok german_xlsx")

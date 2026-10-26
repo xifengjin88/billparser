@@ -73,6 +73,8 @@ EXPECTED = {
     "aws_cur2_commitments.csv.gz": ("builtin", 34.76), "aws_cur2_no_amortized.csv.gz": ("builtin", 34.76),
     "azure_amortized.csv": ("builtin", 32.84), "azure_actual.csv": ("builtin", 177.16),
     "focus_commitments.parquet": ("builtin", 22.85), "gcp_commitments.json": ("builtin", 213.00),
+    # task 02: CUR columns by their exact names, legacy and 2.0 (its "product" map)
+    "aws_cur_legacy.csv.gz": ("builtin", 26.24), "aws_cur2_product_map.csv.gz": ("builtin", 26.24),
 }
 
 

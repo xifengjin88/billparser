@@ -31,9 +31,9 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Protocol
 
-from . import coverage
+from . import bigfile, coverage
 from .attributes import extract as extract_attributes
-from .docmodel import Document, load_bytes
+from .docmodel import Document
 from .llm import PRICES, SPEC_GUIDE, cost_of, redact  # noqa: F401  PRICES: the web API lists them
 from .spec import Extraction, SpecError, check_spec, run
 from .store import Store
@@ -197,8 +197,7 @@ def check(spec: dict, doc: Document, catalog_dir: Path | None) -> tuple[dict, Ex
     check_spec(spec)
     ext = run(spec, doc, catalog_dir)
     clean_rows(ext)
-    if len(ext.rows) <= 100_000:
-        extract_attributes(ext.rows)
+    extract_attributes(ext.rows)
     coverage.apply(ext.rows)
     kind = (spec.get("meta") or {}).get("kind", "cost_lines")
     verdict = validate(ext) if kind == "cost_lines" else {"status": "auxiliary", "confidence": 1.0, "checks": [],
@@ -407,12 +406,11 @@ def run_job(pipeline, job_id: int, llm: AgentLLM | None = None, limits: Limits |
     if job is None:
         raise KeyError(job_id)
     limits = limits or Limits.from_env()
-    loaded = store.load_doc(job["sha256"])
-    if loaded is None:
+    doc = bigfile.stored_doc(store, job["sha256"])    # a large file: its first rows (the sample), never whole
+    if doc is None:
         store.update_agent_job(job_id, status="error", error="The uploaded file is not stored")
         return store.agent_job(job_id)
-    data, name = loaded
-    doc = load_bytes(data, name)
+    stored, name = store.file_path(job["sha256"]), doc.name
     summary = store.get_result(job["sha256"]) or {}
     start_spec = store.get_spec(job["spec_id"]) if job.get("spec_id") else None
     t0 = time.time()
@@ -463,7 +461,7 @@ def run_job(pipeline, job_id: int, llm: AgentLLM | None = None, limits: Limits |
     saved = store.save_spec(spec)
     log(event="decision", status="proved", spec_id=spec_id, version=saved["version"])
     store.update_agent_job(job_id, status="proved", spec_id=spec_id, spec_version=saved["version"], **fields)
-    pipeline.parse_bytes(data, name, force=True, agent=False, run=False)  # read again: the learned route finds it
+    pipeline.parse_path(stored, name, force=True, agent=False, run=False)  # read again: the learned route finds it
     return store.agent_job(job_id)
 
 

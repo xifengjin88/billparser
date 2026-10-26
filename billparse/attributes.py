@@ -8,9 +8,13 @@ only fills a field that is empty, so a column the file has always wins. `extract
 
 from __future__ import annotations
 
+import os
 import re
 
+import numpy as np
 import pandas as pd
+
+from .transforms import map_unique
 
 # instance types: AWS (with RDS, ElastiCache, OpenSearch, Redshift prefixes), Azure VM sizes, GCP machine types
 AWS_TYPE = re.compile(r"\b((?:db|cache|search|ra3|dc2|ds2)\.)?([a-z]\d[a-z0-9-]*|[a-z]{1,3}\d[a-z0-9-]*)\."
@@ -108,31 +112,48 @@ def _quantity(text: str) -> dict:
     return {}
 
 
-def extract(rows: pd.DataFrame) -> list[str]:
+SEP = "\x1f"                    # joins a line's texts into one key (never printed in a bill)
+
+
+def _found(texts: list[str]) -> dict:
+    """What one line's texts print: the joined text, then a quantity and unit that end a text of their own ("...
+    4,216.07 Hrs"), the description's last (in the joined text the headings come after it)."""
+    found = from_text(" ".join(texts))
+    for t in reversed(texts):
+        if (q := _quantity(t)):
+            found = {**found, **q}
+    return found
+
+
+def extract(rows: pd.DataFrame, warnings: list[str] | None = None) -> list[str]:
     """Fill empty attribute columns from each line's text (description, service label, context path). Returns the
-    fields it filled."""
+    fields it filled. More than MAX_UNIQUE_TEXTS distinct texts (a resource ID used as the description): the step is
+    skipped, with a note in warnings."""
     if rows.empty:
         return []
     def text_of(c: str) -> pd.Series:
         if c not in rows:
             return pd.Series([""] * len(rows), index=rows.index, dtype=object)
-        return rows[c].astype(object).map(lambda v: "" if v is None or pd.isna(v) else str(v))
+        return map_unique(rows[c], lambda v: "" if v is None or pd.isna(v) else str(v))
     sources = [text_of(c) for c in ("description", "service_raw", "product_code", "_path")]
-    texts = sources[0]
+    # once per distinct combination of the texts: exports repeat the same few texts on millions of lines
+    key = sources[0]
     for t in sources[1:]:
-        texts = texts + " " + t
-    found = texts.map(from_text)
-    # a quantity and its unit end their own text ("... 4,216.07 Hrs"): read them from each text alone, the
-    # description first (in the joined text the headings come after them)
-    for t in reversed(sources):
-        for i, q in t.map(_quantity).items():
-            if q:
-                found[i] = {**found[i], **q}
+        key = key + SEP + t
+    codes, uniques = pd.factorize(key)
+    limit = int(os.environ.get("MAX_UNIQUE_TEXTS", "500000"))
+    if len(uniques) > limit:
+        if warnings is not None:
+            warnings.append(f"Details (instance type, engine, ...) were not read from the line texts: {len(uniques):,} "
+                            f"distinct texts, more than MAX_UNIQUE_TEXTS ({limit:,})")
+        return []
+    found_unique = [_found(u.split(SEP)) for u in uniques]
     # a tax line has no usage: its quantity and price are the charge's, not its own
     taxed = rows["charge_type"].eq("Tax") if "charge_type" in rows else pd.Series(False, index=rows.index)
     filled = []
     for f in (*NEW_FIELDS, "unit_price", "price_per", "quantity", "unit"):
-        vals = found.map(lambda d, f=f: d.get(f))
+        per_key = np.array([d.get(f) for d in found_unique] + [None], dtype=object)
+        vals = pd.Series(per_key[codes], index=rows.index).infer_objects()   # the type a map would infer
         if f in ("unit_price", "price_per", "quantity", "unit"):
             vals = vals.where(~taxed, None)
         if vals.notna().any():
@@ -153,7 +174,7 @@ def normalize_regions(rows: pd.DataFrame) -> int:
         return 0
     from svcres.regions import lookup
     codes = {v: (hit[1] if (hit := lookup(v)) else None) for v in rows["region"].dropna().astype(str).unique()}
-    named = rows["region"].map(lambda v: codes.get(str(v)) if v is not None and not pd.isna(v) else None)
+    named = map_unique(rows["region"], lambda v: codes.get(str(v)) if v is not None and not pd.isna(v) else None)
     change = named.notna() & named.ne(rows["region"])
     if not change.any():
         return 0

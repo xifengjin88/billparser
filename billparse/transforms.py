@@ -48,6 +48,9 @@ CANONICAL = {
     "commitment_status": "used or unused (unused commitment capacity)",
     "coverage": "How the usage was priced: on_demand, reserved, savings_plan, committed_use, spot, unknown",
     "line_type_raw": "The provider's own line type, unchanged (SavingsPlanCoveredUsage, DiscountedUsage, ...)",
+    "sku_id": "The provider's SKU of the line, as printed (AWS product/sku, FOCUS SkuId, GCP sku.id)",
+    "sku_price_id": "The provider's id of the exact price of the line (AWS pricing/RateCode, FOCUS SkuPriceId)",
+    "meter_id": "The provider's meter id (Azure MeterId)",
 }
 NUMERIC = {"billed_cost", "effective_cost", "list_cost", "contracted_cost", "credits", "quantity", "unit_price",
            "tax"}
@@ -65,6 +68,47 @@ CHARGE_TYPE_MAP = {
 }
 
 _CURRENCY_JUNK = re.compile(r"[^\d.,\-()]")
+
+
+# ---------------------------------------------------------------- per distinct value
+UNIQUE_MIN = 2048          # below this many rows a plain map is as fast
+
+
+def _same(a, b) -> bool:
+    return a == b or (isinstance(a, float) and isinstance(b, float) and a != a and b != b)
+
+
+def map_unique(s: pd.Series, f: Callable) -> pd.Series:
+    """s.map(f), computing f once per distinct value: the result is the same as s.map(f), row for row. Exports repeat
+    the same few values (a line type, a service, a usage type) millions of times. Text columns only: values that
+    are not all strings (1 and 1.0 hash alike) take the plain map. The result has the type s.map(f) infers."""
+    if len(s) < UNIQUE_MIN:
+        return s.map(f)
+    if isinstance(s.dtype, pd.StringDtype) and s.dtype.na_value is np.nan:   # text (CSV): no object copy
+        codes, uniques = pd.factorize(s)
+        values = np.empty(len(uniques) + 1, dtype=object)
+        values[:-1] = [f(u) for u in uniques]
+        if (codes < 0).any():
+            values[-1] = f(s.dtype.na_value)            # code -1: a missing value, as s.map(f) passes it
+        return pd.Series(values[codes], index=s.index, name=s.name).infer_objects()
+    obj = s.astype(object)
+    na = obj.isna().to_numpy()
+    filled = obj[~na]
+    if len(filled) and pd.api.types.infer_dtype(filled, skipna=False) != "string":
+        return s.map(f)
+    out = np.empty(len(obj), dtype=object)
+    if len(filled):
+        codes, uniques = pd.factorize(filled)
+        values = np.empty(len(uniques), dtype=object)
+        values[:] = [f(u) for u in uniques]
+        out[~na] = values[codes]
+    if na.any():
+        a, b = f(None), f(np.nan)
+        if _same(a, b):
+            out[na] = a
+        else:                                            # f tells None from NaN: decide row by row (missing rows only)
+            out[na] = [a if v is None else f(v) for v in obj[na]]
+    return pd.Series(out, index=s.index, name=s.name).infer_objects()     # the type s.map(f) would infer
 
 
 # ---------------------------------------------------------------- scalar parsers
@@ -136,8 +180,12 @@ def t_date(s: pd.Series, fmt: str | None = None, dayfirst: bool = False) -> pd.S
     return out.dt.strftime("%Y-%m-%d").where(out.notna(), None)
 
 
+def _strip(v):
+    return None if v is None or str(v).strip() in ("", "nan") else str(v).strip()
+
+
 def t_strip(s: pd.Series) -> pd.Series:
-    return s.map(lambda v: None if v is None or str(v).strip() in ("", "nan") else str(v).strip())
+    return map_unique(s, _strip)
 
 
 def t_regex(s: pd.Series, pattern: str, group: int = 1) -> pd.Series:
@@ -160,13 +208,15 @@ def t_map(s: pd.Series, mapping: dict, default: str | None = "keep") -> pd.Serie
     return s.map(f)
 
 
+def _charge_type(v):
+    if v is None:
+        return None
+    k = re.sub(r"[\s_-]+", "", str(v).lower())
+    return CHARGE_TYPE_MAP.get(k) or CHARGE_TYPE_MAP.get(str(v).lower()) or str(v)
+
+
 def t_charge_type(s: pd.Series) -> pd.Series:
-    def f(v):
-        if v is None:
-            return None
-        k = re.sub(r"[\s_-]+", "", str(v).lower())
-        return CHARGE_TYPE_MAP.get(k) or CHARGE_TYPE_MAP.get(str(v).lower()) or str(v)
-    return s.map(f)
+    return map_unique(s, _charge_type)
 
 
 def t_json_sum(s: pd.Series, key: str = "amount") -> pd.Series:
@@ -210,25 +260,27 @@ def coverage_of(v) -> str | None:
 
 def t_coverage(s: pd.Series) -> pd.Series:
     """A line type or pricing model as a coverage value (see COVERAGE_MAP)."""
-    return s.map(coverage_of)
+    return map_unique(s, coverage_of)
 
 
 # GCP credit types that mean the usage was covered by a committed use discount
 CUD_CREDITS = {"COMMITTED_USAGE_DISCOUNT", "COMMITTED_USAGE_DISCOUNT_DOLLAR_BASE"}
 
 
+def _commitment_credit(v):
+    if v is None or v == "":
+        return None
+    try:
+        arr = json.loads(v) if isinstance(v, str) else v
+    except (ValueError, TypeError):
+        return None
+    types = {str(x.get("type", "")).upper() for x in arr if isinstance(x, dict)} if isinstance(arr, list) else set()
+    return "committed_use" if types & CUD_CREDITS else None
+
+
 def t_commitment_credit(s: pd.Series) -> pd.Series:
     """A GCP credits cell (JSON list): "committed_use" when one credit is a committed use discount, else None."""
-    def f(v):
-        if v is None or v == "":
-            return None
-        try:
-            arr = json.loads(v) if isinstance(v, str) else v
-        except (ValueError, TypeError):
-            return None
-        types = {str(x.get("type", "")).upper() for x in arr if isinstance(x, dict)} if isinstance(arr, list) else set()
-        return "committed_use" if types & CUD_CREDITS else None
-    return s.map(f)
+    return map_unique(s, _commitment_credit)
 
 
 def t_upper(s: pd.Series) -> pd.Series:

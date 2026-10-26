@@ -13,10 +13,11 @@ import json
 import time
 from pathlib import Path
 
+from . import bigfile
 from . import llm as llm_mod
 from .docmodel import load_bytes
 from .spec import check_spec, run
-from .validate import clean_rows, validate
+from .validate import clean_rows, validate, validate_stats
 
 PROMOTE_AFTER = 3            # clean files before candidate -> verified
 PROMOTE_MIN_CONF = 0.75
@@ -28,21 +29,17 @@ def regression_gate(pipeline, spec: dict, spec_id: str) -> dict:
     docs = pipeline.store.spec_docs(spec_id)
     failures, checked = [], 0
     for sha, accepted in docs.items():
-        loaded = pipeline.store.load_doc(sha)
-        if not loaded:
+        path = pipeline.store.file_path(sha)
+        if path is None:
             continue
         checked += 1
-        doc = load_bytes(*loaded)
         try:
-            ext = run(spec, doc)
-            clean_rows(ext)
-            v = validate(ext)
+            n, total, v = _check(pipeline, spec, sha, path)
         except Exception as e:                                  # noqa: BLE001
             failures.append({"sha": sha, "reason": f"error: {e}"})
             continue
-        total = float(ext.rows["billed_cost"].sum()) if "billed_cost" in ext.rows else 0.0
-        if abs(len(ext.rows) - accepted["rows"]) > max(1, 0.01 * accepted["rows"]):
-            failures.append({"sha": sha, "reason": f"rows {len(ext.rows)} vs {accepted['rows']}"})
+        if abs(n - accepted["rows"]) > max(1, 0.01 * accepted["rows"]):
+            failures.append({"sha": sha, "reason": f"rows {n} vs {accepted['rows']}"})
         elif abs(total - accepted["total"]) > max(0.05, 0.001 * abs(accepted["total"])):
             failures.append({"sha": sha, "reason": f"total {total:.2f} vs {accepted['total']:.2f}"})
         elif v["confidence"] < accepted["confidence"] - 0.05:
@@ -50,15 +47,27 @@ def regression_gate(pipeline, spec: dict, spec_id: str) -> dict:
     return {"passed": not failures, "checked": checked, "failures": failures}
 
 
+def _check(pipeline, spec: dict, sha: str, path: Path) -> tuple[int, float, dict]:
+    """A spec's rows, total and verdict on a stored file; a large file is read in chunks (statistics only)."""
+    info = bigfile.classify(path, pipeline.store.doc_name(sha))
+    if info.large:
+        scan = bigfile.scan(spec, info, bigfile.sample_doc(info, sha), full=False)
+        return scan.rows, scan.stats.total, validate_stats(scan.stats, scan.stated_totals, scan.source_rows)
+    ext = run(spec, load_bytes(path.read_bytes(), info.name))
+    clean_rows(ext)
+    total = float(ext.rows["billed_cost"].sum()) if "billed_cost" in ext.rows else 0.0
+    return len(ext.rows), total, validate(ext)
+
+
 # ---------------------------------------------------------------- spec repair
 def repair_spec(pipeline, spec_id: str, sha: str) -> dict:
     """Ask the LLM to fix a learned spec for a file it failed on, then gate it."""
     spec = pipeline.store.get_spec(spec_id)
-    loaded = pipeline.store.load_doc(sha)
-    if not (pipeline.llm and spec and loaded):
+    if not (pipeline.llm and spec and pipeline.store.file_path(sha)):
         return {"spec": spec_id, "result": "skipped"}
     from .pipeline import _public, build_preview
-    doc = load_bytes(*loaded)
+    doc = bigfile.stored_doc(pipeline.store, sha)      # a large file: its first rows (the sample)
+    assert doc is not None
     ext = run(spec, doc)
     clean_rows(ext)
     feedback = validate(ext)["feedback"] or ["Spec extracted no usable rows from this file"]
@@ -108,6 +117,20 @@ def promote_candidates(pipeline) -> list[dict]:
     return out
 
 
+# ---------------------------------------------------------------- queued agent jobs
+def run_queued_jobs(pipeline) -> list[dict]:
+    """The agent jobs a parse queued and did not run (a large file's: the agent never runs inline on one), oldest
+    first. Only when the agent is on (AGENT_ENABLED=1 and a key): a job calls the Claude API."""
+    from . import agent
+    if not pipeline.s.use_agent:
+        return []
+    out = []
+    for j in reversed(pipeline.store.agent_jobs("queued")):
+        done = agent.run_job(pipeline, j["id"], llm=pipeline.agent_llm, limits=pipeline.agent_limits)
+        out.append({"job": j["id"], "file": j["name"], "status": done["status"], "cost_usd": done.get("cost_usd")})
+    return out
+
+
 # ---------------------------------------------------------------- nightly entry point
 def run_nightly(pipeline) -> dict:
     t0 = time.time()
@@ -118,8 +141,8 @@ def run_nightly(pipeline) -> dict:
         if not item.get("open"):
             still_open.append(item)
             continue
-        loaded = pipeline.store.load_doc(item["sha"])
-        if not loaded:
+        path = pipeline.store.file_path(item["sha"])
+        if path is None:
             still_open.append(item)
             continue
         # if a learned spec matched but failed, try repairing that spec first
@@ -132,13 +155,14 @@ def run_nightly(pipeline) -> dict:
                 learned_ids = {near}
         for sid in learned_ids:
             report["repairs"].append(repair_spec(pipeline, sid, item["sha"]))
-        result = pipeline.parse_bytes(*loaded, force=True)
+        result = pipeline.parse_path(path, pipeline.store.doc_name(item["sha"]), force=True)
         report["review"].append({"file": item["file"], "was": item["status"], "now": result["status"],
                                  "confidence": result["confidence"], "route": (result.get("spec") or {}).get("route")})
     # parse_bytes re-queued anything still failing (ts > t0); drop the old entries we retried
     pipeline.store.rewrite("review", [r for r in pipeline.store.read("review")
                                       if r["sha"] not in {i["sha"] for i in review if i.get("open")}
                                       or r["ts"] > t0])
+    report["jobs"] = run_queued_jobs(pipeline)
     report["promotions"] = promote_candidates(pipeline)
     report["metrics"] = metrics(pipeline.store.read("records"))
     report["seconds"] = round(time.time() - t0, 2)

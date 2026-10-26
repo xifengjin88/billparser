@@ -9,13 +9,13 @@ marked "unreconciled", with wider forecast ranges downstream.
 from __future__ import annotations
 
 import re
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 
 import numpy as np
 import pandas as pd
 
 from .spec import Extraction
-from .transforms import parse_number
+from .transforms import map_unique, parse_number
 from .tree import bound
 
 TOTAL_LABEL = re.compile(r"^\s*(?:grand\s+)?(?:sub)?\s*total\b|\b(?:amount|balance)\s+due\b|\binvoice\s+total\b", re.I)
@@ -33,8 +33,9 @@ class Check:
 
 
 # ---------------------------------------------------------------- cleanup (runs for every route)
-def clean_rows(ext: Extraction) -> list[str]:
-    """Tag tax/credit lines and pull total rows out of the line items."""
+def clean_rows(ext: Extraction, chunk: bool = False) -> list[str]:
+    """Tag tax/credit lines and pull total rows out of the line items. chunk: the rows are one chunk of a large
+    file (bigfile.py), so a row equal to the sum of the others is no total."""
     notes: list[str] = []
     df = ext.rows
     if df.empty or "billed_cost" not in df:
@@ -53,7 +54,7 @@ def clean_rows(ext: Extraction) -> list[str]:
 
     # group headers that name a provider ("Amazon Web Services") belong in provider, not service
     if "service_raw" in df:
-        prov = df["service_raw"].map(_provider_of)
+        prov = map_unique(df["service_raw"], _provider_of)
         is_prov = prov.notna()
         if is_prov.any():
             if "provider" not in df:
@@ -68,7 +69,7 @@ def clean_rows(ext: Extraction) -> list[str]:
     # a "Total" row is a stated total, not spend. Safety net for totals in other languages
     # ("Gesamtbetrag", "Totale"): any single row equal to the sum of all the others.
     is_tot = label.str.contains(TOTAL_LABEL).fillna(False).astype(bool)
-    if not is_tot.any() and len(df) >= 3:
+    if not is_tot.any() and len(df) >= 3 and not chunk:
         cost_all = df["billed_cost"].fillna(0.0)
         grand = cost_all.sum()
         eq = ((grand - cost_all) - cost_all).abs() <= np.maximum(0.011, 0.0005 * cost_all.abs())
@@ -108,87 +109,179 @@ def _label_series(df: pd.DataFrame) -> pd.Series:
     return lab.str.strip()
 
 
+# ---------------------------------------------------------------- what the checks read from the rows
+@dataclass
+class RowStats:
+    """Everything the row-based checks read, as sums and counts: built from a whole frame, or chunk by chunk and
+    merged (bigfile.py), so a file of any size is checked by the same functions."""
+    rows: int = 0
+    cost_rows: int = 0              # lines with a billed cost
+    total: float = 0.0
+    non_tax: float = 0.0
+    label_cost: float = 0.0         # |cost| of lines with a service or description
+    abs_cost: float = 0.0
+    line_math: bool = False         # the rows have quantity, unit price and cost
+    lm_n: int = 0                   # lines line math tests
+    lm_ok: int = 0
+    ratio_n: int = 0                # cost / (quantity x price) on those lines: count, sum, sum of squares
+    ratio_sum: float = 0.0
+    ratio_sq: float = 0.0
+    dates: bool = False             # the rows have charge dates
+    bad_dates: int = 0
+    currencies: set = field(default_factory=set)
+    charge_types: bool = False      # the rows have a charge type
+    negatives: int = 0              # negative lines not marked credit, refund, adjustment or negation
+
+    @classmethod
+    def of(cls, df: pd.DataFrame) -> RowStats:
+        out = cls()
+        out.add(df)
+        return out
+
+    def add(self, df: pd.DataFrame) -> None:
+        self.rows += len(df)
+        if df.empty or "billed_cost" not in df:
+            return
+        self.cost_rows += int(df["billed_cost"].notna().sum())
+        cost = df["billed_cost"].fillna(0.0)
+        self.total += float(cost.sum())
+        self.non_tax += float(cost[df.get("charge_type", pd.Series(index=df.index)).ne("Tax")].sum())
+        lab = (_label_series(df).str.len().fillna(0) > 0).astype(bool)
+        cabs = df["billed_cost"].abs().fillna(0)
+        self.label_cost += float(cabs[lab].sum())
+        self.abs_cost += float(cabs.sum())
+        need = {"quantity", "unit_price", "billed_cost"}
+        if need <= set(df.columns):
+            self.line_math = True
+            sub = df.dropna(subset=list(need))
+            sub = sub[(sub["quantity"] != 0) & (sub["unit_price"] != 0)]
+            if "charge_type" in sub:                   # a Savings Plan negation prints quantity x the on-demand
+                sub = sub[sub["charge_type"].ne("Negation")]   # rate but its amount cancels the covered usage
+            calc = sub["quantity"] * sub["unit_price"]
+            ok = (calc - sub["billed_cost"]).abs() <= np.maximum(0.011, 0.01 * sub["billed_cost"].abs())
+            self.lm_n += len(sub)
+            self.lm_ok += int(ok.sum())
+            ratio = (sub["billed_cost"] / calc.replace(0, np.nan)).dropna()
+            self.ratio_n += len(ratio)
+            self.ratio_sum += float(ratio.sum())
+            self.ratio_sq += float((ratio * ratio).sum())
+        if "charge_start" in df and df["charge_start"].notna().any():
+            self.dates = True
+            d = pd.to_datetime(df["charge_start"], errors="coerce")
+            self.bad_dates += int((d.notna() & ((d < "2006-01-01")
+                                                | (d > pd.Timestamp.now() + pd.Timedelta(days=62)))).sum())
+        if "currency" in df:
+            self.currencies |= set(df["currency"].dropna().astype(str).str.upper().unique())
+        if "charge_type" in df:
+            self.charge_types = True
+            neg = df["billed_cost"] < 0
+            self.negatives += int((neg & ~df["charge_type"].fillna("").isin(
+                ["Credit", "Refund", "Adjustment", "Negation"])).sum())
+
+    def merge(self, o: RowStats) -> None:
+        for f in ("rows", "cost_rows", "total", "non_tax", "label_cost", "abs_cost", "lm_n", "lm_ok", "ratio_n",
+                  "ratio_sum", "ratio_sq", "bad_dates", "negatives"):
+            setattr(self, f, getattr(self, f) + getattr(o, f))
+        self.line_math |= o.line_math
+        self.dates |= o.dates
+        self.charge_types |= o.charge_types
+        self.currencies |= o.currencies
+
+
 # ---------------------------------------------------------------- checks
 def validate(ext: Extraction, alt: Extraction | None = None, resolved_share: float | None = None,
              kind: str = "cost_lines") -> dict:
-    df = ext.rows
-    checks: list[Check] = []
-    n = len(df)
-    if n == 0 or "billed_cost" not in df or df["billed_cost"].notna().sum() == 0:
-        checks.append(Check("rows", "fail", "No cost rows extracted", -1.0))
-        return _summarize(checks, 0.0, reconciled=False, ext=ext)
-    checks.append(Check("rows", "pass", f"{n} rows", 0.1))
-    cost = df["billed_cost"].fillna(0.0)
-    total = float(cost.sum())
-    non_tax = float(cost[df.get("charge_type", pd.Series(index=df.index)).ne("Tax")].sum())
-
-    checks.append(_labels(df))
-    checks.append(_line_math(df))
-    tot_check, reconciled = _stated_totals(ext, total, non_tax)
+    stats = RowStats.of(ext.rows)
+    if not stats.cost_rows:
+        return _summarize([Check("rows", "fail", "No cost rows extracted", -1.0)], 0.0, reconciled=False)
+    checks = [Check("rows", "pass", f"{stats.rows} rows", 0.1), _labels(stats), _line_math(stats)]
+    tot_check, reconciled = _stated_totals(ext.stated_totals, ext.evidence, stats.total, stats.non_tax, stats.rows)
     checks.append(tot_check)
-    checks.append(_coverage(ext))
+    checks.append(_coverage(ext.amount_like_rows, ext.source_rows, stats.rows, ext.stated_totals))
     if ext.evidence:
-        checks += _tree_checks(ext.evidence, total)
+        checks += _tree_checks(ext.evidence, stats.total)
     if alt is not None:
         checks.append(_dual(ext, alt))
     if (cur := _converted(ext)) is not None:
         checks.append(cur)
-    checks += _plausibility(df)
-    if resolved_share is not None:
-        st = "pass" if resolved_share >= 0.9 else "warn" if resolved_share >= 0.6 else "fail"
-        checks.append(Check("service_resolution", st, f"{resolved_share:.0%} of cost has a resolved service",
-                            {"pass": 0.05, "warn": -0.05, "fail": -0.15}[st]))
-    base = 0.55
-    conf = float(np.clip(base + sum(c.weight for c in checks), 0.0, 1.0))
-    return _summarize(checks, conf, reconciled, ext)
+    checks += _plausibility(stats)
+    checks += _resolution(resolved_share)
+    return _summarize(checks, _confidence(checks), reconciled)
 
 
-def _labels(df: pd.DataFrame) -> Check:
+def validate_stats(stats: RowStats, stated_totals: list[dict], source_rows: int,
+                   resolved_share: float | None = None, unread_rows: int = 0) -> dict:
+    """The verdict of a file read in chunks (bigfile.py): the same checks, names, statuses and weights as validate(),
+    from the merged statistics. Exports have no tree of sums and no second reading. unread_rows: rows of the file the
+    reader could not read (a different number of fields than the header): they can carry money, so the row coverage
+    check fails."""
+    if not stats.cost_rows:
+        return _summarize([Check("rows", "fail", "No cost rows extracted", -1.0)], 0.0, reconciled=False)
+    checks = [Check("rows", "pass", f"{stats.rows} rows", 0.1), _labels(stats), _line_math(stats)]
+    tot_check, reconciled = _stated_totals(stated_totals, {}, stats.total, stats.non_tax, stats.rows)
+    checks.append(tot_check)
+    if unread_rows:
+        checks.append(Check("row_coverage", "fail", f"{unread_rows:,} rows of the file could not be read (a different "
+                            f"number of fields than the header); {source_rows:,} rows were read", -0.25))
+    else:
+        checks.append(_coverage(None, source_rows, stats.rows, stated_totals))
+    checks += _plausibility(stats)
+    checks += _resolution(resolved_share)
+    return _summarize(checks, _confidence(checks), reconciled)
+
+
+def _confidence(checks: list[Check]) -> float:
+    return float(np.clip(0.55 + sum(c.weight for c in checks), 0.0, 1.0))
+
+
+def _resolution(resolved_share: float | None) -> list[Check]:
+    if resolved_share is None:
+        return []
+    st = "pass" if resolved_share >= 0.9 else "warn" if resolved_share >= 0.6 else "fail"
+    return [Check("service_resolution", st, f"{resolved_share:.0%} of cost has a resolved service",
+                  {"pass": 0.05, "warn": -0.05, "fail": -0.15}[st])]
+
+
+def _labels(s: RowStats) -> Check:
     """Spend we can't attribute to anything is not useful: require a label on most of the cost."""
-    lab = _label_series(df).str.len().fillna(0) > 0
-    cost = df["billed_cost"].abs().fillna(0)
-    share = float(cost[lab.astype(bool)].sum() / cost.sum()) if cost.sum() else 0.0
+    share = s.label_cost / s.abs_cost if s.abs_cost else 0.0
     if share >= 0.9:
         return Check("labels", "pass", f"{share:.0%} of cost has a service or description", 0.0)
     return Check("labels", "fail", f"Only {share:.0%} of cost has a service or description label", -0.35)
 
 
-def _line_math(df: pd.DataFrame) -> Check:
-    need = {"quantity", "unit_price", "billed_cost"}
-    if not need <= set(df.columns):
+def _line_math(s: RowStats) -> Check:
+    if not s.line_math:
         return Check("line_math", "skip", "No quantity and unit price columns")
-    sub = df.dropna(subset=list(need))
-    sub = sub[(sub["quantity"] != 0) & (sub["unit_price"] != 0)]
-    if "charge_type" in sub:                           # a Savings Plan negation prints quantity x the on-demand
-        sub = sub[sub["charge_type"].ne("Negation")]   # rate but its amount cancels the covered usage
-    if len(sub) < 3:
+    if s.lm_n < 3:
         return Check("line_math", "skip", "Too few lines with quantity and unit price")
-    calc = sub["quantity"] * sub["unit_price"]
-    ok = (calc - sub["billed_cost"]).abs() <= np.maximum(0.011, 0.01 * sub["billed_cost"].abs())
-    share = float(ok.mean())
+    share = s.lm_ok / s.lm_n
     if share >= 0.95:
-        return Check("line_math", "pass", f"{share:.0%} of {len(sub)} lines: qty x price = amount", 0.15)
-    ratio = (sub["billed_cost"] / calc.replace(0, np.nan)).dropna()
-    if len(ratio) and ratio.std() / max(1e-9, abs(ratio.mean())) < 0.01:
-        return Check("line_math", "warn",
-                     f"Consistent ratio {ratio.mean():.4g} between amount and qty x price "
-                     "(unit block size, discount or currency conversion)", 0.0)
-    return Check("line_math", "fail", f"Only {share:.0%} of {len(sub)} lines match qty x price", -0.15)
+        return Check("line_math", "pass", f"{share:.0%} of {s.lm_n} lines: qty x price = amount", 0.15)
+    if s.ratio_n:
+        mean = s.ratio_sum / s.ratio_n
+        var = (s.ratio_sq - s.ratio_n * mean * mean) / (s.ratio_n - 1) if s.ratio_n > 1 else float("nan")
+        if max(var, 0.0) ** 0.5 / max(1e-9, abs(mean)) < 0.01:
+            return Check("line_math", "warn",
+                         f"Consistent ratio {mean:.4g} between amount and qty x price "
+                         "(unit block size, discount or currency conversion)", 0.0)
+    return Check("line_math", "fail", f"Only {share:.0%} of {s.lm_n} lines match qty x price", -0.15)
 
 
-def _stated_totals(ext: Extraction, total: float, non_tax: float) -> tuple[Check, bool]:
-    rec = (ext.evidence or {}).get("reconcile") or {}
-    if (dup := _duplicates(ext.evidence or {})) is not None:
+def _stated_totals(stated_totals: list[dict], evidence: dict, total: float, non_tax: float,
+                   n_rows: int) -> tuple[Check, bool]:
+    rec = (evidence or {}).get("reconcile") or {}
+    if (dup := _duplicates(evidence or {})) is not None:
         return dup, False
     if rec.get("src"):
         return _tree_total(rec, total)
     cands = []
-    for t in ext.stated_totals:
+    for t in stated_totals:
         amt = parse_number(t.get("amount"))
         if amt is not None and t.get("kind") not in ("subtotal", "llm_claim"):   # an LLM's own sum proves nothing
             cands.append((t, amt))
     if not cands:
-        subs = [parse_number(t.get("amount")) for t in ext.stated_totals if t.get("kind") == "subtotal"]
+        subs = [parse_number(t.get("amount")) for t in stated_totals if t.get("kind") == "subtotal"]
         subs = [x for x in subs if x is not None]
         if subs and abs(sum(subs) - non_tax) <= max(0.05, 0.0005 * abs(non_tax)):
             return Check("stated_total", "pass", f"{len(subs)} stated subtotals sum to the extracted lines "
@@ -196,8 +289,8 @@ def _stated_totals(ext: Extraction, total: float, non_tax: float) -> tuple[Check
         detail = "No stated total found" + (f" ({len(subs)} subtotals seen, sum {sum(subs):,.2f})" if subs else "")
         return Check("stated_total", "skip", detail + "; marked unreconciled", 0.0), False
     # n lines printed to the cent can miss their printed total by half a cent each at most
-    tol = min(max(0.05, 0.0005 * abs(total)), bound(len(ext.rows)))
-    tax_rows =[parse_number(t.get("amount")) or 0 for t in ext.stated_totals if re.search(r"tax", t.get("label", ""), re.I)]
+    tol = min(max(0.05, 0.0005 * abs(total)), bound(n_rows))
+    tax_rows = [parse_number(t.get("amount")) or 0 for t in stated_totals if re.search(r"tax", t.get("label", ""), re.I)]
     targets = {"sum of lines": total, "sum before tax": non_tax, "sum plus stated tax": total + sum(tax_rows)}
     for t, amt in sorted(cands, key=lambda x: -abs(x[1])):
         for name, val in targets.items():
@@ -263,18 +356,19 @@ def _tree_total(rec: dict, total: float) -> tuple[Check, bool]:
     return Check("stated_total", "pass", detail, 0.35), True
 
 
-def _coverage(ext: Extraction) -> Check:
-    if ext.amount_like_rows:                                    # grid tables
-        accounted = len(ext.rows) + len([t for t in ext.stated_totals if t.get("kind") in ("subtotal", "total", "total_row", "end_anchor")])
-        share = min(1.0, accounted / ext.amount_like_rows)
+def _coverage(amount_like_rows: int | None, source_rows: int, n_rows: int, stated_totals: list[dict]) -> Check:
+    if amount_like_rows:                                        # grid tables
+        accounted = n_rows + len([t for t in stated_totals
+                                  if t.get("kind") in ("subtotal", "total", "total_row", "end_anchor")])
+        share = min(1.0, accounted / amount_like_rows)
         st = "pass" if share >= 0.98 else "warn" if share >= 0.9 else "fail"
-        return Check("row_coverage", st, f"{accounted} of {ext.amount_like_rows} rows with amounts accounted for",
+        return Check("row_coverage", st, f"{accounted} of {amount_like_rows} rows with amounts accounted for",
                      {"pass": 0.1, "warn": -0.05, "fail": -0.25}[st])
-    if ext.source_rows:
-        moved = len([t for t in ext.stated_totals if t.get("kind") == "total_row"])
-        share = min(1.0, (len(ext.rows) + moved) / ext.source_rows)
+    if source_rows:
+        moved = len([t for t in stated_totals if t.get("kind") == "total_row"])
+        share = min(1.0, (n_rows + moved) / source_rows)
         st = "pass" if share >= 0.9 else "warn" if share >= 0.5 else "fail"
-        return Check("row_coverage", st, f"{len(ext.rows) + moved} of {ext.source_rows} source rows accounted for",
+        return Check("row_coverage", st, f"{n_rows + moved} of {source_rows} source rows accounted for",
                      {"pass": 0.05, "warn": -0.05, "fail": -0.2}[st])
     return Check("row_coverage", "skip", "No source row count")
 
@@ -317,22 +411,14 @@ def _tree_checks(ev: dict, total: float) -> list[Check]:
     return out
 
 
-def _plausibility(df: pd.DataFrame) -> list[Check]:
+def _plausibility(s: RowStats) -> list[Check]:
     out = []
-    if "charge_start" in df and df["charge_start"].notna().any():
-        d = pd.to_datetime(df["charge_start"], errors="coerce")
-        bad = d.notna() & ((d < "2006-01-01") | (d > pd.Timestamp.now() + pd.Timedelta(days=62)))
-        if bad.any():
-            out.append(Check("dates", "warn", f"{int(bad.sum())} dates out of range", -0.05))
-    if "currency" in df:
-        cur = df["currency"].dropna().astype(str).str.upper().unique()
-        if len(cur) > 1:
-            out.append(Check("currency", "warn", f"Multiple currencies: {list(cur)[:5]}", -0.05))
-    if "charge_type" in df:
-        neg = df["billed_cost"] < 0
-        unexplained = neg & ~df["charge_type"].fillna("").isin(["Credit", "Refund", "Adjustment", "Negation"])
-        if unexplained.sum() > max(2, 0.05 * len(df)):
-            out.append(Check("negatives", "warn", f"{int(unexplained.sum())} negative lines not marked as credits", -0.05))
+    if s.dates and s.bad_dates:
+        out.append(Check("dates", "warn", f"{s.bad_dates} dates out of range", -0.05))
+    if len(s.currencies) > 1:
+        out.append(Check("currency", "warn", f"Multiple currencies: {sorted(s.currencies)[:5]}", -0.05))
+    if s.charge_types and s.negatives > max(2, 0.05 * s.rows):
+        out.append(Check("negatives", "warn", f"{s.negatives} negative lines not marked as credits", -0.05))
     return out
 
 
@@ -352,7 +438,7 @@ def completeness(checks: list[Check], reconciled: bool) -> str:
     return "unchecked"
 
 
-def _summarize(checks: list[Check], conf: float, reconciled: bool, ext: Extraction) -> dict:
+def _summarize(checks: list[Check], conf: float, reconciled: bool) -> dict:
     critical_fail = any(c.status == "fail" and c.name in CRITICAL for c in checks)
     if reconciled and conf >= 0.7 and not critical_fail:
         status = "reconciled"

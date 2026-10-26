@@ -90,6 +90,7 @@ class Region:
     df: pd.DataFrame | None = None # frame regions: raw frame, header NOT yet applied
     header_row: int | None = None  # frame regions: detected header row offset
     scanned: bool = False          # PDF page with no text layer
+    row_offset: int = 0            # frame regions: data rows before this one (a chunk of a large file, bigfile.py)
 
     @property
     def is_frame(self) -> bool:

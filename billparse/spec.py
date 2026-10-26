@@ -7,20 +7,22 @@ regex lines), plus header fields and stated totals. See specs/README.md for the 
 from __future__ import annotations
 
 import copy
+import json
 import re
 from dataclasses import dataclass, field
 
+import numpy as np
 import pandas as pd
 
 from . import expr
 from .docmodel import Document, Region
 from .layout import _row_to_cols, build_columns, extract_fields, extract_lines, extract_table, find_header, norm_h
 from .mapper import map_columns
-from .transforms import CANONICAL, TRANSFORMS, apply_transforms, default_transforms, parse_number
+from .transforms import CANONICAL, TRANSFORMS, apply_transforms, default_transforms, map_unique, parse_number
 
 ALLOWED_TOP = {"id", "version", "trust", "extends", "detect", "meta", "source", "table", "columns",
                "derive", "reshape", "filters", "fields", "lines", "totals", "fingerprint", "stats",
-               "created_at", "parent", "notes", "tree", "context"}
+               "created_at", "parent", "notes", "tree", "context", "maps"}
 
 
 class SpecError(ValueError):
@@ -38,6 +40,7 @@ class Extraction:
     warnings: list[str] = field(default_factory=list)
     spec_id: str = ""
     evidence: dict = field(default_factory=dict)     # tree source: subtotals, views, unexplained amounts
+    unmapped: dict = field(default_factory=dict)     # the fields guessed for columns the spec does not name
 
 
 # ---------------------------------------------------------------- validation of spec shape
@@ -59,6 +62,10 @@ def check_spec(spec: dict) -> None:
         expr.validate(e)
     for p in spec.get("lines") or []:
         re.compile(p["pattern"])
+    maps = spec.get("maps")
+    if maps is not None and not (isinstance(maps, dict) and all(isinstance(k, str) and isinstance(v, str)
+                                                                for k, v in maps.items())):
+        raise SpecError('maps must be {"column": "prefix"}')
     if not (spec.get("columns") or spec.get("lines") or spec.get("source") in ("tree", "iac")):
         raise SpecError("Spec maps no columns")
     if spec.get("tree") is not None:
@@ -154,6 +161,7 @@ def run(spec: dict, doc: Document, catalog_dir=None) -> Extraction:
         _totals_from_fields(spec, ext)
         return ext
 
+    raw = _expand_maps(spec, raw)
     raw, reshape_totals = _reshape(spec, raw)
     ext.stated_totals += reshape_totals
     if (spec.get("reshape") or {}).get("unpivot"):
@@ -212,7 +220,8 @@ def _frame(spec: dict, regions: list[Region]) -> tuple[Extraction, pd.DataFrame 
         return Extraction(rows=pd.DataFrame()), None
     scored = sorted(frames, key=lambda r: -detect_score(spec, list(r.df.columns)))
     use = [r for r in scored if detect_score(spec, list(r.df.columns)) > 0] or scored[:1]
-    raw = pd.concat([r.df.assign(_src=[f"{r.name}:{i + (r.header_row or 0) + 2}" for i in range(len(r.df))])
+    raw = pd.concat([r.df.assign(_src=[f"{r.name}:{i + (r.header_row or 0) + r.row_offset + 2}"
+                                       for i in range(len(r.df))])
                      for r in use], ignore_index=True)
     return Extraction(rows=pd.DataFrame(), source_rows=len(raw)), raw
 
@@ -283,6 +292,46 @@ def _reshape(spec: dict, raw: pd.DataFrame) -> tuple[pd.DataFrame, list[dict]]:
     return long, totals
 
 
+def _map_values(v) -> dict:
+    """A map cell as a dict: JSON text ('{"a": "b"}'), Hive/Athena text ('{a=b, c=d}'), a dict, or key/value pairs
+    (a Parquet map)."""
+    if isinstance(v, dict):
+        return v
+    if isinstance(v, (list, tuple, np.ndarray)):
+        return {str(k): x for k, x in (tuple(pair) for pair in v)}
+    if not isinstance(v, str) or not v.strip():
+        return {}
+    text = v.strip()
+    try:
+        out = json.loads(text)
+        return out if isinstance(out, dict) else {}
+    except ValueError:
+        pass
+    if text.startswith("{") and text.endswith("}"):
+        return dict(part.split("=", 1) for part in (x.strip() for x in text[1:-1].split(", ")) if "=" in part)
+    return {}
+
+
+def _expand_maps(spec: dict, raw: pd.DataFrame) -> pd.DataFrame:
+    """A column of key/value pairs (CUR 2.0 "product": {"operating_system": "Linux", ...}) gives the columns the spec
+    names with its prefix ("maps": {"product": "product_"} -> product_operating_system), when the file has no such
+    column of its own."""
+    maps = spec.get("maps") or {}
+    if not maps:
+        return raw
+    named = {h for c in (spec.get("columns") or {}).values() for h in _from_list(c)}
+    for col, prefix in maps.items():
+        src = _find_col(raw, [col])
+        want = [h for h in named if h.startswith(prefix) and _find_col(raw, [h]) is None]
+        if src is None or not want:
+            continue
+        parsed = map_unique(raw[src], _map_values)
+        for h in want:
+            key = h[len(prefix):]
+            raw[h] = map_unique(parsed, lambda d, key=key: (d or {}).get(key))
+    return raw
+
+
 def _find_col(df: pd.DataFrame, names: list[str]) -> str | None:
     lookup = {norm_h(c): c for c in df.columns}
     for n in names:
@@ -322,7 +371,9 @@ def _map_columns(spec: dict, raw: pd.DataFrame, ext: Extraction) -> pd.DataFrame
         used.add(src)
         steps = c.get("t") if c.get("t") is not None else default_transforms(fld)
         out[fld] = apply_transforms(raw[src].where(raw[src].notna(), None), steps)
-    _keep_unmapped(raw, out, used)
+    meta = spec.get("meta") or {}
+    ext.unmapped = _keep_unmapped(raw, out, used, guess=not meta.get("exact_columns"), plan=spec.get("_unmapped"),
+                                  extra=not (meta.get("exact_columns") or spec.get("_no_extra")))
     for meta_col in ("_src", "_group"):
         if meta_col in raw:
             out[meta_col] = raw[meta_col]
@@ -333,26 +384,65 @@ def _map_columns(spec: dict, raw: pd.DataFrame, ext: Extraction) -> pd.DataFrame
 NEVER_ADDED = {"billed_cost", "tax", "unit_price", "list_cost", "contracted_cost", "effective_cost"}
 
 
-def _keep_unmapped(raw: pd.DataFrame, out: pd.DataFrame, used: set) -> None:
+def _keep_unmapped(raw: pd.DataFrame, out: pd.DataFrame, used: set, guess: bool = True,
+                   plan: dict | None = None, extra: bool = True) -> dict:
     """The columns the spec did not map are not lost: a header the mapper's rules know fills a field the spec left
-    empty (never a cost), and every other column goes in the line's extra text ("Header: value | ...")."""
+    empty (never a cost), and every other column goes in the line's extra text ("Header: value | ..."). Returns the
+    fields it guessed. guess=False (a format whose every column has one meaning, meta.exact_columns): nothing is
+    guessed, and no extra text is kept (a provider export's other columns are product details the spec chose not to
+    read). plan: the guesses to use (the same for every chunk of a large file). extra=False: no extra text (a large
+    file: it would cost more memory than the rest of the line)."""
+    if not guess and not extra:
+        return {}
+    if plan is not None and not extra:
+        return _take(raw, out, {f: c for f, c in plan.items() if c in raw.columns})
     left = [c for c in raw.columns if c not in used and not str(c).startswith("_") and str(c).strip()
             and raw[c].astype(str).str.strip().replace({"nan": "", "None": ""}).ne("").any()]
     if not left:
-        return
-    chosen, _, _ = map_columns({c: raw[c].head(200).tolist() for c in left})
+        return {}
+    if not guess:
+        chosen = {}
+    elif plan is not None:
+        chosen = {f: c for f, c in plan.items() if c in raw.columns}
+    else:
+        chosen, _, _ = map_columns({c: raw[c].head(200).tolist() for c in left})
+    taken = _take(raw, out, chosen)
+    left = [c for c in left if c not in taken.values()]
+    if not left or not extra:
+        return taken
+    parts = [map_unique(raw[c], lambda v, c=c: "" if v is None or (isinstance(v, float) and v != v)
+                        or str(v).strip() == "" else f"{c}: {str(v).strip()}") for c in left]
+    extra = parts[0].str.cat(parts[1:], sep=" | ") if len(parts) > 1 else parts[0]
+    extra = extra.str.replace(r"( \| )+", " | ", regex=True).str.strip(" |")
+    out["_extra"] = extra.where(extra.ne(""), None)
+    return taken
+
+
+def _take(raw: pd.DataFrame, out: pd.DataFrame, chosen: dict) -> dict:
+    """The guessed fields the spec left empty (never a cost), filled from their columns."""
+    taken = {}
     for fld, col in chosen.items():
         if fld in NEVER_ADDED or fld in out:
             continue
         out[fld] = apply_transforms(raw[col].where(raw[col].notna(), None), default_transforms(fld))
-        left.remove(col)
-    if not left:
-        return
-    parts = [raw[c].map(lambda v, c=c: "" if v is None or (isinstance(v, float) and v != v) or str(v).strip() == ""
-                        else f"{c}: {str(v).strip()}") for c in left]
-    extra = parts[0].str.cat(parts[1:], sep=" | ") if len(parts) > 1 else parts[0]
-    extra = extra.str.replace(r"( \| )+", " | ", regex=True).str.strip(" |")
-    out["_extra"] = extra.where(extra.ne(""), None)
+        taken[fld] = col
+    return taken
+
+
+def needed_columns(spec: dict, header: list[str], unmapped: dict | None = None) -> list[str]:
+    """The columns of a file (its header) that a frame spec reads: the ones its columns name (or match by
+    header_regex), the ones its derives read with col(), its map columns, and the guessed ones (unmapped). A large
+    file reads only these (bigfile.py)."""
+    names = [h for c in (spec.get("columns") or {}).values() for h in _from_list(c)]
+    names += re.findall(r'col\(\s*"([^"]+)"\s*\)', " ".join(map(str, (spec.get("derive") or {}).values())))
+    names += list(spec.get("maps") or {}) + list((unmapped or {}).values())
+    frame = pd.DataFrame(columns=header)
+    out = {c for c in (_find_col(frame, [n]) for n in names if not n.startswith("_")) if c is not None}
+    for c in (spec.get("columns") or {}).values():
+        if c.get("header_regex"):
+            rx = re.compile(c["header_regex"], re.I)
+            out |= {h for h in header if rx.search(str(h))}
+    return [h for h in header if h in out]
 
 
 HOW = "_how:"                                       # per row: was a derived value printed or computed (contract)
@@ -389,7 +479,7 @@ def _filter(spec: dict, rows: pd.DataFrame) -> pd.DataFrame:
         elif "drop_if_match" in f:
             col, rx = f["drop_if_match"]["field"], re.compile(f["drop_if_match"]["regex"], re.I)
             if col in rows:
-                keep &= ~rows[col].map(lambda v: v is not None and bool(rx.search(str(v)))).astype(bool)
+                keep &= ~map_unique(rows[col], lambda v, rx=rx: v is not None and bool(rx.search(str(v)))).astype(bool)
         elif "keep_if_in" in f:
             col, vals = f["keep_if_in"]["field"], {str(v).lower() for v in f["keep_if_in"]["values"]}
             if col in rows:

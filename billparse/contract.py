@@ -35,7 +35,8 @@ STATUS = {"reconciled": "auto_accepted", "unreconciled": "auto_accepted", "auxil
           "needs_review": "needs_review", "unsupported": "needs_review", "approved": "approved"}
 DOC_TYPE = {"price_sheet": "estimate", "recommendations": "other", "inventory": "inventory"}
 TEXT_FIELDS = ("pricing_model", "commitment_id", "commitment_type", "commitment_status", "instance_type",
-               "operating_system", "database_engine", "deployment_option", "usage_type", "unit", "line_type_raw")
+               "operating_system", "database_engine", "deployment_option", "usage_type", "unit", "line_type_raw",
+               "sku_id", "sku_price_id", "meter_id")
 COST_FIELDS = ("list_cost", "contracted_cost", "effective_cost")    # typed beside the billed cost (Charge.cost)
 COST_TYPES = {"billed": "cost", "list": "list_cost", "contracted": "contracted_cost", "effective": "effective_cost"}
 USAGE_KINDS = {"usage", "marketplace_usage"}
@@ -44,7 +45,7 @@ HOW = "_how:"                   # per row: how a value was made ("printed", "der
 # the dimensions a roll-up keeps: lines that differ in none of them are one charge
 ROLLUP_KEYS = ["service_code", "service_name", "service_raw", "region", "account_id", "charge_type", "pricing_model",
                "instance_type", "operating_system", "database_engine", "deployment_option", "usage_type", "unit",
-               "commitment_id", "currency", "provider", "coverage", "line_type_raw"]
+               "commitment_id", "currency", "provider", "coverage", "line_type_raw", "sku_id", "sku_price_id", "meter_id"]
 
 
 # ---------------------------------------------------------------- cites
@@ -126,10 +127,10 @@ def build(summary: dict, rows: pd.DataFrame | None, file_doc: FileDoc | None) ->
     """(document, meta, bundle) for one parse."""
     loc = Locator(file_doc)
     rows = rows if rows is not None else pd.DataFrame()
-    rolled = len(rows) > MAX_CHARGES and "billed_cost" in rows
-    lines = len(rows)
-    if rolled:
-        rows = _rollup(rows)
+    lines = int(rows["_lines"].sum()) if "_lines" in rows else len(rows)   # rolled up before: a large file
+    rolled = lines > len(rows)
+    if len(rows) > MAX_CHARGES and "billed_cost" in rows:
+        rows, rolled = _rollup(rows), True
     doc = Document(source_name=summary.get("file") or "", sha256=summary.get("sha256") or "",
                    page_count=max(1, len(loc.page)))
     head = Cite(text="the file as a whole")
@@ -204,6 +205,8 @@ def _rollup(rows: pd.DataFrame) -> pd.DataFrame:
         df[k] = df[k].astype("string").fillna("")
     df["billed_cost"] = pd.to_numeric(df["billed_cost"], errors="coerce").fillna(0.0)
     agg: dict = {"billed_cost": "sum", "_src": "first"} if "_src" in df else {"billed_cost": "sum"}
+    if "_lines" in df:                                  # lines rolled up before (bigfile.py)
+        agg["_lines"] = "sum"
     for c in COST_FIELDS:                               # an all-empty group stays empty, never 0
         if c in df:
             df[c] = pd.to_numeric(df[c], errors="coerce")
@@ -221,7 +224,8 @@ def _rollup(rows: pd.DataFrame) -> pd.DataFrame:
     if "description" in df:
         agg["description"] = "first"
     out = df.groupby(keys, dropna=False, sort=False).agg(agg)
-    out["_lines"] = df.groupby(keys, dropna=False, sort=False).size()
+    if "_lines" not in df:
+        out["_lines"] = df.groupby(keys, dropna=False, sort=False).size()
     out = out.reset_index()
     for k in keys:
         out[k] = out[k].replace("", None)
@@ -297,7 +301,7 @@ def _charge(i: int, r: dict, loc: Locator, sections: dict[str, str]) -> Charge:
         c.period_start = cv(d, cite)
     if (d := _date(r.get("charge_end"))):
         c.period_end = cv(d, cite)
-    if (p := _str(r.get("product_code"))):
+    if "sku_id" not in r and (p := _str(r.get("product_code"))):    # no SKU column: the product id, as before
         c.sku_id = cv(p, cite)
     attrs: dict = {}
     # effective_cost and list_cost: deprecated in 1.4: use the typed fields

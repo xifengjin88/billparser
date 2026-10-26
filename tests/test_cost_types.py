@@ -338,3 +338,14 @@ def test_every_sample_fits_the_strict_contract(pipe, name):
     _, doc = parse(pipe, FILES / name)
     out = to_schema(doc)
     assert out.schema_version == SCHEMA_VERSION and len(out.charges) == len(doc.charges)
+
+
+def test_map_unique_is_the_same_as_map():
+    """Task 02: map_unique computes f once per distinct value; values and inferred type are those of Series.map."""
+    import numpy as np
+
+    from billparse.transforms import map_unique
+    s = pd.Series(np.array(["a", "b", None, "a", float("nan"), " c "] * 1000, dtype=object))
+    for f in (lambda v: {"a": 1.5}.get(v), lambda v: v.strip() if isinstance(v, str) else None,
+              lambda v: v == "a", lambda v: 1 if v == "a" else "x", lambda v: "none" if v is None else str(v)):
+        assert map_unique(s, f).equals(s.map(f))

@@ -20,6 +20,8 @@ from svcres.catalog import Catalog, build
 from svcres.resolver import Resolver
 from svcres.seeds import AZURE_FAMILY_TO_CATEGORY, FEE_SERVICES
 
+from .transforms import map_unique
+
 COMMITTABLE = {"Compute", "Databases", "Containers", "Analytics"}
 # Negation (AWS SavingsPlanNegation) cancels covered usage printed at the on-demand rate: not usage, not a credit
 NON_USAGE = {"Tax", "Credit", "Refund", "Purchase", "Fee", "Support", "Adjustment", "Negation"}
@@ -49,13 +51,21 @@ def _load_resolver(data_dir: Path) -> Resolver:
 
 
 def resolve_services(rows: pd.DataFrame, data_dir: Path) -> float | None:
+    """Resolve the services of the rows; returns the share of usage cost with a resolved service."""
+    resolved, usage = resolve_service_sums(rows, data_dir)
+    return resolved / usage if usage else None
+
+
+def resolve_service_sums(rows: pd.DataFrame, data_dir: Path) -> tuple[float, float]:
+    """As resolve_services, but the share's parts (usage cost resolved, usage cost): a large file adds them up
+    chunk by chunk (bigfile.py)."""
     with RESOLVER_LOCK:
         return _resolve_services(rows, data_dir)
 
 
-def _resolve_services(rows: pd.DataFrame, data_dir: Path) -> float | None:
+def _resolve_services(rows: pd.DataFrame, data_dir: Path) -> tuple[float, float]:
     if rows.empty or not ({"service_raw", "product_code", "description"} & set(rows.columns)):
-        return None
+        return 0.0, 0.0
     res = get_resolver(data_dir)
     provider = None
     if "provider" in rows and rows["provider"].notna().any():
@@ -69,29 +79,31 @@ def _resolve_services(rows: pd.DataFrame, data_dir: Path) -> float | None:
         if not todo.any():
             continue
         table = res.resolve_many(rows.loc[todo, col].astype(str).str.strip().unique(), provider)
-        picked[todo] = rows.loc[todo, col].astype(str).str.strip().map(
-            lambda v: table[v] if v in table and table[v].service_key else None)
+        picked[todo] = map_unique(rows.loc[todo, col].astype(str).str.strip(),
+                                  lambda v, table=table: table[v] if v in table and table[v].service_key else None)
     if provider is None:                                # one provider by its exact matches: weak matches elsewhere retried
         picked = _one_provider(rows, picked, res)
-    rows["service"] = picked.map(lambda r: r.service if r else None)
+    got = _fields(picked, ("service", "service_code", "category", "method", "provider"))
+    rows["service"] = got["service"]
     rows["service_name"] = rows["service"]                    # the catalog's name: empty when nothing matched
-    rows["service_code"] = picked.map(lambda r: r.service_code if r else None)
-    rows["category"] = picked.map(lambda r: r.category if r else None)
+    rows["service_code"] = got["service_code"]
+    rows["category"] = got["category"]
     for col in ("service_raw", "description"):          # a line printed by Azure service family ("Compute")
         if col in rows and rows["category"].isna().any():
-            fam = rows[col].map(lambda v: AZURE_FAMILY_TO_CATEGORY.get(str(v).strip()) if isinstance(v, str) else None)
+            fam = map_unique(rows[col], lambda v: AZURE_FAMILY_TO_CATEGORY.get(str(v).strip()) if isinstance(v, str)
+                             else None)
             rows["category"] = rows["category"].where(rows["category"].notna(), fam)
-    rows["resolved_by"] = picked.map(lambda r: r.method if r else None)
+    rows["resolved_by"] = got["method"]
     if "provider" not in rows or rows["provider"].isna().all():
-        rows["provider"] = picked.map(lambda r: r.provider if r else None)
+        rows["provider"] = got["provider"]
     else:
-        rows["provider"] = rows["provider"].where(rows["provider"].notna(), picked.map(lambda r: r.provider if r else None))
+        rows["provider"] = rows["provider"].where(rows["provider"].notna(), got["provider"])
     # unresolved lines keep their raw label so summaries still show them
     rows["service"] = rows["service"].where(rows["service"].notna(), rows.get("service_raw"))
     _fees_and_areas(rows)
     usage = ~rows.get("charge_type", pd.Series([None] * len(rows), index=rows.index)).isin(NON_USAGE)
     cost = rows["billed_cost"].abs().fillna(0).where(usage, 0)
-    return float(cost[picked.notna()].sum() / cost.sum()) if cost.sum() else None
+    return float(cost[picked.notna()].sum()), float(cost.sum())
 
 
 MARKETPLACE_TEXT = re.compile(r"\bmarketplace\b|\bsold by\b", re.I)
@@ -130,17 +142,33 @@ def _fees_and_areas(rows: pd.DataFrame) -> None:
 EXACT_METHODS = ("code", "synonym", "name")
 
 
+def _fields(picked: pd.Series, names: tuple[str, ...]) -> dict[str, pd.Series]:
+    """Fields of the resolution on each row, read once per distinct resolution (a file has a few hundred services
+    on millions of lines)."""
+    vals = picked.to_numpy(dtype=object)
+    codes, _ = pd.factorize(np.fromiter(map(id, vals), dtype=np.int64, count=len(vals)))
+    _, first = np.unique(codes, return_index=True)
+    objs = vals[first]
+    out = {}
+    for name in names:
+        per = np.array([getattr(o, name) if o is not None else None for o in objs] + [None], dtype=object)
+        out[name] = pd.Series(per[codes], index=picked.index).infer_objects()
+    return out
+
+
 def _one_provider(rows: pd.DataFrame, picked: pd.Series, res: Resolver) -> pd.Series:
     """A file with no provider column whose exact matches (code, synonym, name) are 80% or more one provider's: a
     prefix or fuzzy match to another provider ("Cloud Composer" -> Azure "Cloud Services" in a GCP export) is tried
     again within that provider, and left unmatched when it finds nothing there."""
-    exact = [r for r in picked if r is not None and r.method.split(":")[-1] in EXACT_METHODS]
-    if not exact:
+    got = _fields(picked, ("method", "provider"))
+    how = got["method"].map(lambda m: m.split(":")[-1] if isinstance(m, str) else None)
+    is_exact = how.isin(EXACT_METHODS)
+    if not is_exact.any():
         return picked
-    top, n = Counter(r.provider for r in exact).most_common(1)[0]
-    if n < 0.8 * len(exact):
+    top, n = Counter(got["provider"][is_exact]).most_common(1)[0]
+    if n < 0.8 * int(is_exact.sum()):
         return picked
-    weak = picked.map(lambda r: r is not None and r.provider != top and r.method.split(":")[-1] not in EXACT_METHODS)
+    weak = picked.notna() & got["provider"].ne(top) & ~is_exact
     if "provider" in rows:                              # a provider the file prints is kept (a multi-cloud bill)
         weak &= rows["provider"].isna()
     if not weak.any():
@@ -152,8 +180,9 @@ def _one_provider(rows: pd.DataFrame, picked: pd.Series, res: Resolver) -> pd.Se
         if todo is None or not todo.any():
             continue
         table = res.resolve_many(rows.loc[todo, col].astype(str).str.strip().unique(), top)
-        picked[todo] = rows.loc[todo, col].astype(str).str.strip().map(
-            lambda v, table=table: table[v] if v in table and table[v].service_key and table[v].provider == top else None)
+        picked[todo] = map_unique(rows.loc[todo, col].astype(str).str.strip(),
+                                  lambda v, table=table: table[v] if v in table and table[v].service_key
+                                  and table[v].provider == top else None)
     return picked
 
 
@@ -164,12 +193,12 @@ TYPE_OF_CHARGE = {"Tax": "tax", "Credit": "credit", "Refund": "credit", "Purchas
 
 def _kinds(df: pd.DataFrame) -> pd.Series:
     """Each line's kind: usage, tax, credit, commitment_fee, support_fee, fee, marketplace, other."""
-    def one(t, cat):
-        if t is None or pd.isna(t) or t == "Usage":
-            return "marketplace" if cat == "Marketplace" else "usage"
-        return TYPE_OF_CHARGE.get(t, "other")
-    cats = df["category"] if "category" in df else pd.Series(None, index=df.index)
-    return pd.Series([one(t, c) for t, c in zip(df["charge_type"], cats)], index=df.index)
+    t = df["charge_type"]
+    cats = df["category"] if "category" in df else pd.Series(None, index=df.index, dtype=object)
+    usage = (t.isna() | t.eq("Usage")).to_numpy()
+    other = t.map(TYPE_OF_CHARGE).fillna("other").to_numpy(dtype=object)
+    return pd.Series(np.where(usage, np.where(cats.eq("Marketplace").to_numpy(), "marketplace", "usage"), other),
+                     index=df.index)
 
 
 def _by_type(df: pd.DataFrame, key: pd.Series, name: str) -> list[dict]:
@@ -247,9 +276,11 @@ def _period(df: pd.DataFrame, fields: dict) -> dict:
         d = pd.to_datetime(df["charge_start"], errors="coerce").dropna()
         end = pd.to_datetime(df["charge_end"], errors="coerce").dropna().max() if "charge_end" in df else None
         has_end = end is not None and not pd.isna(end)
-        start, last = d.min(), max(d.max(), end) if has_end else d.max()
+        # rolled-up lines (bigfile.py) keep each group's first start and, apart, its last
+        d_max = pd.to_datetime(df["_last_start"], errors="coerce").max() if "_last_start" in df else d.max()
+        start, last = d.min(), max(d_max, end) if has_end else d_max
         # end dates are exclusive (next day 00:00, as in CUR) unless they fall on the last start day
-        inclusive = not has_end or end.normalize() == d.max().normalize()
+        inclusive = not has_end or end.normalize() == d_max.normalize()
         days = max(1, (last.normalize() - start.normalize()).days + (1 if inclusive else 0))
         return {"start": start.date().isoformat(), "end": last.date().isoformat(), "days": int(days), "source": "line dates"}
     if "period" in fields:
