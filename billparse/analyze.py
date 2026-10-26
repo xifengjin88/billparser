@@ -339,6 +339,8 @@ FEE_UNUSED = {"rifee", "savingsplanrecurringfee"}   # AWS CUR: their effective c
 AZURE_FAMILY = re.compile(r"^(Standard|Basic)_([A-Z]+)\d+([a-z]*)(?:_[A-Z]\d+)?(?:_(v\d+))?")   # case matters
 ELIGIBLE_NOTE = ("Facts from the file: commitment-eligible usage split by how it was priced, and commitment paid for "
                  "but not used. billparse does not estimate savings.")
+BILLED_NOTE = (" The splits are billed cost: usage a commitment covers can show 0 (an actual-cost export bills it at 0); "
+               "list_cost and quantity give its size.")
 
 
 def instance_family(v) -> str | None:
@@ -354,10 +356,19 @@ def instance_family(v) -> str | None:
 
 
 def _split(df: pd.DataFrame, cost: str) -> dict:
-    """Spend by coverage, and its total."""
-    out = {k: round(float(v), 2) for k, v in df.groupby(df["_cov"], sort=False)[cost].sum().items()
-           if abs(v) >= 0.005}
-    return {**{k: out[k] for k in COVERAGES if k in out}, "total": round(float(df[cost].sum()), 2)}
+    """Spend by coverage and its total, and the size of each coverage's usage apart from how it was billed: its list
+    cost (null when no line prints one) and its quantity per unit. Reserved usage an actual-cost export bills at 0
+    still shows its hours and its list cost."""
+    g = df.groupby(df["_cov"], sort=False)
+    out = {k: round(float(v), 2) for k, v in g[cost].sum().items() if abs(v) >= 0.005}
+    res = {**{k: out[k] for k in COVERAGES if k in out}, "total": round(float(df[cost].sum()), 2)}
+    listed = {k: round(float(v), 2) for k, v in g["_list"].sum(min_count=1).items() if v == v}
+    res["list_cost"] = {k: listed[k] for k in COVERAGES if k in listed}
+    qty = df[df["_qty"].notna()]
+    res["quantity"] = {k: {str(u): round(float(q), 4) for u, q in grp.groupby(grp["_unit"].fillna("unit"))["_qty"].sum().items()}
+                       for k, grp in qty.groupby(qty["_cov"], sort=False)}
+    res["quantity"] = {k: res["quantity"][k] for k in COVERAGES if k in res["quantity"]}
+    return res
 
 
 def _eligible_usage(df: pd.DataFrame) -> dict:
@@ -374,6 +385,9 @@ def _eligible_usage(df: pd.DataFrame) -> dict:
     eligible[cost] = pd.to_numeric(eligible[cost], errors="coerce").fillna(0.0)
     cov = eligible["coverage"] if "coverage" in eligible else pd.Series(None, index=eligible.index, dtype=object)
     eligible["_cov"] = cov.where(cov.isin(COVERAGES), "unknown")
+    eligible["_list"] = pd.to_numeric(eligible["list_cost"], errors="coerce") if "list_cost" in eligible else float("nan")
+    eligible["_qty"] = pd.to_numeric(eligible["quantity"], errors="coerce") if "quantity" in eligible else float("nan")
+    eligible["_unit"] = eligible["unit"] if "unit" in eligible else None
     by_category = {c: _split(g, cost) for c, g in eligible.groupby(cats[eligible.index], sort=False)}
     by_category = dict(sorted(by_category.items(), key=lambda x: -abs(x[1]["total"])))
 
@@ -399,9 +413,10 @@ def _eligible_usage(df: pd.DataFrame) -> dict:
         od = eligible[eligible["_cov"].eq("on_demand")]
         if month.nunique() > 1:
             monthly = {k: round(float(v), 2) for k, v in od.groupby(month[od.index])[cost].sum().items()}
+    note = ELIGIBLE_NOTE if has_effective else ELIGIBLE_NOTE + BILLED_NOTE
     return {"cost_type": "effective" if has_effective else "billed", "by_category": by_category,
             "by_group": groups, "unused_commitment_spend": _unused(df, unused_line), "monthly_on_demand": monthly,
-            "note": ELIGIBLE_NOTE}
+            "note": note}
 
 
 def _unused(df: pd.DataFrame, unused_line: pd.Series) -> dict | None:

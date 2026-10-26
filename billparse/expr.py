@@ -44,7 +44,8 @@ def _cur_effective(line_type: pd.Series, billed: pd.Series, ri: pd.Series, sp: p
 
     The recurring fee lines carry the commitment that was not used (AWS, "Understanding your amortized costs"):
     RIFee -> unused amortized upfront fee + unused recurring fee; SavingsPlanRecurringFee -> total commitment to date
-    - used commitment. When the file has no such columns, those lines stay 0 as the other fee lines."""
+    - used commitment. When the file has no such columns, those lines have no effective cost: how much of the
+    commitment was unused cannot be told (0 would read as "nothing wasted")."""
     if ri.attrs.get("missing") and sp.attrs.get("missing"):
         return _missing(len(billed), billed.index)
     kind = line_type.map(lambda v: re.sub(r"[\s_-]+", "", str(v).lower()) if isinstance(v, str) else "")
@@ -57,14 +58,18 @@ def _cur_effective(line_type: pd.Series, billed: pd.Series, ri: pd.Series, sp: p
 
     def given(*cols) -> bool:
         return all(isinstance(c, pd.Series) and not c.attrs.get("missing") for c in cols)
+    fee = kind.eq("rifee")
     if given(ri_unused_upfront, ri_unused_recurring):
-        fee = kind.eq("rifee")
         unused = ri_unused_upfront.reindex(billed.index).fillna(0) + ri_unused_recurring.reindex(billed.index).fillna(0)
         out[fee] = unused[fee]
+    else:
+        out[fee] = np.nan
+    fee = kind.eq("savingsplanrecurringfee")
     if given(sp_total, sp_used):
-        fee = kind.eq("savingsplanrecurringfee")
         unused = sp_total.reindex(billed.index) - sp_used.reindex(billed.index).fillna(0)
         out[fee] = unused[fee]
+    else:
+        out[fee] = np.nan
     out.attrs["how"] = pd.Series(np.where(spread, "derived", "printed"), index=billed.index)
     return out
 

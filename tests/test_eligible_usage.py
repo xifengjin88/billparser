@@ -17,7 +17,7 @@ from billparse.schema import SCHEMA_VERSION
 
 ROOT = Path(__file__).resolve().parents[1]
 FILES = ROOT / "samples" / "files"
-UNUSED = {"aws_cur2_commitments.csv.gz": 0.0, "aws_cur_legacy_full.csv.gz": 5.04, "azure_amortized.csv": 0.44,
+UNUSED = {"aws_cur2_commitments.csv.gz": None, "aws_cur_legacy_full.csv.gz": 5.04, "azure_amortized.csv": 0.44,
           "focus_commitments.parquet": 0.30, "azure_actual.csv": None, "aws_cur2_no_amortized.csv.gz": None}
 
 
@@ -43,7 +43,8 @@ def test_schema_version():
 def test_covered_usage_is_under_its_commitment(tmp_path):
     e = eligible(tmp_path, "aws_cur2_commitments.csv.gz")
     assert e["cost_type"] == "effective"
-    assert e["by_category"]["Databases"] == {"reserved": 10.8, "total": 10.8}       # the RDS line an RI covers
+    assert e["by_category"]["Databases"] == {"reserved": 10.8, "total": 10.8,      # the RDS line an RI covers
+                                             "list_cost": {"reserved": 18.0}, "quantity": {"reserved": {"Hrs": 72.0}}}
     compute = e["by_category"]["Compute"]
     assert compute["savings_plan"] == 4.32 and compute["spot"] == 4.32 and compute["on_demand"] == 13.82
     fams = {(g["instance_family"], tuple(k for k in g if k in COVERAGES)) for g in e["by_group"]}
@@ -167,3 +168,22 @@ def test_unused_is_null_when_the_file_does_not_print_it(tmp_path):
     assert doc.commitments and all(k.unused is None for k in doc.commitments)
     focus = {str(k.commitment_type.value): k for k in _doc(tmp_path, "focus_commitments.parquet", "f").commitments}
     assert float(focus["savings_plan"].unused.value) == pytest.approx(0.30)
+
+
+def test_a_cur_without_the_unused_columns_never_reports_zero_unused(tmp_path):
+    # amortized columns but no reservation_unused_* / savings plan commitment columns: unknown, not "nothing wasted"
+    u = eligible(tmp_path, "aws_cur2_commitments.csv.gz")["unused_commitment_spend"]
+    assert u["total"] is None and u["note"]
+    assert all(k.unused is None for k in _doc(tmp_path, "aws_cur2_commitments.csv.gz", "d").commitments)
+
+
+@pytest.mark.parametrize("name", ["azure_actual.csv", "aws_cur2_no_amortized.csv.gz"])
+def test_covered_usage_billed_at_zero_keeps_its_size(tmp_path, name):
+    e = eligible(tmp_path, name)
+    assert e["cost_type"] == "billed" and "list_cost and quantity" in e["note"]
+    covered = {"azure_actual.csv": ("Compute", "reserved", 28.8, "1 Hour"),
+               "aws_cur2_no_amortized.csv.gz": ("Databases", "reserved", 18.0, "Hrs")}[name]
+    cat, cov, listed, unit = covered
+    split = e["by_category"][cat]
+    assert split.get(cov, 0.0) == 0.0                       # billed at 0
+    assert split["list_cost"][cov] == pytest.approx(listed) and split["quantity"][cov][unit] == 72.0

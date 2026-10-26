@@ -166,9 +166,12 @@ separated, period detection, and a next-month and next-quarter forecast with a r
 confidence and shorter history (commitment negations are not usage). `commitment_eligible_usage` gives facts, never
 savings: the compute, database, container and analytics usage split by how it was priced (`coverage`: on demand,
 reserved, savings plan, committed use, Spot, unknown), by category and by provider, region and instance family (top
-50); the commitment paid for but not used (Azure and FOCUS unused lines, the unused part of AWS RI and Savings Plan
-fees), `null` with a note when the file does not print its amount; and the on-demand part by month. It uses the
-effective cost when every eligible line has one, else the billed cost, and says which. billparse estimates no
+50), each split also given as list cost and quantity per unit, so usage billed at 0 (reserved usage in an
+actual-cost export) still shows its size; the commitment paid for but not used (Azure and FOCUS unused lines, the
+unused part of AWS RI and Savings Plan fees), `null` with a note when the file does not print its amount (a CUR
+without the unused-commitment columns), never 0; and the on-demand part by month. It uses the effective cost when
+every eligible line has one, else the billed cost, and says which. Each commitment shows its term, payment option
+and unused amount. billparse estimates no
 savings and assumes no discount: that belongs to its consumers. `commitment_opportunity` is deprecated (schema
 1.6) and removed in 1.7.
 
