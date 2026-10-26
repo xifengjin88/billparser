@@ -159,6 +159,8 @@ def _line_math(df: pd.DataFrame) -> Check:
         return Check("line_math", "skip", "No quantity and unit price columns")
     sub = df.dropna(subset=list(need))
     sub = sub[(sub["quantity"] != 0) & (sub["unit_price"] != 0)]
+    if "charge_type" in sub:                           # a Savings Plan negation prints quantity x the on-demand
+        sub = sub[sub["charge_type"].ne("Negation")]   # rate but its amount cancels the covered usage
     if len(sub) < 3:
         return Check("line_math", "skip", "Too few lines with quantity and unit price")
     calc = sub["quantity"] * sub["unit_price"]

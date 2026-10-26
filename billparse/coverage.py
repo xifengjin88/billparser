@@ -24,7 +24,9 @@ from .spec import HOW
 from .transforms import coverage_of
 
 COMMITMENTS = {"reserved", "savings_plan", "committed_use"}
-TEXT_RULES = [("savings_plan", re.compile(r"savings\s*plans?", re.I)),
+TEXT_RULES = [("on_demand", re.compile(r"pay[\s-]*as[\s-]*you[\s-]*go|\bnot\s+applied\b", re.I)),   # before the
+              #   commitment words: "reserved capacity not applied, billed at pay-as-you-go rates" is on demand
+              ("savings_plan", re.compile(r"savings\s*plans?", re.I)),
               ("reserved", re.compile(r"\breserved\b|\breservations?\b|\bRI\b")),
               ("committed_use", re.compile(r"\bCUD\b|committed\s+use", re.I)),
               ("spot", re.compile(r"\bspot\b", re.I)),

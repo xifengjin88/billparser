@@ -155,7 +155,8 @@ def build(summary: dict, rows: pd.DataFrame | None, file_doc: FileDoc | None) ->
     _currency(doc, summary, loc)
     doc.commitments = _commitments(doc.charges)
     usage = [c for c in doc.charges if c.kind.value in USAGE_KINDS]
-    doc.cost_types = [t for t, f in COST_TYPES.items() if any(getattr(c, f) is not None for c in usage)]
+    # a cost type the file gives for every usage line; a partial one would read as a total a consumer can sum
+    doc.cost_types = [t for t, f in COST_TYPES.items() if usage and all(getattr(c, f) is not None for c in usage)]
     basis = (summary.get("header_fields") or {}).get("cost_basis")
     doc.cost_basis = basis if basis in ("actual", "amortized", "unknown") else None
     if kind == "cost_lines":                           # an inventory or a price sheet prints counts, not money

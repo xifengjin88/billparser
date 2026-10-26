@@ -101,7 +101,8 @@ service's money by type (`by_service_and_type`).
 as typed fields on the charge: billed (`cost`), `list_cost`, `contracted_cost` and `effective_cost`. Nothing is
 priced or looked up: a value is printed in the file, or simple arithmetic on printed columns of the same row (Azure
 `PayGPrice` × quantity, marked `inferred` with source `derived`). A cost type the file does not print stays empty;
-`Document.cost_types` lists the ones it gives. Effective (amortized) cost comes only from amortized data: AWS CUR
+`Document.cost_types` lists the ones it gives for every usage line (a type that only some lines have is
+not listed, so a consumer never sums a partial column as a total). Effective (amortized) cost comes only from amortized data: AWS CUR
 reservation and Savings Plan effective-cost columns by line type, Azure rows by `PricingModel` (on-demand and Spot
 rows always; reservation and savings plan rows only in an amortized export, told apart in `Document.cost_basis`),
 FOCUS `EffectiveCost`, GCP cost + credits.
@@ -110,7 +111,8 @@ Every usage line also says how it was priced (`coverage`): `on_demand`, `reserve
 `committed_use`, `spot`, or `unknown` when the file does not say. It comes from the provider's line type or pricing
 column (CUR `DiscountedUsage` → reserved, Azure `PricingModel`, FOCUS `PricingCategory` with
 `CommitmentDiscountType`, GCP committed use discount credits, CUR `SpotUsage` usage types), and for files with no such
-column from the line's words ("Savings Plan", "Reserved", "Spot", "On Demand"), marked `inferred` with source `text`.
+column from the line's words ("Savings Plan", "Reserved", "Spot", "On Demand"; words that say the usage was billed
+at on-demand rates, such as "pay-as-you-go" or "not applied", win), marked `inferred` with source `text`.
 Lines that are not usage (tax, credit, fee) have no coverage. A Savings Plan negation line (it cancels covered usage
 printed at the on-demand rate) is its own kind, `commitment_negation`: not usage and not a credit.
 

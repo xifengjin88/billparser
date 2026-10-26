@@ -191,6 +191,7 @@ class Document(BaseModel):
     completeness: Completeness = "unchecked"
     gaps: list[Gap] = Field(default_factory=list)
     cost_types: list[str] = Field(default_factory=list)   # billed, list, contracted, effective: what the file gives
+    #                                                       for every usage line
     cost_basis: Optional[str] = None                     # actual | amortized | unknown (Azure exports); else None
     confidence: Optional[Confidence] = None
 

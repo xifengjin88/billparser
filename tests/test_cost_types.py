@@ -290,3 +290,51 @@ def test_a_support_charge_has_no_coverage(pipe, tmp_path):
     _, doc = parse(pipe, f)
     support = [c for c in doc.charges if c.kind.value == "support_fee"]
     assert support and all(c.coverage is None for c in support)
+
+
+# ---------------------------------------------------------------- review fixes
+NEW_SAMPLES = ["aws_cur2_commitments.csv.gz", "aws_cur2_no_amortized.csv.gz", "azure_amortized.csv",
+               "azure_actual.csv", "focus_commitments.parquet", "gcp_commitments.json"]
+
+
+@pytest.mark.parametrize("name", NEW_SAMPLES)
+def test_new_samples_are_not_contradicted(pipe, name):
+    """A Savings Plan negation prints quantity x on-demand rate but cancels it: it is no line-math failure."""
+    r, doc = parse(pipe, FILES / name)
+    assert r["completeness"] != "contradicted" and doc.completeness != "contradicted", r["checks"]
+    assert next(c for c in r["checks"] if c["name"] == "line_math")["status"] != "fail"
+
+
+def test_cost_types_lists_only_what_every_usage_line_has(pipe):
+    _, actual = parse(pipe, FILES / "azure_actual.csv")
+    assert "effective" not in actual.cost_types            # reservation usage has no effective cost in this export
+    assert actual.cost_types == ["billed", "list", "contracted"]
+    _, amortized = parse(pipe, FILES / "azure_amortized.csv")
+    assert "effective" in amortized.cost_types
+
+
+def test_text_that_says_on_demand_wins_over_commitment_words(pipe):
+    """The reseller PDF: "reserved capacity not applied, billed at pay-as-you-go rates" is on-demand usage."""
+    _, doc = parse(pipe, FILES / "reseller_invoice.pdf")
+    line = next(c for c in doc.charges if "not applied" in str(c.description.value))
+    assert value(line.coverage) == "on_demand" and line.coverage.source == "text"
+
+
+@pytest.mark.parametrize("name", sorted(p.name for p in FILES.iterdir() if p.is_file() and not p.name.startswith(".")))
+def test_no_sample_gets_a_commitment_from_words_that_deny_it(pipe, name):
+    """Run the text rules over every sample: a line read as covered by a commitment from its words must not also
+    say it was billed at on-demand or pay-as-you-go rates."""
+    _, doc = parse(pipe, FILES / name)
+    for c in doc.charges:
+        if c.coverage is not None and c.coverage.source == "text" and c.coverage.value in COMMITTED:
+            text = str(c.description.value).lower()
+            assert not any(w in text for w in ("pay-as-you-go", "pay as you go", "on demand", "not applied")), text
+
+
+@pytest.mark.parametrize("name", sorted(p.name for p in FILES.iterdir() if p.is_file() and not p.name.startswith(".")))
+def test_every_sample_fits_the_strict_contract(pipe, name):
+    """POST /parse returns export.to_schema(document): a new kind or field must not break it."""
+    from billparse.export import to_schema
+    _, doc = parse(pipe, FILES / name)
+    out = to_schema(doc)
+    assert out.schema_version == SCHEMA_VERSION and len(out.charges) == len(doc.charges)
