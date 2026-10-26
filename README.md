@@ -132,6 +132,17 @@ Status: `reconciled` (total matched), `unreconciled` (no total, other checks fin
 ranges widen), `needs_review` (goes to the review queue), `auxiliary` (price sheets,
 recommendations), `unsupported` (scanned PDF).
 
+**Large files** (`bigfile.py`). A file of more than `LARGE_FILE_MB` uncompressed (CSV, CSV in gzip or zip,
+Parquet, Parquet in zip) is never read whole. The upload is copied to disk in 8 MB parts. The routes run on its first
+`SAMPLE_ROWS` rows; the accepted spec then reads the whole file in chunks of `CHUNK_ROWS` rows, each chunk through
+the same steps as a small file. The rows go to one Parquet file. Only sums stay in memory: the statistics the checks
+read (the same checks, names and weights as a small file) and the lines rolled up by service, region, account,
+charge type, coverage, month and the other keys of a charge. The analysis and the contract come from the rolled-up
+lines, so their sums are exact; a charge counts its lines in its `lines` attribute. The source viewer shows the
+first rows. Large parses run in their own pool (`LARGE_PARSE_WORKERS`); a waiting one shows `queued`.
+`scripts/bench_large.py` measures one: 5M CUR rows (1.5 GB CSV) in 76 s with 1.7 GB of memory, against 118 s and
+11 GB in memory.
+
 **Analysis** (`analyze.py`). Spend by service, category and provider, tax/credits/purchases
 separated, period detection, next-month and next-quarter forecast with a range that widens
 with lower confidence and shorter history, and indicative commitment-eligible spend.
@@ -183,5 +194,17 @@ Schema changes go through Alembic: change `billparse/db.py`, then
 - No OCR: scanned PDFs are detected and queued. Hook Azure Document Intelligence or Textract
   into `docmodel._read_pdf` to produce the same word-with-position rows.
 - Commitment savings are indicative ranges; monthly bills hide hourly usage.
-- Parses run in a thread pool in the API process (`PARSE_WORKERS`). A task is in memory: an API restart forgets
-  running tasks (never stored results). One API container only.
+- Parses run in a thread pool in the API process (`PARSE_WORKERS`), large files in a second pool
+  (`LARGE_PARSE_WORKERS`). A task is in memory: an API restart forgets running tasks (never stored results). One API
+  container only.
+- Large files (more than `LARGE_FILE_MB` uncompressed, default 300 MB): CSV and Parquet only, plain, in gzip, or as
+  the one file of a zip. A large Excel, PDF or JSON file is refused ("Export this report as CSV"), and so is a file
+  of more than `MAX_UNCOMPRESSED_GB` (default 50) uncompressed. A layout whose spec reshapes the table (a month per
+  column) or reads a grid cannot be read in chunks. The agent never runs inline on a large file: its job is queued and
+  works on the first rows. A CSV row with another number of fields than the header is skipped (with a warning); a
+  small file keeps a row with fewer fields.
+- Files just under `LARGE_FILE_MB` use the in-memory path, about 18 times the CSV size in memory (a 300 MB CUR:
+  about 5 GB). Lower `LARGE_FILE_MB` where memory is short.
+- A large file's Azure cost basis is told chunk by chunk; chunks that disagree make it `unknown`, with a warning.
+  More than `CONTRACT_MAX_CHARGES` rolled-up lines: the smallest become one "other" line per service, charge type,
+  coverage and month.

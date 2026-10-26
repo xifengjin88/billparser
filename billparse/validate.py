@@ -33,8 +33,9 @@ class Check:
 
 
 # ---------------------------------------------------------------- cleanup (runs for every route)
-def clean_rows(ext: Extraction) -> list[str]:
-    """Tag tax/credit lines and pull total rows out of the line items."""
+def clean_rows(ext: Extraction, chunk: bool = False) -> list[str]:
+    """Tag tax/credit lines and pull total rows out of the line items. chunk: the rows are one chunk of a large
+    file (bigfile.py), so a row equal to the sum of the others is no total."""
     notes: list[str] = []
     df = ext.rows
     if df.empty or "billed_cost" not in df:
@@ -68,7 +69,7 @@ def clean_rows(ext: Extraction) -> list[str]:
     # a "Total" row is a stated total, not spend. Safety net for totals in other languages
     # ("Gesamtbetrag", "Totale"): any single row equal to the sum of all the others.
     is_tot = label.str.contains(TOTAL_LABEL).fillna(False).astype(bool)
-    if not is_tot.any() and len(df) >= 3:
+    if not is_tot.any() and len(df) >= 3 and not chunk:
         cost_all = df["billed_cost"].fillna(0.0)
         grand = cost_all.sum()
         eq = ((grand - cost_all) - cost_all).abs() <= np.maximum(0.011, 0.0005 * cost_all.abs())

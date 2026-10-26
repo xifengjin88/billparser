@@ -121,7 +121,7 @@ def _agent(pipe: Pipeline, a) -> None:
         raise SystemExit("The agent calls the Claude API and costs money: set AGENT_ENABLED=1 and ANTHROPIC_API_KEY.")
     if a.action == "run":
         path = Path(a.target)                       # agent=False: the job below is its only run (no second paid run)
-        r = pipe.parse_bytes(path.read_bytes(), path.name, force=True, agent=False)
+        r = pipe.parse_path(path, force=True, agent=False)
         if not agent.needs_agent(r):
             print(f"{r['file']}: {r['completeness']}, no review needed")
             return

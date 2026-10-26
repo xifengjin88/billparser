@@ -103,7 +103,7 @@ test:  ## Run the tests
 
 lint:  ## Lint the backend (Ruff) and the web app (oxlint)
 	uv run ruff check billparse/api.py billparse/webapi.py billparse/agent.py billparse/auth.py billparse/db.py billparse/store.py \
-		billparse/settings.py migrations/env.py tests/test_webapi.py tests/conftest.py scripts/export_openapi.py
+		billparse/settings.py billparse/bigfile.py migrations/env.py tests/test_webapi.py tests/conftest.py scripts/export_openapi.py
 	cd web && pnpm lint
 
 lint-fix:  ## Apply Ruff's safe fixes

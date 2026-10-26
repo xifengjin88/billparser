@@ -19,16 +19,16 @@ from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import replace
 from decimal import Decimal
 from functools import lru_cache
+from pathlib import Path
 from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, UploadFile
 from fastapi.responses import Response
 from pydantic import BaseModel, Field
 
-from . import agent, auth, contract, highlight
+from . import agent, auth, bigfile, contract, highlight
 from . import llm as llm_mod
 from .analyze import RESOLVER_LOCK, get_resolver
-from .docmodel import load_bytes
 from .pipeline import Pipeline
 from .pipeline import Settings as PipelineSettings
 from .review import CHECKLIST, apply_edits, approve, charge_rows, drop_gaps
@@ -80,6 +80,28 @@ def read_upload(upload: UploadFile) -> bytes:
     if not data:
         raise HTTPException(400, "The file is empty.")
     return data
+
+
+def save_upload(upload: UploadFile, store: Store) -> tuple[Path, str, int]:
+    """Copy an upload to a temporary file in the data directory, 8 MB at a time, never whole in memory: (path,
+    SHA-256, size). 413 above MAX_UPLOAD_MB. The caller removes the file, or the pipeline moves it into the store."""
+    limit = MAX_UPLOAD_MB * 1024 * 1024
+    path = store.temp_path(Path(upload.filename or "").suffix)
+    h, n = hashlib.sha256(), 0
+    try:
+        with path.open("wb") as out:
+            while (b := upload.file.read(8 * 1024 * 1024)):
+                n += len(b)
+                if n > limit:
+                    raise HTTPException(413, f"The file is larger than {MAX_UPLOAD_MB} MB.")
+                h.update(b)
+                out.write(b)
+        if not n:
+            raise HTTPException(400, "The file is empty.")
+    except BaseException:
+        path.unlink(missing_ok=True)
+        raise
+    return path, h.hexdigest(), n
 
 
 # ------------------------------------------------------------------ models (invoice-parser's)
@@ -455,11 +477,12 @@ def ensure_contract(store: Store, sha: str) -> None:
     """A result parsed before the contract was kept: build it now from the stored lines and file."""
     if store.part(sha, "doc"):
         return
-    summary, loaded = store.get_result(sha), store.load_doc(sha)
+    summary = store.get_result(sha)
     if not summary:
         raise HTTPException(409, "This file has no result yet (it is being parsed, or its run was interrupted).")
-    file_doc = load_bytes(*loaded) if loaded else None
-    doc, meta, bundle = contract.build(summary, store.get_rows(sha), file_doc)
+    file_doc = bigfile.stored_doc(store, sha)          # a large file: its first rows only
+    rows = store.get_rolled(sha) if summary.get("large") else store.get_rows(sha)
+    doc, meta, bundle = contract.build(summary, rows, file_doc)
     store.save_part(sha, "doc", doc.model_dump_json(exclude_none=True))
     store.save_part(sha, "meta", json.dumps(meta, default=str))
     store.save_part(sha, "bundle", json.dumps(bundle, default=str))
@@ -590,6 +613,9 @@ def settings() -> Settings:
 # ------------------------------------------------------------------ parsing in the background
 # A parse can take minutes (a layout spec is learned or improved): the browser starts it, then polls its task.
 _pool = ThreadPoolExecutor(max_workers=int(os.environ.get("PARSE_WORKERS", "2")), thread_name_prefix="parse")
+# large files (bigfile.py) in a pool of their own, so they never hold up small files: LARGE_PARSE_WORKERS at a time
+_large_pool = ThreadPoolExecutor(max_workers=int(os.environ.get("LARGE_PARSE_WORKERS", "1")),
+                                 thread_name_prefix="parse-large")
 _tasks: dict[str, dict] = {}
 _lock = threading.Lock()
 
@@ -598,7 +624,7 @@ def _task_out(store: Store, sha: str, t: dict) -> ParseTask:
     fut: Future = t["future"]
     out = ParseTask(sha256=sha, name=t["name"], state="running", started=t["started"], started_by=t.get("by"))
     if not fut.done():
-        out.progress = _progress(store, sha, t["started"])
+        out.progress = _progress(store, sha, t["started"]) or t.get("progress")
         return out
     out.finished = t.get("finished")
     if (e := fut.exception()) is not None:
@@ -647,20 +673,31 @@ def _use_llm(backend: str | None) -> bool:
     return backend != "none" and bool(os.environ.get("ANTHROPIC_API_KEY"))
 
 
-def start_parse(store: Store, name: str, data: bytes, force: bool, use_llm: bool, user: str | None = None,
-                agent_step: bool = True, backend: str | None = None, fallback: str | None = None) -> str:
-    sha = hashlib.sha256(data).hexdigest()             # the pipeline's key for the file (docmodel.load_bytes)
+def start_parse(store: Store, name: str, path: Path, sha: str, force: bool, use_llm: bool, user: str | None = None,
+                agent_step: bool = True, backend: str | None = None, fallback: str | None = None,
+                temp: bool = False) -> str:
+    """Parse the file at path (its SHA-256 is sha) in the background. temp: path is an upload, moved into the store
+    or removed when the parse ends."""
+    large = bigfile.classify(path, name).large
     with _lock:
         t = _tasks.get(sha)
         if t and not t["future"].done():
+            if temp:
+                path.unlink(missing_ok=True)
             return sha                                   # already being parsed: the same task
         pipe = _pipeline(store, use_llm, backend or None, fallback or None)
-        task: dict = {"name": name, "started": time.time(), "by": user}
+        task: dict = {"name": name, "started": time.time(), "by": user, "progress": "queued" if large else None}
+
+        def step(s: str) -> None:
+            task.update(step=s)
+            if s.startswith("reading"):
+                task["progress"] = s[0].upper() + s[1:]
 
         def run() -> dict:
+            task["progress"] = "reading" if large else None
             try:
-                result = pipe.parse_bytes(data, name, force=force, agent=agent_step, user=user,
-                                          on_step=lambda step: task.update(step=step))
+                result = pipe.parse_path(path, name, force=force, agent=agent_step, user=user, on_step=step,
+                                         move=temp, sha=sha)
                 row = store.document(sha)
                 if row is not None and user and not row.uploaded_by:
                     store.update_document(sha, uploaded_by=user)
@@ -670,7 +707,9 @@ def start_parse(store: Store, name: str, data: bytes, force: bool, use_llm: bool
                 raise
             finally:
                 task["finished"] = time.time()
-        task["future"] = _pool.submit(run)
+                if temp:
+                    path.unlink(missing_ok=True)
+        task["future"] = (_large_pool if large else _pool).submit(run)
         _tasks[sha] = task
     return sha
 
@@ -684,9 +723,9 @@ def parse_start(request: Request, file: UploadFile = File(...), force: bool = Qu
         if choice and choice not in ("claude", "none") and llm_mod.parse_choice(choice) is None:
             raise HTTPException(400, f"Unknown model choice {choice!r}; known: claude, none, "
                                      f"{', '.join(llm_mod.llm_choices())}")
-    data = read_upload(file)
-    sha = start_parse(store, file.filename or "upload", data, force, _use_llm(backend), auth.current_user(request),
-                      agent_step=fallback != "none", backend=backend, fallback=fallback)
+    path, sha, _ = save_upload(file, store)
+    sha = start_parse(store, file.filename or "upload", path, sha, force, _use_llm(backend), auth.current_user(request),
+                      agent_step=fallback != "none", backend=backend, fallback=fallback, temp=True)
     return _task_out(store, sha, _tasks[sha])
 
 
@@ -703,11 +742,11 @@ def parse_task(sha256: str, store: Store = Depends(get_store)) -> ParseTask:
     return _task_out(store, sha256, t)
 
 
-def _stored(store: Store, sha: str) -> tuple[bytes, str]:
-    loaded = store.load_doc(sha)
-    if loaded is None:
+def _stored(store: Store, sha: str) -> Path:
+    path = store.file_path(sha)
+    if path is None:
         raise HTTPException(404, "The uploaded file is not stored.")
-    return loaded
+    return path
 
 
 @router.post("/documents/{sha256}/reparse", response_model=ParseTask, tags=["web"])
@@ -715,11 +754,11 @@ def reparse(sha256: str, request: Request, store: Store = Depends(get_store)) ->
     """Parse the stored file again and run the agent for it again (a new spec, or an improve round on the spec that
     reads it), in the background. Paid when learning is on."""
     row = _row(store, sha256)
-    data, _ = _stored(store, sha256)
+    path = _stored(store, sha256)
     for j in store.agent_jobs():                     # this file's last job runs again on this parse
         if j["sha256"] == sha256 and j["status"] not in ("queued", "running", "stopping"):
             store.retry_agent_job(j["id"])
-    sha = start_parse(store, row["name"], data, True, llm_wanted(), auth.current_user(request))
+    sha = start_parse(store, row["name"], path, sha256, True, llm_wanted(), auth.current_user(request))
     return _task_out(store, sha, _tasks[sha])
 
 
@@ -738,8 +777,8 @@ def parse_current(sha256: str, request: Request, store: Store = Depends(get_stor
     """Parse the stored file again with the specs and code of today, in the background: no agent and no model
     request, so it is free."""
     row = _row(store, sha256)
-    data, _ = _stored(store, sha256)
-    sha = start_parse(store, row["name"], data, True, False, auth.current_user(request), agent_step=False)
+    path = _stored(store, sha256)
+    sha = start_parse(store, row["name"], path, sha256, True, False, auth.current_user(request), agent_step=False)
     return _task_out(store, sha, _tasks[sha])
 
 
@@ -833,8 +872,8 @@ def source_table(sha256: str, name: str, offset: int = Query(0, ge=0), limit: in
     if t is None:
         raise HTTPException(404, "No table with this name.")
     rows, from_file, total = t.get("rows") or [], False, len(t.get("rows") or [])
-    if t.get("truncated") and offset + limit > len(rows) and (loaded := store.load_doc(sha256)):
-        region = next((r for r in load_bytes(*loaded).regions if r.name == name), None)
+    if t.get("truncated") and offset + limit > len(rows) and (file_doc := bigfile.stored_doc(store, sha256)):
+        region = next((r for r in file_doc.regions if r.name == name), None)   # a large file: its first rows
         if region is not None:
             full = contract.bundle_of_region(region, None)
             rows, from_file, total = full["rows"], True, len(full["rows"])

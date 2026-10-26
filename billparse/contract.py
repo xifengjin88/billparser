@@ -126,10 +126,10 @@ def build(summary: dict, rows: pd.DataFrame | None, file_doc: FileDoc | None) ->
     """(document, meta, bundle) for one parse."""
     loc = Locator(file_doc)
     rows = rows if rows is not None else pd.DataFrame()
-    rolled = len(rows) > MAX_CHARGES and "billed_cost" in rows
-    lines = len(rows)
-    if rolled:
-        rows = _rollup(rows)
+    lines = int(rows["_lines"].sum()) if "_lines" in rows else len(rows)   # rolled up before: a large file
+    rolled = lines > len(rows)
+    if len(rows) > MAX_CHARGES and "billed_cost" in rows:
+        rows, rolled = _rollup(rows), True
     doc = Document(source_name=summary.get("file") or "", sha256=summary.get("sha256") or "",
                    page_count=max(1, len(loc.page)))
     head = Cite(text="the file as a whole")
@@ -204,6 +204,8 @@ def _rollup(rows: pd.DataFrame) -> pd.DataFrame:
         df[k] = df[k].astype("string").fillna("")
     df["billed_cost"] = pd.to_numeric(df["billed_cost"], errors="coerce").fillna(0.0)
     agg: dict = {"billed_cost": "sum", "_src": "first"} if "_src" in df else {"billed_cost": "sum"}
+    if "_lines" in df:                                  # lines rolled up before (bigfile.py)
+        agg["_lines"] = "sum"
     for c in COST_FIELDS:                               # an all-empty group stays empty, never 0
         if c in df:
             df[c] = pd.to_numeric(df[c], errors="coerce")
@@ -221,7 +223,8 @@ def _rollup(rows: pd.DataFrame) -> pd.DataFrame:
     if "description" in df:
         agg["description"] = "first"
     out = df.groupby(keys, dropna=False, sort=False).agg(agg)
-    out["_lines"] = df.groupby(keys, dropna=False, sort=False).size()
+    if "_lines" not in df:
+        out["_lines"] = df.groupby(keys, dropna=False, sort=False).size()
     out = out.reset_index()
     for k in keys:
         out[k] = out[k].replace("", None)

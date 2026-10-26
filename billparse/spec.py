@@ -212,7 +212,8 @@ def _frame(spec: dict, regions: list[Region]) -> tuple[Extraction, pd.DataFrame 
         return Extraction(rows=pd.DataFrame()), None
     scored = sorted(frames, key=lambda r: -detect_score(spec, list(r.df.columns)))
     use = [r for r in scored if detect_score(spec, list(r.df.columns)) > 0] or scored[:1]
-    raw = pd.concat([r.df.assign(_src=[f"{r.name}:{i + (r.header_row or 0) + 2}" for i in range(len(r.df))])
+    raw = pd.concat([r.df.assign(_src=[f"{r.name}:{i + (r.header_row or 0) + r.row_offset + 2}"
+                                       for i in range(len(r.df))])
                      for r in use], ignore_index=True)
     return Extraction(rows=pd.DataFrame(), source_rows=len(raw)), raw
 

@@ -47,7 +47,8 @@ def run_file(pipe: Pipeline, path: Path) -> dict:
     except Exception as e:  # noqa: BLE001  the harness reports every failure and goes on
         return {"file": path.name, "error": f"{type(e).__name__}: {e}", "trace": traceback.format_exc(limit=4),
                 "seconds": round(time.perf_counter() - t0, 2)}
-    rows = pipe.store.get_rows(r["sha256"])
+    # a large file's rows are not read whole: its rolled-up lines (sums and attribute shares by line kind)
+    rows = pipe.store.get_rolled(r["sha256"]) if r.get("large") else pipe.store.get_rows(r["sha256"])
     n = 0 if rows is None else len(rows)
     coverage = {}
     if n:

@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import json
 import math
+import shutil
 import time
 from collections.abc import Iterator
 from contextlib import contextmanager
@@ -166,20 +167,48 @@ class Store:
                 p.write_bytes(data)
                 (self.root / "docs" / f"{sha}.name").write_text(name)
 
-    def file_path(self, sha: str) -> Path | None:
-        return next((p for p in (self.root / "docs").glob(f"{sha}.*") if p.suffix != ".name"), None)
+    def save_doc_path(self, sha: str, path: Path, name: str, move: bool = False) -> None:
+        """save_doc for a file on disk (a large upload is never read into memory): moved (move) or copied."""
+        if self.retain_docs:
+            p = self.root / "docs" / f"{sha}{Path(name).suffix or '.bin'}"
+            if not p.exists() and Path(path).resolve() != p.resolve():
+                tmp = p.with_name(p.name + ".part")
+                (shutil.move if move else shutil.copyfile)(str(path), str(tmp))
+                tmp.replace(p)
+                (self.root / "docs" / f"{sha}.name").write_text(name)
 
-    def load_doc(self, sha: str) -> tuple[bytes, str] | None:
+    def temp_path(self, suffix: str = "") -> Path:
+        """A new file name in the data directory's tmp folder (uploads on their way to docs/)."""
+        d = self.root / "tmp"
+        d.mkdir(exist_ok=True)
+        return d / f"{time.time_ns()}{suffix}"
+
+    def file_path(self, sha: str) -> Path | None:
+        return next((p for p in (self.root / "docs").glob(f"{sha}.*") if p.suffix not in (".name", ".part")), None)
+
+    def doc_name(self, sha: str) -> str | None:
         p = self.file_path(sha)
         if p is None:
             return None
         name_p = self.root / "docs" / f"{sha}.name"
-        return p.read_bytes(), (name_p.read_text() if name_p.exists() else p.name)
+        return name_p.read_text() if name_p.exists() else p.name
+
+    def load_doc(self, sha: str) -> tuple[bytes, str] | None:
+        """The stored file's bytes and name. A large file is never read whole: see bigfile.stored_doc."""
+        p = self.file_path(sha)
+        if p is None:
+            return None
+        return p.read_bytes(), self.doc_name(sha) or p.name
 
     # ---------------- results
-    def save_result(self, sha: str, summary: dict, rows: pd.DataFrame) -> None:
+    def save_result(self, sha: str, summary: dict, rows: pd.DataFrame | None, rows_path: Path | None = None) -> None:
+        """The summary, and the rows: a frame, or a Parquet file already written (a large file, bigfile.py), which is
+        moved in place."""
         path = self.root / "results" / f"{sha}.parquet"
-        if rows is not None and not rows.empty:
+        (self.root / "results" / f"{sha}.rolled.parquet").unlink(missing_ok=True)
+        if rows_path is not None:
+            shutil.move(str(rows_path), str(path))
+        elif rows is not None and not rows.empty:
             rows.astype({c: "string" for c in rows.columns if rows[c].dtype == object}).to_parquet(path, index=False)
         else:
             path.unlink(missing_ok=True)
@@ -202,6 +231,16 @@ class Store:
             row.summary, row.parsed_at = jsonable(summary), now
             s.add(row)
             s.commit()
+
+    def save_rolled(self, sha: str, rows: pd.DataFrame) -> None:
+        """A large file's rolled-up lines (bigfile.py): what its contract was built from."""
+        if rows is not None and not rows.empty:
+            rows.astype({c: "string" for c in rows.columns if rows[c].dtype == object}).to_parquet(
+                self.root / "results" / f"{sha}.rolled.parquet", index=False)
+
+    def get_rolled(self, sha: str) -> pd.DataFrame | None:
+        p = self.root / "results" / f"{sha}.rolled.parquet"
+        return pd.read_parquet(p) if p.exists() else None
 
     def get_result(self, sha: str) -> dict | None:
         with self.session() as s:

@@ -8,6 +8,7 @@ only fills a field that is empty, so a column the file has always wins. `extract
 
 from __future__ import annotations
 
+import os
 import re
 
 import numpy as np
@@ -124,9 +125,10 @@ def _found(texts: list[str]) -> dict:
     return found
 
 
-def extract(rows: pd.DataFrame) -> list[str]:
+def extract(rows: pd.DataFrame, warnings: list[str] | None = None) -> list[str]:
     """Fill empty attribute columns from each line's text (description, service label, context path). Returns the
-    fields it filled."""
+    fields it filled. More than MAX_UNIQUE_TEXTS distinct texts (a resource ID used as the description): the step is
+    skipped, with a note in warnings."""
     if rows.empty:
         return []
     def text_of(c: str) -> pd.Series:
@@ -139,6 +141,12 @@ def extract(rows: pd.DataFrame) -> list[str]:
     for t in sources[1:]:
         key = key + SEP + t
     codes, uniques = pd.factorize(key)
+    limit = int(os.environ.get("MAX_UNIQUE_TEXTS", "500000"))
+    if len(uniques) > limit:
+        if warnings is not None:
+            warnings.append(f"Details (instance type, engine, ...) were not read from the line texts: {len(uniques):,} "
+                            f"distinct texts, more than MAX_UNIQUE_TEXTS ({limit:,})")
+        return []
     found_unique = [_found(u.split(SEP)) for u in uniques]
     # a tax line has no usage: its quantity and price are the charge's, not its own
     taxed = rows["charge_type"].eq("Tax") if "charge_type" in rows else pd.Series(False, index=rows.index)
