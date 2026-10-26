@@ -111,6 +111,9 @@ printed.
 
 ## 5. Task order
 
+> **Renumbered (2026-10-25):** task 02 is now [Large CUR and export files](02-large-files.md), and the durable
+> job queue is task 09. The table below is the original order; the task files themselves are the source of truth.
+
 | # | Task | Needs | STOP gate |
 |---|---|---|---|
 | 01 | [Cost columns and commitment coverage from the file](01-cost-columns-and-coverage.md) | none | no |

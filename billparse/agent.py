@@ -197,8 +197,7 @@ def check(spec: dict, doc: Document, catalog_dir: Path | None) -> tuple[dict, Ex
     check_spec(spec)
     ext = run(spec, doc, catalog_dir)
     clean_rows(ext)
-    if len(ext.rows) <= 100_000:
-        extract_attributes(ext.rows)
+    extract_attributes(ext.rows)
     coverage.apply(ext.rows)
     kind = (spec.get("meta") or {}).get("kind", "cost_lines")
     verdict = validate(ext) if kind == "cost_lines" else {"status": "auxiliary", "confidence": 1.0, "checks": [],

@@ -21,7 +21,7 @@ import re
 import pandas as pd
 
 from .spec import HOW
-from .transforms import coverage_of
+from .transforms import coverage_of, map_unique
 
 COMMITMENTS = {"reserved", "savings_plan", "committed_use"}
 TEXT_RULES = [("on_demand", re.compile(r"pay[\s-]*as[\s-]*you[\s-]*go|\bnot\s+applied\b", re.I)),   # before the
@@ -39,6 +39,18 @@ def _text_coverage(text: str) -> str | None:
     return next((cov for cov, rx in TEXT_RULES if rx.search(text)), None)
 
 
+def _is_spot(v) -> bool:
+    return bool(SPOT_USAGE.search(v)) if isinstance(v, str) else False
+
+
+def _status(v) -> str | None:
+    return v.strip().lower() if isinstance(v, str) and v.strip() else None
+
+
+def _line_kind(v) -> str:
+    return re.sub(r"[\s_-]+", "", v.lower()) if isinstance(v, str) else ""
+
+
 def _col(rows: pd.DataFrame, name: str) -> pd.Series:
     return rows[name] if name in rows else pd.Series([None] * len(rows), index=rows.index, dtype=object)
 
@@ -52,31 +64,31 @@ def apply(rows: pd.DataFrame) -> None:
     how = pd.Series("printed", index=rows.index, dtype=object).where(cov.notna(), None)
 
     # a line type that names a commitment, when no column gave one (Azure UnusedReservation, CUR fee lines)
-    from_type = _col(rows, "line_type_raw").map(coverage_of)
+    from_type = map_unique(_col(rows, "line_type_raw"), coverage_of)
     fill = (cov.isna() | cov.eq("unknown")) & from_type.isin(COMMITMENTS)
     cov[fill], how[fill] = from_type[fill], "printed"
 
     # FOCUS: a commitment discount of a known kind
-    ctype = _col(rows, "commitment_type").map(lambda v: str(v).lower() if isinstance(v, str) else "")
+    ctype = map_unique(_col(rows, "commitment_type"), lambda v: str(v).lower() if isinstance(v, str) else "")
     committed = cov.eq("committed_use")
     cov[committed & ctype.str.contains("saving")] = "savings_plan"
     cov[committed & ctype.str.contains("reserv")] = "reserved"
 
     # Spot in the usage type
-    spot = usage & (cov.isna() | cov.isin({"on_demand", "unknown"})) & \
-        _col(rows, "usage_type").map(lambda v: bool(SPOT_USAGE.search(v)) if isinstance(v, str) else False)
+    spot_type = map_unique(_col(rows, "usage_type"), _is_spot).astype(bool)
+    spot = usage & (cov.isna() | cov.isin({"on_demand", "unknown"})) & spot_type
     how[spot & cov.isna()] = "text"
     cov[spot] = "spot"
 
     # usage lines with no coverage column: the line's words
     todo = usage & cov.isna()
     if todo.any():
-        parts = [_col(rows, c).map(lambda v: str(v) if isinstance(v, str) else "")
+        parts = [map_unique(_col(rows, c), lambda v: str(v) if isinstance(v, str) else "")
                  for c in ("description", "service_raw", "usage_type", "_path")]
         text = parts[0]
         for p in parts[1:]:
             text = text + " " + p
-        found = text[todo].map(_text_coverage)
+        found = map_unique(text[todo], _text_coverage)
         hit = found.notna()
         cov[found[hit].index], how[found[hit].index] = found[hit], "text"
     cov[usage & cov.isna()] = "unknown"                   # usage the file does not say how it was priced
@@ -94,10 +106,8 @@ def apply(rows: pd.DataFrame) -> None:
     rows[HOW + "coverage"] = how
 
     # commitment status: covered usage used its commitment; an unused-commitment line says unused
-    status = _col(rows, "commitment_status").map(lambda v: str(v).strip().lower() if isinstance(v, str) and v.strip()
-                                                  else None)
-    kind = _col(rows, "line_type_raw").map(lambda v: re.sub(r"[\s_-]+", "", str(v).lower()) if isinstance(v, str)
-                                           else "")
+    status = map_unique(_col(rows, "commitment_status"), _status)
+    kind = map_unique(_col(rows, "line_type_raw"), _line_kind)
     status[status.isna() & kind.str.startswith("unused")] = "unused"
     status[status.isna() & usage & cov.isin(COMMITMENTS) & how.eq("printed")] = "used"
     rows["commitment_status"] = status

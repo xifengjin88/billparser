@@ -16,7 +16,7 @@ from . import expr
 from .docmodel import Document, Region
 from .layout import _row_to_cols, build_columns, extract_fields, extract_lines, extract_table, find_header, norm_h
 from .mapper import map_columns
-from .transforms import CANONICAL, TRANSFORMS, apply_transforms, default_transforms, parse_number
+from .transforms import CANONICAL, TRANSFORMS, apply_transforms, default_transforms, map_unique, parse_number
 
 ALLOWED_TOP = {"id", "version", "trust", "extends", "detect", "meta", "source", "table", "columns",
                "derive", "reshape", "filters", "fields", "lines", "totals", "fingerprint", "stats",
@@ -348,8 +348,8 @@ def _keep_unmapped(raw: pd.DataFrame, out: pd.DataFrame, used: set) -> None:
         left.remove(col)
     if not left:
         return
-    parts = [raw[c].map(lambda v, c=c: "" if v is None or (isinstance(v, float) and v != v) or str(v).strip() == ""
-                        else f"{c}: {str(v).strip()}") for c in left]
+    parts = [map_unique(raw[c], lambda v, c=c: "" if v is None or (isinstance(v, float) and v != v)
+                        or str(v).strip() == "" else f"{c}: {str(v).strip()}") for c in left]
     extra = parts[0].str.cat(parts[1:], sep=" | ") if len(parts) > 1 else parts[0]
     extra = extra.str.replace(r"( \| )+", " | ", regex=True).str.strip(" |")
     out["_extra"] = extra.where(extra.ne(""), None)
@@ -389,7 +389,7 @@ def _filter(spec: dict, rows: pd.DataFrame) -> pd.DataFrame:
         elif "drop_if_match" in f:
             col, rx = f["drop_if_match"]["field"], re.compile(f["drop_if_match"]["regex"], re.I)
             if col in rows:
-                keep &= ~rows[col].map(lambda v: v is not None and bool(rx.search(str(v)))).astype(bool)
+                keep &= ~map_unique(rows[col], lambda v, rx=rx: v is not None and bool(rx.search(str(v)))).astype(bool)
         elif "keep_if_in" in f:
             col, vals = f["keep_if_in"]["field"], {str(v).lower() for v in f["keep_if_in"]["values"]}
             if col in rows:

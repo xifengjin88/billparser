@@ -39,7 +39,6 @@ from .store import Store
 from .transforms import period_of
 from .validate import clean_rows, validate
 
-ATTRIBUTE_ROWS = 100_000            # larger files are exports with their own attribute columns
 
 
 @dataclass
@@ -298,8 +297,7 @@ class Pipeline:
                 att.ext.stated_totals += [dict(t, kind="document_total") for t in extra_totals]
             clean_rows(att.ext)
             normalize_regions(att.ext.rows)
-            if len(att.ext.rows) <= ATTRIBUTE_ROWS:
-                extract_attributes(att.ext.rows)
+            extract_attributes(att.ext.rows)
             coverage.apply(att.ext.rows)
             kind = (spec.get("meta") or {}).get("kind", "cost_lines")
             if kind != "cost_lines":
