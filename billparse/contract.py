@@ -43,6 +43,15 @@ COST_TYPES = {"billed": "cost", "list": "list_cost", "contracted": "contracted_c
 USAGE_KINDS = {"usage", "marketplace_usage"}
 COMMITMENT_KINDS = {"commitment_fee", "commitment_negation"}
 HOW = "_how:"                   # per row: how a value was made ("printed", "derived", "text"); see spec._derive
+# how a value was made, from the most to the least certain: a rolled-up line keeps its lines' least certain
+HOW_RANK = {"printed": 1, "text": 2, "rule": 3, "derived": 4}
+INFERRED = {"text", "rule"}    # read from a line's words, or set by a rule: origin inferred, the source says which
+
+
+def weakest(values) -> str | None:
+    """The least certain way among values (a roll-up)."""
+    known = [v for v in values if isinstance(v, str) and v in HOW_RANK]
+    return max(known, key=HOW_RANK.__getitem__) if known else None
 # the dimensions a roll-up keeps: lines that differ in none of them are one charge
 ROLLUP_KEYS = ["service_code", "service_name", "service_raw", "region", "account_id", "charge_type", "pricing_model",
                "instance_type", "operating_system", "database_engine", "deployment_option", "usage_type", "unit",
@@ -235,7 +244,7 @@ def _rollup(rows: pd.DataFrame) -> pd.DataFrame:
             df[c] = pd.to_numeric(df[c], errors="coerce")
             agg[c] = lambda s: s.sum(min_count=1)
     for c in [c for c in df.columns if str(c).startswith(HOW)]:
-        agg[c] = lambda s: "derived" if s.eq("derived").any() else (s.dropna().iloc[0] if s.notna().any() else None)
+        agg[c] = weakest
     if "quantity" in df:
         df["quantity"] = pd.to_numeric(df["quantity"], errors="coerce")
         agg["quantity"] = "sum"
@@ -308,7 +317,7 @@ def _charge(i: int, r: dict, loc: Locator, sections: dict[str, str]) -> Charge:
         c.service_code = cv(code, at_service, "inferred", None, f"mapping:{how}" if how else "mapping")
     for f in TEXT_FIELDS:
         if (v := _str(r.get(f))):
-            setattr(c, f, cv(v, cite, "printed"))
+            setattr(c, f, _cited(v, cite, r.get(HOW + f)))
     for f in COST_FIELDS:                               # printed, or computed from printed columns of the row
         if (d := _dec(r.get(f))) is not None:
             derived = _str(r.get(HOW + f)) == "derived"
@@ -321,7 +330,7 @@ def _charge(i: int, r: dict, loc: Locator, sections: dict[str, str]) -> Charge:
                         None if how == "printed" else ("text" if how == "text" else "rule"))
     for f in ("quantity", "unit_price", "list_unit_price", "contracted_unit_price"):
         if (d := _dec(r.get(f))) is not None:
-            setattr(c, f, cv(d, cite))
+            setattr(c, f, _cited(d, cite, r.get(HOW + f)))
     if (d := _date(r.get("charge_start"))):
         c.period_start = cv(d, cite)
     if (d := _date(r.get("charge_end"))):
@@ -344,6 +353,12 @@ def _charge(i: int, r: dict, loc: Locator, sections: dict[str, str]) -> Charge:
         attrs["under"] = str(r["_path"])
     c.attributes = attrs
     return c
+
+
+def _cited(value, cite: Cite, how):
+    """A value of a line: printed, or inferred with its source when a step read it from words or set it by a rule."""
+    how = _str(how)
+    return cv(value, cite, "inferred", None, how) if how in INFERRED else cv(value, cite, "printed")
 
 
 PERIOD_NAME = re.compile(r"\b(billing|statement|invoice|service)?\s*period\b", re.I)

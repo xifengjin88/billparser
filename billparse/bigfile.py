@@ -433,7 +433,7 @@ def stored_doc(store, sha: str) -> Document | None:
 STEP_COLUMNS = ["service", "service_name", "service_code", "category", "resolved_by", "region_name", "price_per",
                 "commitment_status", "meter_name", HOW + "coverage", "_extra", "_src", "_group"]
 ROLL_KEYS = [*contract.ROLLUP_KEYS, "service", "category", "_month"]
-HOW_RANK = {"text": 1, "printed": 2, "derived": 3}
+HOW_RANK = contract.HOW_RANK                  # a rolled-up line keeps its lines' least certain way
 
 
 @dataclass
@@ -587,7 +587,7 @@ def _schema(rows: pd.DataFrame, spec: dict) -> pa.Schema:
     """The Parquet columns of every chunk, fixed by the first: its columns, then every canonical field and step column
     and the derived fields' "how" columns. Money and quantities are numbers, dates are timestamps, the rest text."""
     names = list(rows.columns)
-    for c in [*CANONICAL, *STEP_COLUMNS, *(HOW + f for f in (spec.get("derive") or {}))]:
+    for c in [*CANONICAL, *STEP_COLUMNS, *(HOW + f for f in CANONICAL)]:     # how each value was made, any chunk
         if c not in names:
             names.append(c)
     out = []

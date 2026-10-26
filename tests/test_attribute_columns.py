@@ -282,3 +282,42 @@ def test_a_file_whose_lines_all_cost_zero_is_not_contradicted(pipe, tmp_path):
     r = pipe.parse_file(f)
     labels = next(c for c in r["checks"] if c["name"] == "labels")
     assert labels["status"] == "pass" and r["completeness"] != "contradicted", r["checks"]
+
+
+def test_guessed_values_are_inferred_with_their_source(pipe):
+    _, doc = parse(pipe, "azure_usage_full.csv")
+    by = {}
+    for c in doc.charges:
+        by.setdefault(str(v(c.description)), c)
+    linux = by["B2ms"].operating_system                               # no "Windows" on the meter: a rule
+    assert (linux.value, linux.origin, linux.source) == ("Linux", "inferred", "rule")
+    win = by["D4s v5"].operating_system                               # "Windows" in the meter: its words
+    assert (win.value, win.origin, win.source) == ("Windows", "inferred", "text")
+    assert by["D4s v5"].instance_type.origin == "printed"             # AdditionalInfo ServiceType, a column
+    spot = by["D4s v5 Spot"].instance_type                            # the meter name's words
+    assert (spot.origin, spot.source) == ("inferred", "text")
+    assert by["D4s v5"].meter_id.origin == "printed"
+    _, cur = parse(pipe, "aws_cur_legacy_full.csv.gz")
+    ec2 = next(c for c in cur.charges if v(c.usage_type) == "USE1-BoxUsage:m5.xlarge")
+    assert ec2.instance_type.origin == "printed" and ec2.operating_system.origin == "printed"
+    used = next(c for c in cur.charges if v(c.line_type_raw) == "DiscountedUsage").commitment_status
+    assert (used.value, used.origin, used.source) == ("used", "inferred", "rule")
+
+
+def test_invoice_details_read_from_text_are_inferred(pipe):
+    r = pipe.parse_file(FILES / "reseller_invoice.pdf")
+    doc = Document.model_validate_json(pipe.store.part(r["sha256"], "doc"))
+    typed = [c for c in doc.charges if c.instance_type is not None]
+    assert typed and all((c.instance_type.origin, c.instance_type.source) == ("inferred", "text") for c in typed)
+
+
+def test_a_license_meter_is_not_a_vm(pipe, tmp_path):
+    f = tmp_path / "lic.csv"
+    pd.DataFrame([{"SubscriptionId": "s", "Date": "09/01/2026", "MeterCategory": "Virtual Machines Licenses",
+                   "MeterSubCategory": "SQL Server Standard", "MeterName": "2 vCPU VM License", "Quantity": 24,
+                   "CostInBillingCurrency": 1.0, "ChargeType": "Usage", "BillingCurrencyCode": "USD"}] * 3).to_csv(
+        f, index=False)
+    r = pipe.parse_file(f)
+    doc = Document.model_validate_json(pipe.store.part(r["sha256"], "doc"))
+    assert r["spec"]["id"] == "azure-usage-details"
+    assert all(c.operating_system is None and c.instance_type is None for c in doc.charges)

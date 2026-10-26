@@ -108,6 +108,10 @@ def apply(rows: pd.DataFrame) -> None:
     # commitment status: covered usage used its commitment; an unused-commitment line says unused
     status = map_unique(_col(rows, "commitment_status"), _status)
     kind = map_unique(_col(rows, "line_type_raw"), _line_kind)
-    status[status.isna() & kind.str.startswith("unused")] = "unused"
-    status[status.isna() & usage & cov.isin(COMMITMENTS) & how.eq("printed")] = "used"
+    status_how = pd.Series("printed", index=rows.index, dtype=object).where(status.notna(), None)
+    unused = status.isna() & kind.str.startswith("unused")
+    used = status.isna() & usage & cov.isin(COMMITMENTS) & how.eq("printed")
+    status[unused], status_how[unused] = "unused", "rule"     # from the line type, not a status column
+    status[used], status_how[used] = "used", "rule"           # covered usage used its commitment
     rows["commitment_status"] = status
+    rows[HOW + "commitment_status"] = status_how

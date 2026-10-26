@@ -14,6 +14,7 @@ import re
 import numpy as np
 import pandas as pd
 
+from .spec import HOW
 from .transforms import map_unique
 
 # instance types: AWS (with RDS, ElastiCache, OpenSearch, Redshift prefixes), Azure VM sizes, GCP machine types
@@ -127,7 +128,7 @@ def _found(texts: list[str]) -> dict:
 
 # an Azure VM meter name that is a size ("D4s v5", "E8ds v5", "B2ms", "NC24ads A100 v4"), Spot or low priority
 AZURE_METER_SIZE = re.compile(r"^([A-Z]{1,3}\d+[a-z]*(?:[ _-][A-Z]\d+)?(?:[ _]v\d+)?)(?:\s+(Spot|Low Priority))?$")
-AZURE_VM = re.compile(r"virtual machines", re.I)
+AZURE_VM = re.compile(r"^\s*virtual machines\s*$", re.I)     # the category exactly: not "Virtual Machines Licenses"
 
 
 def _azure_size(meter) -> tuple[str, str | None] | None:
@@ -153,14 +154,16 @@ def azure_sizes(rows: pd.DataFrame) -> int:
     if not hit.any():
         return 0
     idx = found[hit].index
-    for col in ("instance_type", "meter_name", "pricing_model"):
+    for col in ("instance_type", "meter_name", "pricing_model", HOW + "instance_type", HOW + "pricing_model"):
         if col not in rows:
             rows[col] = None
     rows.loc[idx, "instance_type"] = found[hit].map(lambda f: f[0])
+    rows.loc[idx, HOW + "instance_type"] = "text"            # read from the meter name's words: inferred
     rows.loc[idx, "meter_name"] = rows.loc[idx, "description"]
     suffix = found[hit].map(lambda f: f[1])
     fill = suffix.notna() & rows.loc[idx, "pricing_model"].isna()
     rows.loc[fill[fill].index, "pricing_model"] = suffix[fill]
+    rows.loc[fill[fill].index, HOW + "pricing_model"] = "text"
     return len(idx)
 
 
@@ -168,21 +171,22 @@ AZURE_OS_COLUMNS = ("_meter_subcategory", "_product_name", "_image_type")     # 
 BYOL = re.compile(r"windows[\s_]*(server|client)[\s_]*byol", re.I)
 
 
-def _azure_os(key: str) -> tuple[str | None, str | None]:
-    """(operating system, license model) of an Azure VM line from its meter sub-category, product name and image type
-    (Microsoft, "Understanding Azure virtual machine usage"): a compute meter is Windows or non-Windows; an image type
-    Windows_Server BYOL or Windows_Client BYOL is Azure Hybrid Benefit (Windows, billed at the non-Windows rate)."""
+def _azure_os(key: str) -> tuple[str | None, str | None, str | None]:
+    """(operating system, license model, how) of an Azure VM line from its meter sub-category, product name and image
+    type (Microsoft, "Understanding Azure virtual machine usage"): a compute meter is Windows or non-Windows; an image
+    type Windows_Server BYOL or Windows_Client BYOL is Azure Hybrid Benefit (Windows, billed at the non-Windows rate).
+    how: "text" when the words say it, "rule" for Linux (a meter that does not say Windows)."""
     sub, product, image = key.split(SEP)
     meter = f"{sub} {product}".strip()
     if BYOL.search(image):
-        return "Windows", "Bring your own license"
+        return "Windows", "Bring your own license", "text"
     if re.search(r"\bwindows\b", meter, re.I):
-        return "Windows", "License included"
+        return "Windows", "License included", "text"
     if re.search(r"red\s*hat|\brhel\b", f"{image} {meter}", re.I):
-        return "RHEL", None
+        return "RHEL", None, "text"
     if re.search(r"\bsuse\b|\bsles\b", f"{image} {meter}", re.I):
-        return "SUSE", None
-    return ("Linux", None) if meter or image else (None, None)
+        return "SUSE", None, "text"
+    return ("Linux", None, "rule") if meter or image else (None, None, None)
 
 
 def azure_os(rows: pd.DataFrame) -> int:
@@ -200,13 +204,16 @@ def azure_os(rows: pd.DataFrame) -> int:
     vm = map_unique(rows["service_raw"], lambda v: bool(AZURE_VM.search(v)) if isinstance(v, str) else False)
     key = parts[0] + SEP + parts[1] + SEP + parts[2]
     found = map_unique(key[vm.astype(bool)], _azure_os)
+    how = found.map(lambda f: f[2])
     n = 0
     for i, col in enumerate(("operating_system", "license_model")):
         vals = found.map(lambda f, i=i: f[i])
-        if col not in rows:
-            rows[col] = None
+        for c in (col, HOW + col):
+            if c not in rows:
+                rows[c] = None
         todo = vals.notna() & rows.loc[vals.index, col].isna()
         rows.loc[todo[todo].index, col] = vals[todo]
+        rows.loc[todo[todo].index, HOW + col] = how[todo]
         n = max(n, int(todo.sum()))
     return n
 
@@ -253,6 +260,10 @@ def extract(rows: pd.DataFrame, warnings: list[str] | None = None) -> list[str]:
                 empty &= rows["coverage"].isna()             # the words of the line never contradict it
             if empty.any():
                 rows.loc[empty, f] = vals[empty]
+                if f != "price_per":                     # read from a line's words: inferred (contract)
+                    if HOW + f not in rows:
+                        rows[HOW + f] = None
+                    rows.loc[empty & vals.notna(), HOW + f] = "text"
                 filled.append(f)
     return filled
 
