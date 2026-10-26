@@ -12,7 +12,7 @@ and record for every line whether its usage was on demand or covered by a commit
 
 **Every value in this task comes from a column printed in the customer's file. This task does no pricing, no
 lookup, and no calculation beyond simple arithmetic on printed columns of the same row.** There is no price data in
-this repository; prices arrive in tasks 04–05. If a file does not print a cost type, that field stays empty.
+this repository; prices arrive in tasks 05–06. If a file does not print a cost type, that field stays empty.
 
 | Format | billed cost | list cost | contracted cost | effective cost | line type / pricing model |
 |---|---|---|---|---|---|
@@ -210,6 +210,6 @@ New tests, in a new file `tests/test_cost_types.py`, using the `make_pipe` fixtu
 
 ## Do not
 
-- Do not look up or compute any price. Prices are tasks 04–05.
+- Do not look up or compute any price. Prices are tasks 05–06.
 - Do not change what `billed_cost` holds for any format; totals reconciliation depends on it.
 - Do not drop negation lines.

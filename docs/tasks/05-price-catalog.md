@@ -1,6 +1,6 @@
-# Task 04: Price catalog
+# Task 05: Price catalog
 
-**Order:** after 03. **Needs:** nothing in code, but it is scheduled here because task 05 needs it.
+**Order:** after 04. **Needs:** nothing in code, but it is scheduled here because task 06 needs it.
 **STOP gate: yes. Ask the user before writing any code (step 0).**
 **Read first:** `00-START-HERE.md` section 4.
 
@@ -30,7 +30,7 @@ Before writing code, ask the user these questions and wait for answers:
 4. Does it keep history (old prices with dates), or only the latest prices?
 5. How often is it refreshed, and when does the refresh finish?
 
-Write the answers into `docs/tasks/04-price-catalog-answers.md` and commit them with your branch.
+Write the answers into `docs/tasks/05-price-catalog-answers.md` and commit them with your branch.
 
 - If the user cannot answer now, build everything below against the fixture catalog only (step 5), with a
   `FixtureSource`. Stop before step 4's real adapter, and report that the adapter is waiting for the answers.
@@ -55,7 +55,7 @@ prices/
   __init__.py
   model.py        PriceKey, PriceRecord (dataclasses)
   units.py        unit normalization and conversion
-  aws_codes.py    AWS operation codes -> operating system / license (used in task 05)
+  aws_codes.py    AWS operation codes -> operating system / license (used in task 06)
   store.py        PriceCatalog: storage, snapshots, bulk lookup
   sources/
     __init__.py   Source protocol: iter_records(snapshot_date) -> Iterator[PriceRecord]
@@ -99,7 +99,7 @@ one input unit into it. It covers at least these units:
 | `Requests`, `1M requests`, `10K` | `request` | 1, 1,000,000 or 10,000 |
 
 Azure units carry a block size (`10 Hours`, `100 GB`); use `transforms.parse_block_unit`. An unknown unit returns
-`None`. Task 05 reports it.
+`None`. Task 06 reports it.
 
 ### Storage (`prices/store.py`)
 
@@ -167,6 +167,6 @@ Tests in a new file, `tests/test_prices.py`:
 
 ## Do not
 
-- Do not wire the catalog into the pipeline. That is task 05.
+- Do not wire the catalog into the pipeline. That is task 06.
 - Do not add Archera rates (GRI, GSP). Consumers own them.
 - Do not change `svcres/`.

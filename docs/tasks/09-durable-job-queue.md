@@ -1,6 +1,6 @@
-# Task 08: Durable job queue
+# Task 09: Durable job queue
 
-**Order:** after 07. **Needs:** nothing in code. **STOP gate: yes. Ask the user before writing code (step 0).**
+**Order:** after 08. **Needs:** 02 (`bigfile.py` and the large-file pool this task moves into a worker). **STOP gate: yes. Ask the user before writing code (step 0).**
 **Read first:** `billparse/webapi.py` (the "parsing in the background" section), `pipeline.Pipeline.parse_bytes`,
 `billparse/agent.py` (`run_job`, `needs_agent`, `enqueue_for`), `billparse/store.py` (agent job methods),
 `billparse/db.py`, `docker-compose.yml`.
@@ -18,7 +18,7 @@ each other, and a slow learning job never blocks a parse.
    connections?
 3. Should the parse API notify callers when a job ends (a callback URL), or will callers poll?
 
-Write the answers into `docs/tasks/08-durable-job-queue-answers.md`. The rest of this spec assumes PostgreSQL and
+Write the answers into `docs/tasks/09-durable-job-queue-answers.md`. The rest of this spec assumes PostgreSQL and
 polling plus an optional callback. If the user chooses Redis, keep the same table of job states and API, and swap
 only the claiming mechanism.
 
@@ -49,7 +49,7 @@ only the claiming mechanism.
 | `queue` | str, index | `small`, `large`, `learn` |
 | `state` | str, index | `queued`, `running`, `stopping`, `done`, `error`, `stopped` |
 | `step` | str | reading, routing, pricing, validating, learning |
-| `options` | JSON | force, backend, fallback, `assume_os` / `assume_tenancy` (task 05), callback_url |
+| `options` | JSON | force, backend, fallback, `assume_os` / `assume_tenancy` (task 06), callback_url |
 | `attempts`, `max_attempts` | int | default max 2 |
 | `lease_until` | float | the worker renews it every 15 s while working |
 | `worker` | str | host and pid |
@@ -72,7 +72,8 @@ transaction. A second upload of the same file returns the existing job.
 
 ### Queues
 
-- The upload size decides the queue: at or below `LARGE_FILE_MB` (default 20) → `small`, above → `large`.
+- Task 02's `bigfile.classify` decides the queue: small files → `small`, large files → `large`. Reuse its `LARGE_FILE_MB`
+  setting; do not add a second threshold.
 - Learning jobs go to `learn`.
 
 ### Learning out of the parse
@@ -110,7 +111,8 @@ transaction. A second upload of the same file returns the existing job.
   - It must start with an entry of the new `CALLBACK_ALLOWLIST` env var (comma-separated URL prefixes); otherwise
     reject the request with 400.
   - When the job ends, the worker POSTs the `ParseTask` JSON to it, retrying 3 times with backoff.
-- Delete `_pool` and `_tasks`.
+- Delete `_pool`, `_tasks` and task 02's large-file pool (`LARGE_PARSE_WORKERS` becomes the `worker-large`
+  concurrency). Large jobs call the same `bigfile.py` entry point task 02 wrote.
 
 ## Tests (`tests/test_jobs.py`, SQLite)
 

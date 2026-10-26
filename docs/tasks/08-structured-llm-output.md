@@ -1,6 +1,6 @@
-# Task 07: Structured LLM output and parallel spec candidates
+# Task 08: Structured LLM output and parallel spec candidates
 
-**Order:** after 06. **Needs:** nothing (independent; scheduled here so it does not interrupt tasks 01–06).
+**Order:** after 07. **Needs:** nothing (independent; scheduled here so it does not interrupt tasks 01–07).
 **STOP gate:** none.
 **Read first:** `billparse/llm.py`, `billparse/agent.py` (`ClaudeClient`, `TOOLS`, `_tool`), `pipeline._llm_spec`.
 

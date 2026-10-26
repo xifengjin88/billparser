@@ -1,6 +1,6 @@
-# Task 02: Attribute, ID and commitment columns from export files
+# Task 03: Attribute, ID and commitment columns from export files
 
-**Order:** after 01 is merged. **Needs:** 01. **STOP gate:** none, but **stop at the end for user review** (they
+**Order:** after 02. **Needs:** 01, 02 (the large path and unique-value text extraction). **STOP gate:** none, but **stop at the end for user review** (they
 will run the corpus check on real exports).
 **Read first:** `00-START-HERE.md`, then task 01 (you build on its fields).
 
@@ -12,7 +12,7 @@ read it from that column instead of guessing from description text, at any file 
 ## Where the values come from
 
 **From columns printed in the customer's file only.** Text extraction (`attributes.py`) stays as the fallback for
-invoices and custom files. No prices, no catalog lookups. Task 05 uses these fields to look up prices later, which
+invoices and custom files. No prices, no catalog lookups. Task 06 uses these fields to look up prices later, which
 is why they must be right.
 
 ## What exists today (verified on the samples)
@@ -27,8 +27,8 @@ Why:
 
 - `specs/builtin/aws-cur2.json` and `aws-cur-legacy.json` map no product attribute columns, no operation, no
   reservation or Savings Plan ARN. `line_item_usage_type` is used only as a fallback for `description`.
-- `billparse/pipeline.py`: `ATTRIBUTE_ROWS = 100_000`. `_try` skips `extract_attributes` above it. So a real CUR
-  (often millions of rows) gets no instance type or OS at all.
+- Before task 02, `pipeline.ATTRIBUTE_ROWS = 100_000` skipped text extraction above 100k rows. Task 02 removed the
+  cutoff and made extraction run on unique values, but text is still a guess: export columns must be read.
 - `specs/builtin/azure-usage-details.json` does not map `MeterId`, `ReservationId`, `BenefitId`, `ResourceId`,
   `AdditionalInfo`. Azure meter names like `D4s v5` do not match `attributes.AZURE_SIZE`, which needs the
   `Standard_` prefix.
@@ -114,12 +114,9 @@ Why:
    `attributes["meter_name"]`. Spot and low-priority suffixes (`D4s v5 Spot`, `D4s v5 Low Priority`) are removed
    from the size and recorded in `pricing_model`.
 
-6. **Remove the 100k-row cutoff** (`pipeline.py`):
-   - Delete `ATTRIBUTE_ROWS`. Change `attributes.extract` so it works on **unique** text values: build the text
-     key per row, run `from_text` and `_quantity` once per unique key, and map the results back.
-   - Only fill fields that are still empty (the function already does this per field; keep that).
-   - Add a guard: when more than `ATTRIBUTE_MAX_UNIQUE` unique texts exist (env var, default 200,000), skip and
-     add a warning to the extraction ("attribute text extraction skipped: N unique descriptions").
+6. **Large files.** Task 02 already removed the 100k-row cutoff and made `attributes.extract` work on unique
+   values. Check that every new mapping and the Azure size normalizer also run in `bigfile.py`'s per-chunk steps,
+   and that the normalizer works on unique meter names, not per row.
 
 ## New samples and tests
 
@@ -138,22 +135,21 @@ New file `tests/test_attribute_columns.py`:
   `operating_system`, `usage_type` and `operation`. Azure lines have a typed `meter_id`. Lines with a commitment
   have `commitment_id`.
 - Azure `D4s v5` becomes `Standard_D4s_v5`.
-- An in-memory frame of 150,000 rows with 20 unique descriptions gets `instance_type` on every row, and
-  `attributes.extract` finishes in under 5 seconds (generous on purpose; record the real time in your report).
-- With `ATTRIBUTE_MAX_UNIQUE=10` and 20 unique texts, the result carries the skip warning.
+- On the large path (set `LARGE_FILE_MB` very low), a new CUR sample gets the same attribute fields as on the small
+  path.
 - `SCHEMA_VERSION == "1.5"`.
 
 ## Done when
 
 - [ ] Tests, lint and typecheck pass; old `EXPECTED` entries unchanged.
 - [ ] The table at the top, re-run on the new samples, shows 100% for every field the file has a column for.
-- [ ] No size cutoff silently drops attributes.
+- [ ] The large path fills the same fields as the small path.
 - [ ] `llm.SPEC_GUIDE` lists the new canonical fields automatically (it prints `CANONICAL`; check the prompt still
       fits the model's limits).
 - [ ] `specs/README.md` documents `json_get`; README updated.
-- [ ] **Stop and report to the user.** Ask them to run `make corpus-check` on real exports before task 03 starts.
+- [ ] **Stop and report to the user.** Ask them to run `make corpus-check` on real exports before task 04 starts.
 
 ## Do not
 
-- Do not look up prices or validate against a catalog (tasks 04–06).
+- Do not look up prices or validate against a catalog (tasks 05–07).
 - Do not migrate learned specs that already exist in users' stores.

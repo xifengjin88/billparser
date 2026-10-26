@@ -1,12 +1,12 @@
-# Task 06: Price-based validation checks
+# Task 07: Price-based validation checks
 
-**Order:** after 05, and after the user has reviewed the match rates from task 05. **Needs:** 05.
+**Order:** after 06, and after the user has reviewed the match rates from task 06. **Needs:** 06.
 **STOP gate:** none.
 **Read first:** `billparse/validate.py` in full.
 
 ## In one sentence
 
-Use the price columns from task 05 to catch parses that add up but are wrong: swapped columns, wrong units, invented
+Use the price columns from task 06 to catch parses that add up but are wrong: swapped columns, wrong units, invented
 values.
 
 ## Where the values come from
@@ -23,7 +23,7 @@ They do not look anything up themselves.
 - `feedback` (fail and warn details) flows into the LLM repair loop (`pipeline._llm_spec`) and the agent's evidence
   report (`agent.evidence_report`).
 - `learn.regression_gate` compares rows, total and confidence on a spec's earlier files.
-- After task 05, `pipeline._parse` calls `match_prices` before the final `validate`. Route attempts (`_try`) call
+- After task 06, `pipeline._parse` calls `match_prices` before the final `validate`. Route attempts (`_try`) call
   `validate` **before** pricing. Step 4 decides how the checks reach them.
 
 ## Checks to add
@@ -42,7 +42,7 @@ when its inputs are missing, so files without prices or attributes are never pen
 Notes:
 
 - `implied_unit_price` ignores credits, negations, tax, fees and lines covered by commitments. Ratios between 0 and
-  0.5 on on-demand lines are a warning, not a failure: large negotiated discounts exist, and task 05's
+  0.5 on on-demand lines are a warning, not a failure: large negotiated discounts exist, and task 06's
   `inferred_discount` explains them.
 - `cost_order` warns rather than fails, because credits and a few edge cases legitimately break it.
 - `grounding_values` needs the document text. Pass it in as a new optional parameter of `validate()`.
@@ -59,12 +59,12 @@ Notes:
    `match_prices` and `validate`. Reject the new version if any of the new checks went from pass to fail on a file.
 4. **Route attempts.** For the checks to steer route choice and LLM repair, run `match_prices` inside
    `pipeline._try` for `cost_lines` attempts as well, on the attempt's rows. It is cheap because it works on unique
-   keys. Skip this for files over 100,000 rows until task 09 makes large files sample-based, and note that in a
-   comment.
+   keys. For large files (task 02), route attempts run on the sample, so this runs on the sample there; the final
+   checks use statistics: add the new checks' counters to `bigfile.Stats` and to `validate.validate_stats`.
 
 ## Tests (`tests/test_price_checks.py`)
 
-Build the frames directly, with the fixture catalog from task 04:
+Build the frames directly, with the fixture catalog from task 05:
 
 - a correct mapping → all new checks pass or skip, and confidence does not fall;
 - quantity and unit price columns swapped → `implied_unit_price` fails with the mix-up detail;

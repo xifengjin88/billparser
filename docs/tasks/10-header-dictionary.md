@@ -1,6 +1,6 @@
 # Task 10: Header dictionary and value-first column detection
 
-**Order:** last. **Needs:** 01 and 02 (fields), 04 (price catalog, to confirm instance types and SKUs).
+**Order:** last. **Needs:** 01 and 03 (fields), 05 (price catalog, to confirm instance types and SKUs).
 **STOP gate:** none.
 **Read first:** `billparse/mapper.py` in full, `spec._keep_unmapped`, `svcres/resolver.py` (how service
 synonyms are learned and stored), `billparse/review.py`, and the review approve endpoint in `webapi.py`.

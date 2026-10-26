@@ -1,6 +1,6 @@
-# Task 03: Remove savings estimates from the analysis
+# Task 04: Remove savings estimates from the analysis
 
-**Order:** after 02. **Needs:** 01 (uses `coverage` and `commitment_status`). **STOP gate:** none.
+**Order:** after 03. **Needs:** 01 (uses `coverage` and `commitment_status`). **STOP gate:** none.
 **Read first:** `00-START-HERE.md` section 1 (billparse returns facts, never savings).
 
 ## In one sentence

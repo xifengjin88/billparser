@@ -1,9 +1,9 @@
-# Task 05: Price matching stage
+# Task 06: Price matching stage
 
-**Order:** after 04. **Needs:** 01 (cost fields, coverage), 02 (attribute and ID fields), 04 (price catalog).
-**STOP gate:** none, but **stop at the end for user review** (they check match rates on real files before task 06
+**Order:** after 05. **Needs:** 01 (cost fields, coverage), 02 (the large path), 03 (attribute and ID fields), 05 (price catalog).
+**STOP gate:** none, but **stop at the end for user review** (they check match rates on real files before task 07
 tunes thresholds on them).
-**Read first:** `00-START-HERE.md` section 4, task 04's answers file.
+**Read first:** `00-START-HERE.md` section 4, task 05's answers file.
 
 ## In one sentence
 
@@ -15,7 +15,7 @@ priced.
 
 | Value | Source |
 |---|---|
-| `list_unit_price`, `catalog_sku_id`, `price_match_level` | price catalog (task 04), as of the line's date |
+| `list_unit_price`, `catalog_sku_id`, `price_match_level` | price catalog (task 05), as of the line's date |
 | `list_cost` when the file printed none | quantity (from the file) × `list_unit_price` (catalog); `origin = "inferred"` |
 | `list_cost` when the file printed one | the file; never overwritten |
 | `implied_unit_price` | `billed_cost / quantity`, or `effective_cost / quantity` when effective is printed (file values) |
@@ -30,7 +30,7 @@ priced.
   `best.ext.rows`.
 - `store.get_rows(sha)` reloads stored rows. `store.save_result(sha, summary, rows)` stores the summary and rows.
   `webapi` has `POST /documents/{sha256}/reparse`, which parses again.
-- Task 04 provides `prices.store.PriceCatalog` with bulk `lookup(keys)`, and `prices.units.normalize`.
+- Task 05 provides `prices.store.PriceCatalog` with bulk `lookup(keys)`, and `prices.units.normalize`.
 
 ## Steps
 
@@ -92,7 +92,7 @@ Run each level only on the keys that are still unmatched. Record the level on ev
 | `price_match_level` | the level name |
 | `price_missing` | missing attributes, or None |
 | `price_assumptions` | defaults used, or None |
-| `list_unit_price` | from the catalog **only when the file did not print one** (task 02 maps printed ones) |
+| `list_unit_price` | from the catalog **only when the file did not print one** (task 03 maps printed ones) |
 | `catalog_sku_id` | the matched catalog record's SKU or meter |
 | `implied_unit_price` | see the table at the top |
 | `price_ratio` | `implied_unit_price / list_unit_price` |
@@ -104,18 +104,18 @@ Run each level only on the keys that are still unmatched. Record the level on ev
 
 Fields on `schema.Charge`:
 
-- `list_unit_price` already exists from task 02. Fill it from the catalog only when it is empty.
+- `list_unit_price` already exists from task 03. Fill it from the catalog only when it is empty.
 - `catalog_sku_id` **already exists** on `schema.Charge` and in `export.py`. Fill it with the matched catalog
   record's SKU or meter. (The table above uses this name too.)
 - New typed fields: `price_match_level`, `implied_unit_price`, `price_ratio`, `price_missing`, `price_assumptions`.
 
 **Public contract** (`export.py`): add the five new fields to `export.Charge` and to the field list in
-`export.to_schema`. `list_unit_price` was added in task 02, and `catalog_sku_id` is already copied. Consumers read
+`export.to_schema`. `list_unit_price` was added in task 03, and `catalog_sku_id` is already copied. Consumers read
 the on-demand list price from `list_unit_price` and `list_cost` (FOCUS `ListUnitPrice`, `ListCost`), with
 `origin` saying whether the file printed it or the catalog supplied it. Add a document-level `pricing` object to
 `export.Document` (match rate, catalog version, inferred discount, warnings) and copy it in `to_schema`.
 
-Bump `SCHEMA_VERSION` to `"1.7"`. Do the 1.7 removal of `commitment_opportunity` promised in task 03 in the same
+Bump `SCHEMA_VERSION` to `"1.7"`. Do the 1.7 removal of `commitment_opportunity` promised in task 04 in the same
 bump.
 
 ### 6. Rules for inferred values
@@ -165,7 +165,7 @@ Add `pricing` to `DocumentView` in `webapi.py`, show the match rate on the docum
   - run `match_prices` again with the current catalog, then `validate` and `contract.build`, and save.
   - Never re-parse the file. It returns the same task shape as reparse.
 
-## Tests (`tests/test_pricing.py`, using the task 04 fixture catalog)
+## Tests (`tests/test_pricing.py`, using the task 05 fixture catalog)
 
 - An Azure file matches at `exact_id` by meter; EC2 and RDS lines from a CUR match at `attributes`.
 - A line without an OS and with no default is `service_only`, with `price_missing` containing `operating_system`.
@@ -179,6 +179,10 @@ Add `pricing` to `DocumentView` in `webapi.py`, show the match rate on the docum
 - Reprice after changing the fixture catalog changes `list_cost`, while the route and the row count stay the same.
 - No catalog: the parse succeeds with a warning.
 - Performance: 500,000 rows with about 2,000 unique keys are priced in under 10 seconds. Record the real time.
+- Large path (task 02): `match_prices` runs per chunk inside `bigfile.py`, looking up each chunk's unique keys (with a
+  cache across chunks), and its document summary is built from accumulated counters in `bigfile.Stats`. Test that a
+  file priced through the large path (`LARGE_FILE_MB` set very low) gives the same match rate and `list_cost` total as
+  the small path.
 - `EXPECTED` routes and totals unchanged: pricing never changes `billed_cost`.
 
 ## Done when
@@ -189,7 +193,7 @@ Add `pricing` to `DocumentView` in `webapi.py`, show the match rate on the docum
 - [ ] Match rate visible in the result and on the document page.
 - [ ] README describes the stage, the ladder, the defaults, R1–R4 and reprice.
 - [ ] **Stop and report to the user with the match rates on all sample files.** They will check match rates on real
-      files before task 06.
+      files before task 07.
 
 ## Do not
 
