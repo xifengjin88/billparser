@@ -37,7 +37,7 @@ from .settings import catalog_dir, data_dir
 from .store import Store
 
 router = APIRouter()
-MAX_UPLOAD_MB = int(os.environ.get("MAX_UPLOAD_MB", "500"))
+MAX_UPLOAD_MB = int(os.environ.get("MAX_UPLOAD_MB", "2048"))
 
 
 @lru_cache(maxsize=1)
