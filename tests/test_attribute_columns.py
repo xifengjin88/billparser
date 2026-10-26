@@ -64,7 +64,7 @@ def compute(doc: Document) -> list:
 
 
 def test_schema_version():
-    assert SCHEMA_VERSION == "1.5"
+    assert SCHEMA_VERSION >= "1.5"                    # 1.5 added the attribute fields
 
 
 @pytest.mark.parametrize("name", sorted(SAMPLES))
@@ -174,7 +174,7 @@ def test_parse_returns_the_new_fields(client):
         r = client.post("/parse", files={"file": ("aws_cur_legacy_full.csv.gz", fh)})
     assert r.status_code == 200, r.text
     doc = r.json()["document"]
-    assert doc["schema_version"] == "1.5"
+    assert doc["schema_version"] == SCHEMA_VERSION >= "1.5"
     ec2 = next(c for c in doc["charges"] if (c.get("usage_type") or {}).get("value") == "USE1-BoxUsage:m5.xlarge")
     for f in ("tenancy", "license_model", "resource_id", "pricing_term", "list_unit_price", "sku_id", "sku_price_id",
               "operation"):

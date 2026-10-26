@@ -45,11 +45,16 @@ def _print_summary(r: dict) -> None:
         if f:
             nm = f["next_month"]
             print(f"  next month: {nm['expected']:,.2f} ({nm['low']:,.2f} to {nm['high']:,.2f})  [{f['method']}]")
-        c = a.get("commitment_opportunity", {})
-        if c.get("eligible_monthly_spend"):
-            lo, hi = c["indicative_monthly_savings"]
-            print(f"  commitment-eligible spend {c['eligible_monthly_spend']:,.2f}/mo; "
-                  f"indicative savings {lo:,.2f} to {hi:,.2f}/mo")
+        e = a.get("commitment_eligible_usage") or {}
+        for cat, split in (e.get("by_category") or {}).items():
+            parts = ", ".join(f"{k.replace('_', ' ')} {v:,.2f}" for k, v in split.items() if k != "total")
+            print(f"  commitment-eligible {cat} ({e.get('cost_type')} cost) {split['total']:,.2f}: {parts}")
+        u = e.get("unused_commitment_spend") or {}
+        if u.get("total") is not None:
+            print(f"  unused commitment {u['total']:,.2f}: " + ", ".join(f"{k.replace('_', ' ')} {v:,.2f}"
+                                                                      for k, v in (u.get("by_type") or {}).items()))
+        elif u.get("lines"):
+            print(f"  unused commitment: {u['lines']} line(s), amount not in the file")
 
 
 def main(argv: list[str] | None = None) -> None:

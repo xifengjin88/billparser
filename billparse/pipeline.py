@@ -231,7 +231,9 @@ class Pipeline:
         out_path = self.store.temp_path(".parquet")
         try:
             scan = bigfile.scan(best.spec, info, sample, self.s.catalog_dir, out_path, on_progress=on_step,
-                                unmapped=best.ext.unmapped if best.ext is not None else None)
+                                unmapped=best.ext.unmapped if best.ext is not None else None,
+                                cost_basis=((best.ext.fields if best.ext is not None else {}).get("cost_basis")
+                                            or {}).get("value"))
         except bigfile.TooLarge as e:
             out_path.unlink(missing_ok=True)
             return unsupported(Document(info.name, info.fmt, sha, []), str(e))

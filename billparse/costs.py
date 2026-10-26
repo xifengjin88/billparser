@@ -44,11 +44,15 @@ def azure_basis(rows: pd.DataFrame) -> str:
     return "unknown"
 
 
-def azure_amortization(ext: Extraction) -> None:
+def azure_amortization(ext: Extraction, known: str | None = None) -> None:
+    """known: the export's basis told from other rows of the same file (the first rows of a large file), used when
+    these rows cannot tell it (a chunk of a large file with no commitment usage)."""
     rows = ext.rows
     if rows.empty or "pricing_model" not in rows:
         return
     basis = azure_basis(rows)
+    if basis == "unknown" and known in ("actual", "amortized"):
+        basis = known
     model = _key(rows["pricing_model"])
     keep = model.isin(PLAIN_MODELS) | (model.isin(COMMITTED_MODELS) if basis == "amortized" else False)
     cost = pd.to_numeric(rows["billed_cost"], errors="coerce")

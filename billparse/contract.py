@@ -56,7 +56,8 @@ def weakest(values) -> str | None:
 ROLLUP_KEYS = ["service_code", "service_name", "service_raw", "region", "account_id", "charge_type", "pricing_model",
                "instance_type", "operating_system", "database_engine", "deployment_option", "usage_type", "unit",
                "commitment_id", "currency", "provider", "coverage", "line_type_raw", "sku_id", "sku_price_id", "meter_id",
-               "operation", "tenancy", "license_model", "pricing_term", "purchase_option"]   # never resource_id: one per line
+               "operation", "tenancy", "license_model", "pricing_term", "purchase_option",
+               "commitment_status"]   # never resource_id: one per line. commitment_status: unused apart (analysis)
 UNIT_PRICES = ("list_unit_price", "contracted_unit_price")    # kept on a rolled line when all its lines agree
 
 

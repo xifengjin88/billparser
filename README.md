@@ -162,8 +162,15 @@ first rows. Large parses run in their own pool (`LARGE_PARSE_WORKERS`); a waitin
 11 GB in memory.
 
 **Analysis** (`analyze.py`). Spend by service, category and provider, tax/credits/purchases
-separated, period detection, next-month and next-quarter forecast with a range that widens
-with lower confidence and shorter history, and indicative commitment-eligible spend.
+separated, period detection, and a next-month and next-quarter forecast with a range that widens with lower
+confidence and shorter history (commitment negations are not usage). `commitment_eligible_usage` gives facts, never
+savings: the compute, database, container and analytics usage split by how it was priced (`coverage`: on demand,
+reserved, savings plan, committed use, Spot, unknown), by category and by provider, region and instance family (top
+50); the commitment paid for but not used (Azure and FOCUS unused lines, the unused part of AWS RI and Savings Plan
+fees), `null` with a note when the file does not print its amount; and the on-demand part by month. It uses the
+effective cost when every eligible line has one, else the billed cost, and says which. billparse estimates no
+savings and assumes no discount: that belongs to its consumers. `commitment_opportunity` is deprecated (schema
+1.6) and removed in 1.7.
 
 ## Learning loop
 
@@ -211,7 +218,6 @@ Schema changes go through Alembic: change `billparse/db.py`, then
   `azure-cost-analysis-export` and `gcp-cost-table` are marked unverified. Run real samples first.
 - No OCR: scanned PDFs are detected and queued. Hook Azure Document Intelligence or Textract
   into `docmodel._read_pdf` to produce the same word-with-position rows.
-- Commitment savings are indicative ranges; monthly bills hide hourly usage.
 - Parses run in a thread pool in the API process (`PARSE_WORKERS`), large files in a second pool
   (`LARGE_PARSE_WORKERS`). A task is in memory: an API restart forgets running tasks (never stored results). One API
   container only.

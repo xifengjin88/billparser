@@ -220,7 +220,7 @@ def _by_service_and_type(df: pd.DataFrame) -> list[dict]:
 
 def _by_category_and_type(df: pd.DataFrame) -> list[dict]:
     """Each area's money by kind (Compute: usage, commitment fee, credit, tax...): what an area really costs."""
-    cats = df["category"] if "category" in df else pd.Series(None, index=df.index)
+    cats = df["category"] if "category" in df else pd.Series(None, index=df.index, dtype=object)
     return _by_type(df, cats.fillna("Unresolved"), "category")
 
 
@@ -238,14 +238,14 @@ def analyze(rows: pd.DataFrame, confidence: float, status: str, fields: dict) ->
 
     by_service = (usage.groupby(usage["service"].fillna("Unknown"))["billed_cost"].sum()
                   .sort_values(ascending=False))
-    by_category = (usage.groupby(usage.get("category", pd.Series(index=usage.index)).fillna("Unresolved"))["billed_cost"]
+    by_category = (usage.groupby(usage.get("category", pd.Series(index=usage.index, dtype=object)).fillna("Unresolved"))["billed_cost"]
                    .sum().sort_values(ascending=False))
-    by_provider = usage.groupby(usage.get("provider", pd.Series(index=usage.index)).fillna("unknown"))["billed_cost"].sum()
+    by_provider = usage.groupby(usage.get("provider", pd.Series(index=usage.index, dtype=object)).fillna("unknown"))["billed_cost"].sum()
 
     period = _period(df, fields)
     monthly = _monthly(df)
     forecast = _forecast(usage_total, period, monthly, confidence, status)
-    commit = _commitments(usage, by_category, monthly, confidence)
+    commit = _commitments(usage, by_category)
 
     return {
         "currency": currency, "total_billed": round(total, 2), "usage_spend": round(usage_total, 2),
@@ -261,7 +261,8 @@ def analyze(rows: pd.DataFrame, confidence: float, status: str, fields: dict) ->
                          for k, v in by_service.head(15).items()],
         "monthly": {k: round(float(v), 2) for k, v in monthly.items()} if monthly is not None else None,
         "forecast": forecast,
-        "commitment_opportunity": commit,
+        "commitment_eligible_usage": _eligible_usage(df),
+        "commitment_opportunity": commit,              # deprecated in 1.6, removed in 1.7
     }
 
 
@@ -323,20 +324,105 @@ def _band(x: float, w: float) -> dict:
     return {"low": round(x * (1 - w), 2), "expected": round(x, 2), "high": round(x * (1 + w), 2)}
 
 
-def _commitments(usage: pd.DataFrame, by_cat: pd.Series, monthly: pd.Series | None, conf: float) -> dict:
+def _commitments(usage: pd.DataFrame, by_cat: pd.Series) -> dict:
+    """Deprecated in 1.6, removed in 1.7: see commitment_eligible_usage. No savings, discount or coverage assumption."""
     eligible = float(sum(v for k, v in by_cat.items() if k in COMMITTABLE))
-    if eligible <= 0:
-        return {"eligible_monthly_spend": 0.0, "note": "No compute, database, container or analytics spend identified."}
-    stable = monthly is not None and len(monthly) >= 3 and (monthly.std() / monthly.mean() < 0.1)
-    lo_base, hi_base = (0.6, 0.8) if stable else (0.45, 0.7)
-    lo_base, hi_base = lo_base * (0.8 + 0.2 * conf), hi_base * (0.8 + 0.2 * conf)
-    return {
-        "eligible_monthly_spend": round(eligible, 2),
-        "suggested_baseline_coverage": [round(lo_base, 2), round(hi_base, 2)],
-        "coverable_monthly_spend": [round(eligible * lo_base, 2), round(eligible * hi_base, 2)],
-        "assumed_discount_range": [0.2, 0.4],
-        "indicative_monthly_savings": [round(eligible * lo_base * 0.2, 2), round(eligible * hi_base * 0.4, 2)],
-        "note": ("Indicative only. Monthly bills hide hourly usage, so the baseline is conservative. "
-                 "Hourly data (CUR, usage exports or connected accounts) narrows this range. "
-                 "Insured commitments can cover the uncertain band above the baseline."),
-    }
+    return {"deprecated": True, "replaced_by": "commitment_eligible_usage", "eligible_monthly_spend": round(eligible, 2),
+            "note": "Deprecated: commitment_eligible_usage gives the facts (covered, on demand, unused). billparse "
+                    "estimates no savings."}
+
+
+# ---------------------------------------------------------------- commitment-eligible usage (facts only)
+COVERAGES = ["on_demand", "reserved", "savings_plan", "committed_use", "spot", "unknown"]
+MAX_GROUPS = 50
+FEE_UNUSED = {"rifee", "savingsplanrecurringfee"}   # AWS CUR: their effective cost is the unused commitment (task 02)
+AZURE_FAMILY = re.compile(r"^(Standard|Basic)_([A-Z]+)\d+([a-z]*)(?:_[A-Z]\d+)?(?:_(v\d+))?")   # case matters
+ELIGIBLE_NOTE = ("Facts from the file: commitment-eligible usage split by how it was priced, and commitment paid for "
+                 "but not used. billparse does not estimate savings.")
+
+
+def instance_family(v) -> str | None:
+    """m5 (m5.xlarge), db.r6g (db.r6g.large), Standard_Dsv5 (Standard_D4s_v5), n2 (n2-standard-4)."""
+    if not isinstance(v, str) or not v.strip():
+        return None
+    v = v.strip()
+    if (m := AZURE_FAMILY.match(v)):
+        return f"{m.group(1)}_{m.group(2)}{m.group(3)}{m.group(4) or ''}"
+    if "." in v:                                     # AWS: the size is the last part (OpenSearch adds .search)
+        return re.sub(r"\.(search|elasticsearch)$", "", v).rsplit(".", 1)[0]
+    return v.split("-", 1)[0]                        # GCP: n2-standard-4
+
+
+def _split(df: pd.DataFrame, cost: str) -> dict:
+    """Spend by coverage, and its total."""
+    out = {k: round(float(v), 2) for k, v in df.groupby(df["_cov"], sort=False)[cost].sum().items()
+           if abs(v) >= 0.005}
+    return {**{k: out[k] for k in COVERAGES if k in out}, "total": round(float(df[cost].sum()), 2)}
+
+
+def _eligible_usage(df: pd.DataFrame) -> dict:
+    """Commitment-eligible usage (COMMITTABLE categories) as facts from the lines: how it was priced (coverage), by
+    category and by provider, region and instance family; the commitment paid for but not used; the on-demand part
+    by month. Works on lines and on rolled-up lines (every field read is a roll-up key)."""
+    ct = df["charge_type"]
+    status = df["commitment_status"] if "commitment_status" in df else pd.Series(None, index=df.index, dtype=object)
+    unused_line = status.eq("unused")
+    cats = df["category"] if "category" in df else pd.Series(None, index=df.index, dtype=object)
+    eligible = df[~ct.isin(NON_USAGE) & cats.isin(COMMITTABLE) & ~unused_line].copy()
+    has_effective = "effective_cost" in df and not eligible.empty and eligible["effective_cost"].notna().all()
+    cost = "effective_cost" if has_effective else "billed_cost"
+    eligible[cost] = pd.to_numeric(eligible[cost], errors="coerce").fillna(0.0)
+    cov = eligible["coverage"] if "coverage" in eligible else pd.Series(None, index=eligible.index, dtype=object)
+    eligible["_cov"] = cov.where(cov.isin(COVERAGES), "unknown")
+    by_category = {c: _split(g, cost) for c, g in eligible.groupby(cats[eligible.index], sort=False)}
+    by_category = dict(sorted(by_category.items(), key=lambda x: -abs(x[1]["total"])))
+
+    def col(name: str) -> pd.Series:
+        return eligible[name] if name in eligible else pd.Series(None, index=eligible.index, dtype=object)
+    keys = pd.DataFrame({"provider": col("provider"), "region": col("region"),
+                         "instance_family": map_unique(col("instance_type"), instance_family)}, index=eligible.index)
+    keys = keys.astype(object).where(keys.notna(), None)
+    groups = []
+    for key, g in eligible.groupby([keys[k].fillna("") for k in keys.columns], sort=False):
+        groups.append({**{k: (v or None) for k, v in zip(keys.columns, key, strict=True)}, **_split(g, cost)})
+    groups.sort(key=lambda x: -abs(x["total"]))
+    if len(groups) > MAX_GROUPS:
+        top = {(g["provider"] or "", g["region"] or "", g["instance_family"] or "") for g in groups[:MAX_GROUPS]}
+        key_tuples = pd.Series(list(zip(keys["provider"].fillna(""), keys["region"].fillna(""),
+                                        keys["instance_family"].fillna(""), strict=True)), index=eligible.index)
+        rest = eligible[~key_tuples.isin(top)]
+        groups = groups[:MAX_GROUPS] + [{"provider": "other", "region": None, "instance_family": None,
+                                         **_split(rest, cost)}]
+    monthly = None
+    if "charge_start" in eligible and not eligible.empty:
+        month = pd.to_datetime(eligible["charge_start"], errors="coerce").dt.to_period("M").astype(str)
+        od = eligible[eligible["_cov"].eq("on_demand")]
+        if month.nunique() > 1:
+            monthly = {k: round(float(v), 2) for k, v in od.groupby(month[od.index])[cost].sum().items()}
+    return {"cost_type": "effective" if has_effective else "billed", "by_category": by_category,
+            "by_group": groups, "unused_commitment_spend": _unused(df, unused_line), "monthly_on_demand": monthly,
+            "note": ELIGIBLE_NOTE}
+
+
+def _unused(df: pd.DataFrame, unused_line: pd.Series) -> dict | None:
+    """Commitment paid for but not used, by commitment kind: Azure and FOCUS unused lines, AWS CUR RIFee and
+    SavingsPlanRecurringFee (their effective cost is the unused part). The amount is the lines' effective
+    (amortized) cost; null with a note when a line has none (an Azure actual-cost export, a CUR without amortized
+    columns), never 0."""
+    kind = df["line_type_raw"].map(lambda v: re.sub(r"[\s_-]+", "", v.lower()) if isinstance(v, str) else "") \
+        if "line_type_raw" in df else pd.Series("", index=df.index)
+    lines = df[unused_line | kind.isin(FEE_UNUSED)]
+    if lines.empty:
+        return {"total": None, "note": "The file has no unused-commitment lines (Azure or FOCUS unused, AWS RI or "
+                                       "Savings Plan fee lines); how much was unused cannot be told from it."}
+    n = int(lines["_lines"].sum()) if "_lines" in lines else len(lines)
+    qty = round(float(pd.to_numeric(lines["quantity"], errors="coerce").sum()), 4) if "quantity" in lines else None
+    eff = pd.to_numeric(lines["effective_cost"], errors="coerce") if "effective_cost" in lines else \
+        pd.Series(float("nan"), index=lines.index)
+    if eff.isna().any():
+        return {"total": None, "lines": n, "quantity": qty,
+                "note": "The unused-commitment lines print no amortized cost (an actual-cost export, or no amortized "
+                        "columns): their amount cannot be told from the file."}
+    cov = lines["coverage"] if "coverage" in lines else pd.Series(None, index=lines.index, dtype=object)
+    by_type = {k: round(float(v), 2) for k, v in eff.groupby(cov.fillna("unknown")).sum().items()}
+    return {"total": round(float(eff.sum()), 2), "by_type": by_type, "lines": n, "quantity": qty}
