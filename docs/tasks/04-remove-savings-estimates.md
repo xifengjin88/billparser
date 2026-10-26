@@ -34,9 +34,23 @@ and `commitment_status` (task 01). No prices, no discount assumptions.
    - `by_group`: the same split by provider, region and instance family when known. The instance family is the part
      of `instance_type` before the size: `m5` from `m5.xlarge`, `Standard_D` + series for Azure, `n2` for GCP. Keep
      the top 50 groups by spend, and roll the rest into `"other"`.
-   - `unused_commitment_spend`: the sum over lines with `commitment_status = unused`.
+   - `unused_commitment_spend`: commitment capacity paid for but not used, by commitment type, from what each format
+     prints:
+     - **Azure:** lines with `commitment_status = unused` (`UnusedReservation`, `UnusedSavingsPlan`);
+     - **FOCUS:** lines with `commitment_status = unused` (`CommitmentDiscountStatus = Unused`);
+     - **AWS CUR:** the `effective_cost` of `RIFee` and `SavingsPlanRecurringFee` lines. Task 02's fix made
+       `cur_effective` put the unused part of the commitment there. When the file has no amortized columns, report
+       `null` with a note, not 0.
+   - Keep unused spend **out of** `by_category` and `by_group`: a FOCUS unused line is `ChargeCategory = Usage` with
+     `coverage = savings_plan`, so without this it would be counted as covered usage too.
    - `monthly`: the eligible on-demand spend per month, when the file spans more than one month.
    - `note`: one sentence saying these are facts from the file and that billparse does not estimate savings.
+
+   **Roll-ups.** Every real CUR or FOCUS file is analyzed from rolled-up lines: on the large path, and on the normal
+   path above `CONTRACT_MAX_CHARGES`. `commitment_status` is **not** in `contract.ROLLUP_KEYS` today, so unused FOCUS
+   and Azure lines would merge with used ones and the unused amount would come out as 0. Add `commitment_status` to
+   `ROLLUP_KEYS` (it has three values, so groups barely grow). Every other field this step reads (`coverage`,
+   `category`, `provider`, `region`, `instance_type`, `line_type_raw`, the month) is already a roll-up key.
 
 2. **Deprecate the old field** for one schema version:
    - Keep `commitment_opportunity` in the analysis, but add `"deprecated": true` and
@@ -57,7 +71,10 @@ and `commitment_status` (task 01). No prices, no discount assumptions.
 In `tests/test_cost_types.py` or a new file, using the task 01 sample `aws_cur2_commitments.csv.gz`:
 
 - covered spend appears under `reserved` and `savings_plan`, not under `on_demand`;
-- `unused_commitment_spend` matches the unused lines;
+- `unused_commitment_spend` matches the unused lines on the CUR sample, `azure_actual.csv` and
+  `focus_commitments.parquet`, and is `null` on `aws_cur2_no_amortized.csv.gz`;
+- the same three files give the same `commitment_eligible_usage` on the large path (`LARGE_FILE_MB` set very low,
+  small `CHUNK_ROWS`) and with `CONTRACT_MAX_CHARGES` set low on the normal path, so unused spend survives roll-ups;
 - the coverage splits add up to the eligible usage spend;
 - no key anywhere in `analysis` contains `discount` or `savings`, except the deprecated object's
   `deprecated` and `replaced_by` keys;
