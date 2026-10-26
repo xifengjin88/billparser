@@ -381,7 +381,8 @@ def _map_columns(spec: dict, raw: pd.DataFrame, ext: Extraction) -> pd.DataFrame
 
 
 # money columns: a second cost changes the sum; a price can be list or net
-NEVER_ADDED = {"billed_cost", "tax", "unit_price", "list_cost", "contracted_cost", "effective_cost"}
+NEVER_ADDED = {"billed_cost", "tax", "unit_price", "list_cost", "contracted_cost", "effective_cost", "list_unit_price",
+               "contracted_unit_price"}
 
 
 def _keep_unmapped(raw: pd.DataFrame, out: pd.DataFrame, used: set, guess: bool = True,

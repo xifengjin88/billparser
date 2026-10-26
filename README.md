@@ -120,7 +120,15 @@ the commitment that was not used (`reservation/UnusedRecurringFee` + unused upfr
 **AWS CUR** (`specs/builtin/aws-cur-legacy.json`, `aws-cur2.json`). A fixed format: every field is read from the
 column of its exact name (`exact_columns`), legacy (`product/instanceType`) or 2.0 (`product_instance_type`, and the
 `product` map for engine, OS and deployment). Columns the spec does not name are kept as extra text, never guessed.
-The SKU (`product/sku`) and its exact price (`pricing/RateCode`) are `sku_id` and `sku_price_id`. A Savings Plan negation line (it cancels covered usage
+The SKU (`product/sku`) and its exact price (`pricing/RateCode`) are `sku_id` and `sku_price_id`.
+
+**Attribute and ID columns** (schema 1.5). Every built-in export reads a line's details from its own columns, and
+text extraction (`attributes.py`) only fills what no column gave: instance type, OS, engine, deployment, tenancy,
+license model, usage type, operation, pricing term and purchase option (CUR), meter, resource, reservation or savings
+plan ID and the list and contracted unit prices (Azure: `MeterId`, `ResourceId`, `ReservationId`/`BenefitId`,
+`PayGPrice`, `UnitPrice`, the VM size from `AdditionalInfo`), SKU, SKU price, resource and commitment IDs and unit
+prices (FOCUS), SKU, resource and machine type from the system labels (GCP). An Azure VM meter name that is a size
+(`D4s v5`) gives `Standard_D4s_v5`; a Spot or Low Priority suffix goes to the pricing model. A Savings Plan negation line (it cancels covered usage
 printed at the on-demand rate) is its own kind, `commitment_negation`: not usage and not a credit.
 
 **Validation** (`validate.py`). Evidence that moves a confidence score:

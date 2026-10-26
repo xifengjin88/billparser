@@ -172,6 +172,41 @@
    "from": [
     "pricing_rate_code"
    ]
+  },
+  "operation": {
+   "from": [
+    "line_item_operation"
+   ]
+  },
+  "tenancy": {
+   "from": [
+    "product_tenancy"
+   ]
+  },
+  "license_model": {
+   "from": [
+    "product_license_model"
+   ]
+  },
+  "list_unit_price": {
+   "from": [
+    "pricing_public_on_demand_rate"
+   ]
+  },
+  "pricing_term": {
+   "from": [
+    "pricing_term"
+   ]
+  },
+  "purchase_option": {
+   "from": [
+    "pricing_purchase_option"
+   ]
+  },
+  "resource_id": {
+   "from": [
+    "line_item_resource_id"
+   ]
   }
  },
  "derive": {

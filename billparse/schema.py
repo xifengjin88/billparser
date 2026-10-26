@@ -6,9 +6,11 @@ from typing import Any, Generic, Literal, Optional, TypeVar, cast
 
 from pydantic import BaseModel, Field
 
-SCHEMA_VERSION = "1.4"            # 1.2: database_engine, deployment_option on charges; 1.3: confidence;
+SCHEMA_VERSION = "1.5"            # 1.2: database_engine, deployment_option on charges; 1.3: confidence;
                                   # 1.4: typed list/contracted/effective cost, coverage, line_type_raw on charges,
                                   #      kind commitment_negation, cost_types and cost_basis on documents
+                                  # 1.5: tenancy, license_model, resource_id, pricing_term, purchase_option,
+                                  #      list_unit_price, contracted_unit_price on charges (read from export columns)
 
 T = TypeVar("T")
 
@@ -126,6 +128,13 @@ class Charge(BaseModel):
     catalog_sku_id: Optional[CitedValue[str]] = None
     sku_price_id: Optional[CitedValue[str]] = None
     meter_id: Optional[CitedValue[str]] = None
+    tenancy: Optional[CitedValue[str]] = None              # Shared, Dedicated, Host
+    license_model: Optional[CitedValue[str]] = None
+    resource_id: Optional[CitedValue[str]] = None
+    pricing_term: Optional[CitedValue[str]] = None         # OnDemand, Reserved (as printed)
+    purchase_option: Optional[CitedValue[str]] = None      # All Upfront, Partial Upfront, No Upfront
+    list_unit_price: Optional[CitedValue[Decimal]] = None  # one unit at the public list price
+    contracted_unit_price: Optional[CitedValue[Decimal]] = None  # one unit after negotiated discounts
     attributes: dict[str, Any] = Field(default_factory=dict)
 
 

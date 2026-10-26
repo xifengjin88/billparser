@@ -36,7 +36,8 @@ STATUS = {"reconciled": "auto_accepted", "unreconciled": "auto_accepted", "auxil
 DOC_TYPE = {"price_sheet": "estimate", "recommendations": "other", "inventory": "inventory"}
 TEXT_FIELDS = ("pricing_model", "commitment_id", "commitment_type", "commitment_status", "instance_type",
                "operating_system", "database_engine", "deployment_option", "usage_type", "unit", "line_type_raw",
-               "sku_id", "sku_price_id", "meter_id")
+               "sku_id", "sku_price_id", "meter_id", "operation", "tenancy", "license_model", "resource_id",
+               "pricing_term", "purchase_option")
 COST_FIELDS = ("list_cost", "contracted_cost", "effective_cost")    # typed beside the billed cost (Charge.cost)
 COST_TYPES = {"billed": "cost", "list": "list_cost", "contracted": "contracted_cost", "effective": "effective_cost"}
 USAGE_KINDS = {"usage", "marketplace_usage"}
@@ -294,7 +295,7 @@ def _charge(i: int, r: dict, loc: Locator, sections: dict[str, str]) -> Charge:
         how = _str(r.get(HOW + "coverage"))
         c.coverage = cv(v, cite, "printed" if how == "printed" else "inferred", None,
                         None if how == "printed" else ("text" if how == "text" else "rule"))
-    for f in ("quantity", "unit_price"):
+    for f in ("quantity", "unit_price", "list_unit_price", "contracted_unit_price"):
         if (d := _dec(r.get(f))) is not None:
             setattr(c, f, cv(d, cite))
     if (d := _date(r.get("charge_start"))):
@@ -306,7 +307,8 @@ def _charge(i: int, r: dict, loc: Locator, sections: dict[str, str]) -> Charge:
     attrs: dict = {}
     # effective_cost and list_cost: deprecated in 1.4: use the typed fields
     for k in ("service_raw", "category", "resolved_by", "charge_type", "account_name", "region_name", "effective_cost",
-              "list_cost", "credits", "tax", "invoice_id", "price_per", "resource_type", "storage_gb", "_lines"):
+              "list_cost", "credits", "tax", "invoice_id", "price_per", "resource_type", "storage_gb", "meter_name",
+              "_lines"):
         v = r.get(k)
         if _str(v) is not None:
             attrs[k.lstrip("_")] = v if isinstance(v, (int, float)) else str(v)

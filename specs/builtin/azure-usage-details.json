@@ -145,6 +145,45 @@
    "from": [
     "paygCostInBillingCurrency"
    ]
+  },
+  "meter_id": {
+   "from": [
+    "MeterId"
+   ]
+  },
+  "commitment_id": {
+   "from": [
+    "ReservationId",
+    "BenefitId"
+   ],
+   "coalesce": true
+  },
+  "resource_id": {
+   "from": [
+    "ResourceId",
+    "InstanceId"
+   ],
+   "coalesce": true
+  },
+  "list_unit_price": {
+   "from": [
+    "PayGPrice"
+   ]
+  },
+  "contracted_unit_price": {
+   "from": [
+    "UnitPrice"
+   ]
+  },
+  "instance_type": {
+   "from": [
+    "AdditionalInfo"
+   ],
+   "t": [
+    {
+     "json_get": "ServiceType"
+    }
+   ]
   }
  },
  "derive": {

@@ -22,13 +22,18 @@ Built-in specs live here in `builtin/`. Learned specs are written to `store/spec
 Transforms: `number`, `currency`, `date` (optional format), `strip`, `regex`, `map`, `charge_type`,
 `json_sum`, `upper`, `strip_suffix`, `scale`, `coverage` (a line type or pricing model as `on_demand`, `reserved`,
 `savings_plan`, `committed_use`, `spot` or `unknown`; tax, credit, fee and other non-usage types give nothing),
-`commitment_credit` (a GCP credits list: `committed_use` when a credit is a committed use discount). Add hand-written ones to `CUSTOM_TRANSFORMS` in
+`commitment_credit` (a GCP credits list: `committed_use` when a credit is a committed use discount), `json_get`
+(one key's value from a JSON object cell, or from a list of `{"key", "value"}` pairs: `{"json_get": "ServiceType"}`
+reads the VM size from Azure `AdditionalInfo`, `{"json_get": "compute.googleapis.com/machine_spec"}` the machine type
+from GCP `system_labels`). Add hand-written ones to `CUSTOM_TRANSFORMS` in
 `transforms.py`; LLM-written specs can only use the registered list.
 
 Canonical fields: see `CANONICAL` in `billparse/transforms.py`. Cost types: `billed_cost`, `list_cost`,
 `contracted_cost`, `effective_cost`. Commitments: `coverage`, `line_type_raw` (the provider's line type, unchanged),
 `commitment_type`, `commitment_status`, `commitment_id`. Price identifiers: `sku_id` (AWS `product/sku`), `sku_price_id`
-(AWS `pricing/RateCode`: the SKU's exact price), `meter_id` (Azure). One source column can feed several fields (the CUR line type
+(AWS `pricing/RateCode`: the SKU's exact price), `meter_id` (Azure). Line details from export columns: `operation`,
+`tenancy`, `license_model`, `resource_id`, `pricing_term`, `purchase_option`, and the unit prices `list_unit_price`
+and `contracted_unit_price` (never added from a guessed column). One source column can feed several fields (the CUR line type
 feeds `charge_type`, `line_type_raw` and `coverage`).
 
 To add a provider format: drop a JSON file in `builtin/`, add a sample to `samples/`, add it to

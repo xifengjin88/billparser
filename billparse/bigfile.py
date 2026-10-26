@@ -430,7 +430,7 @@ def stored_doc(store, sha: str) -> Document | None:
 # ---------------------------------------------------------------- the scan
 # columns the steps add to a spec's canonical fields (spec._keep_unmapped, attributes, coverage, resolve_services)
 STEP_COLUMNS = ["service", "service_name", "service_code", "category", "resolved_by", "region_name", "price_per",
-                "commitment_status", HOW + "coverage", "_extra", "_src", "_group"]
+                "commitment_status", "meter_name", HOW + "coverage", "_extra", "_src", "_group"]
 ROLL_KEYS = [*contract.ROLLUP_KEYS, "service", "category", "_month"]
 HOW_RANK = {"text": 1, "printed": 2, "derived": 3}
 

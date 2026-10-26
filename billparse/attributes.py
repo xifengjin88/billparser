@@ -125,12 +125,53 @@ def _found(texts: list[str]) -> dict:
     return found
 
 
+# an Azure VM meter name that is a size ("D4s v5", "E8ds v5", "B2ms", "NC24ads A100 v4"), Spot or low priority
+AZURE_METER_SIZE = re.compile(r"^([A-Z]{1,3}\d+[a-z]*(?:[ _-][A-Z]\d+)?(?:[ _]v\d+)?)(?:\s+(Spot|Low Priority))?$")
+AZURE_VM = re.compile(r"virtual machines", re.I)
+
+
+def _azure_size(meter) -> tuple[str, str | None] | None:
+    m = AZURE_METER_SIZE.match(meter.strip()) if isinstance(meter, str) else None
+    if not m:
+        return None
+    return "Standard_" + re.sub(r"[ -]+", "_", m.group(1)), m.group(2)
+
+
+def azure_sizes(rows: pd.DataFrame) -> int:
+    """Azure VM lines whose meter name is a size ("D4s v5", in the description): instance_type Standard_D4s_v5 when
+    no column gave one, the meter name kept in meter_name, and a Spot or Low Priority suffix in pricing_model when
+    empty. Once per distinct meter name. Returns the rows filled."""
+    if rows.empty or "description" not in rows or "service_raw" not in rows:
+        return 0
+    vm = map_unique(rows["service_raw"], lambda v: bool(AZURE_VM.search(v)) if isinstance(v, str) else False)
+    empty = rows["instance_type"].isna() if "instance_type" in rows else pd.Series(True, index=rows.index)
+    todo = vm.astype(bool) & empty
+    if not todo.any():
+        return 0
+    found = map_unique(rows.loc[todo, "description"], _azure_size)
+    hit = found.notna()
+    if not hit.any():
+        return 0
+    idx = found[hit].index
+    for col in ("instance_type", "meter_name", "pricing_model"):
+        if col not in rows:
+            rows[col] = None
+    rows.loc[idx, "instance_type"] = found[hit].map(lambda f: f[0])
+    rows.loc[idx, "meter_name"] = rows.loc[idx, "description"]
+    suffix = found[hit].map(lambda f: f[1])
+    fill = suffix.notna() & rows.loc[idx, "pricing_model"].isna()
+    rows.loc[fill[fill].index, "pricing_model"] = suffix[fill]
+    return len(idx)
+
+
 def extract(rows: pd.DataFrame, warnings: list[str] | None = None) -> list[str]:
     """Fill empty attribute columns from each line's text (description, service label, context path). Returns the
     fields it filled. More than MAX_UNIQUE_TEXTS distinct texts (a resource ID used as the description): the step is
     skipped, with a note in warnings."""
     if rows.empty:
         return []
+    azure_sizes(rows)
+
     def text_of(c: str) -> pd.Series:
         if c not in rows:
             return pd.Series([""] * len(rows), index=rows.index, dtype=object)

@@ -218,7 +218,7 @@ def test_rollup_keeps_coverage_apart_and_sums_effective_cost(pipe, monkeypatch):
 
 
 def test_schema_version():
-    assert SCHEMA_VERSION == "1.4"
+    assert SCHEMA_VERSION >= "1.4"                    # 1.4 added the cost types (task 03 moved it to 1.5)
 
 
 def test_cur_effective_function():

@@ -157,6 +157,46 @@
    "t": [
     "strip"
    ]
+  },
+  "sku_id": {
+   "from": [
+    "SkuId"
+   ]
+  },
+  "sku_price_id": {
+   "from": [
+    "SkuPriceId"
+   ]
+  },
+  "resource_id": {
+   "from": [
+    "ResourceId"
+   ]
+  },
+  "commitment_id": {
+   "from": [
+    "CommitmentDiscountId"
+   ]
+  },
+  "list_unit_price": {
+   "from": [
+    "ListUnitPrice"
+   ]
+  },
+  "contracted_unit_price": {
+   "from": [
+    "ContractedUnitPrice"
+   ]
+  },
+  "usage_type": {
+   "from": [
+    "x_UsageType"
+   ]
+  },
+  "operation": {
+   "from": [
+    "x_Operation"
+   ]
   }
  }
 }

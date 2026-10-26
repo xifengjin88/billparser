@@ -131,6 +131,30 @@
    "t": [
     "commitment_credit"
    ]
+  },
+  "sku_id": {
+   "from": [
+    "sku.id",
+    "sku_id"
+   ],
+   "coalesce": true
+  },
+  "resource_id": {
+   "from": [
+    "resource.name",
+    "resource_name"
+   ],
+   "coalesce": true
+  },
+  "instance_type": {
+   "from": [
+    "system_labels"
+   ],
+   "t": [
+    {
+     "json_get": "compute.googleapis.com/machine_spec"
+    }
+   ]
   }
  },
  "derive": {

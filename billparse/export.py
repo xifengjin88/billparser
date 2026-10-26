@@ -93,6 +93,13 @@ class Charge(_Strict):
     catalog_sku_id: Optional[CitedValue[str]] = None
     sku_price_id: Optional[CitedValue[str]] = None
     meter_id: Optional[CitedValue[str]] = None
+    tenancy: Optional[CitedValue[str]] = None
+    license_model: Optional[CitedValue[str]] = None
+    resource_id: Optional[CitedValue[str]] = None                # FOCUS ResourceId
+    pricing_term: Optional[CitedValue[str]] = None
+    purchase_option: Optional[CitedValue[str]] = None
+    list_unit_price: Optional[CitedValue[Decimal]] = None        # FOCUS ListUnitPrice
+    contracted_unit_price: Optional[CitedValue[Decimal]] = None  # FOCUS ContractedUnitPrice
     attributes: dict[str, Any] = Field(default_factory=dict)
 
 
@@ -194,7 +201,8 @@ def to_schema(doc: internal.Document) -> Document:
                 "service_code", "pricing_model", "commitment_id", "commitment_type", "commitment_status",
                 "marketplace_seller", "period_start", "period_end", "instance_type", "operating_system", "database_engine", "deployment_option", "usage_type",
                 "operation", "quantity", "unit", "unit_price", "sku_id", "catalog_sku_id", "sku_price_id", "meter_id",
-                "list_cost", "contracted_cost", "effective_cost", "coverage", "line_type_raw")},
+                "list_cost", "contracted_cost", "effective_cost", "coverage", "line_type_raw", "tenancy", "license_model",
+                "resource_id", "pricing_term", "purchase_option", "list_unit_price", "contracted_unit_price")},
             attributes=_jsonable(c.attributes),
         ))
     out = dict(
