@@ -246,6 +246,21 @@ def _legacy_full_rows() -> list[dict]:
     return rows
 
 
+def aws_cur_legacy_terms() -> float:
+    """aws_cur_legacy_full with the commitment term and payment option columns: the RI's lease and purchase option,
+    the Savings Plan's purchase term and payment option (task 04: the commitments table)."""
+    rows = []
+    for r in _legacy_full_rows():
+        r = dict(r, **{"pricing/LeaseContractLength": "", "savingsPlan/PurchaseTerm": "", "savingsPlan/PaymentOption": ""})
+        if r.get("reservation/ReservationARN"):
+            r.update({"pricing/LeaseContractLength": "1yr", "pricing/PurchaseOption": "No Upfront"})
+        if r.get("savingsPlan/SavingsPlanARN"):
+            r.update({"savingsPlan/PurchaseTerm": "3yr", "savingsPlan/PaymentOption": "Partial Upfront"})
+        rows.append(r)
+    _write_gz_csv(rows, "aws_cur_legacy_terms.csv.gz")
+    return round(sum(r["lineItem/UnblendedCost"] for r in rows), 2)
+
+
 def _write_gz_csv(rows: list[dict], name: str) -> None:
     cols = list(dict.fromkeys(k for r in rows for k in r))
     buf = io.StringIO()
@@ -786,7 +801,7 @@ if __name__ == "__main__":
         print("ok", fn.__name__)
     for fn in (aws_cur2_commitments, aws_cur2_no_amortized, azure_amortized, azure_actual, focus_commitments,
                gcp_commitments, aws_cur_legacy, aws_cur2_product_map, aws_cur_legacy_full, aws_cur2_flat,
-               aws_cur2_map, azure_usage_full, focus_full, gcp_export_full):
+               aws_cur2_map, azure_usage_full, focus_full, gcp_export_full, aws_cur_legacy_terms):
         print("ok", fn.__name__, "total", fn())
     german_xlsx(OUT / "german_invoice.xlsx")
     print("ok german_xlsx")

@@ -12,7 +12,8 @@ SCHEMA_VERSION = "1.6"            # 1.2: database_engine, deployment_option on c
                                   # 1.5: tenancy, license_model, resource_id, pricing_term, purchase_option,
                                   #      list_unit_price, contracted_unit_price on charges (read from export columns)
                                   # 1.6: the analysis gives commitment_eligible_usage (facts) and no savings
-                                  #      estimate; analysis.commitment_opportunity is deprecated, removed in 1.7
+                                  #      estimate; analysis.commitment_opportunity is deprecated, removed in 1.7;
+                                  #      commitment_term on charges; term, payment option and unused on commitments
 
 T = TypeVar("T")
 
@@ -135,6 +136,7 @@ class Charge(BaseModel):
     resource_id: Optional[CitedValue[str]] = None
     pricing_term: Optional[CitedValue[str]] = None         # OnDemand, Reserved (as printed)
     purchase_option: Optional[CitedValue[str]] = None      # All Upfront, Partial Upfront, No Upfront
+    commitment_term: Optional[CitedValue[str]] = None      # 1yr, 3yr, 12 months (as printed)
     list_unit_price: Optional[CitedValue[Decimal]] = None  # one unit at the public list price
     contracted_unit_price: Optional[CitedValue[Decimal]] = None  # one unit after negotiated discounts
     attributes: dict[str, Any] = Field(default_factory=dict)
@@ -148,6 +150,7 @@ class Commitment(BaseModel):
     term: Optional[CitedValue[str]] = None
     payment_option: Optional[CitedValue[str]] = None
     amount: Optional[CitedValue[Decimal]] = None
+    unused: Optional[CitedValue[Decimal]] = None       # the commitment paid for but not used, from its lines
     charge_ids: list[str] = Field(default_factory=list)
     cite: Cite
 

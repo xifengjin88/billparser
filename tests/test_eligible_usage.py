@@ -117,7 +117,7 @@ def _keys(x, path=""):
 @pytest.mark.parametrize("name", ["aws_cur2_commitments.csv.gz", "focus_commitments.parquet", "azure_amortized.csv"])
 def test_no_savings_or_discount_estimate(tmp_path, name):
     a = _pipe(tmp_path).parse_file(FILES / name)["analysis"]
-    for path, k, v in _keys(a):
+    for path, k, _v in _keys(a):
         if k in COVERAGES:                       # "savings_plan" is a commitment kind the file prints, not a saving
             continue
         assert "discount" not in k.lower() and "saving" not in k.lower(), path
@@ -138,3 +138,32 @@ def test_instance_family():
     assert [instance_family(v) for v in ("m5.xlarge", "db.r6g.large", "c7g.8xlarge.search", "Standard_D4s_v5",
                                          "Standard_E8ds_v5", "n2-standard-4", None)] == \
         ["m5", "db.r6g", "c7g", "Standard_Dsv5", "Standard_Edsv5", "n2", None]
+
+
+# ---------------------------------------------------------------- the commitments table
+def _doc(tmp_path, name: str, store: str = "store"):
+    from billparse.schema import Document
+    p = _pipe(tmp_path, store)
+    r = p.parse_file(FILES / name)
+    return Document.model_validate_json(p.store.part(r["sha256"], "doc"))
+
+
+@pytest.mark.parametrize("large", [False, True])
+def test_commitments_have_term_payment_and_unused(tmp_path, monkeypatch, large):
+    if large:
+        monkeypatch.setenv("LARGE_FILE_MB", "0.000001")
+        monkeypatch.setenv("CHUNK_ROWS", "3")
+    doc = _doc(tmp_path, "aws_cur_legacy_terms.csv.gz", "large" if large else "store")
+    by = {str(k.commitment_type.value): k for k in doc.commitments}
+    ri, sp = by["reserved_instance"], by["savings_plan"]
+    assert (ri.term.value, ri.payment_option.value) == ("1yr", "No Upfront")
+    assert (sp.term.value, sp.payment_option.value) == ("3yr", "Partial Upfront")
+    assert float(ri.unused.value) == pytest.approx(3.6) and float(sp.unused.value) == pytest.approx(1.44)
+    assert float(ri.amount.value) == pytest.approx(10.8) and float(sp.amount.value) == pytest.approx(4.32)
+
+
+def test_unused_is_null_when_the_file_does_not_print_it(tmp_path):
+    doc = _doc(tmp_path, "aws_cur2_no_amortized.csv.gz")
+    assert doc.commitments and all(k.unused is None for k in doc.commitments)
+    focus = {str(k.commitment_type.value): k for k in _doc(tmp_path, "focus_commitments.parquet", "f").commitments}
+    assert float(focus["savings_plan"].unused.value) == pytest.approx(0.30)

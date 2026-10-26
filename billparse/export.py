@@ -100,6 +100,7 @@ class Charge(_Strict):
     purchase_option: Optional[CitedValue[str]] = None
     list_unit_price: Optional[CitedValue[Decimal]] = None        # FOCUS ListUnitPrice
     contracted_unit_price: Optional[CitedValue[Decimal]] = None  # FOCUS ContractedUnitPrice
+    commitment_term: Optional[CitedValue[str]] = None
     attributes: dict[str, Any] = Field(default_factory=dict)
 
 
@@ -111,6 +112,7 @@ class Commitment(_Strict):
     term: Optional[CitedValue[str]] = None
     payment_option: Optional[CitedValue[str]] = None
     amount: Optional[CitedValue[Decimal]] = None
+    unused: Optional[CitedValue[Decimal]] = None
     charge_ids: list[str] = Field(default_factory=list)
     cite: Cite
 
@@ -202,7 +204,8 @@ def to_schema(doc: internal.Document) -> Document:
                 "marketplace_seller", "period_start", "period_end", "instance_type", "operating_system", "database_engine", "deployment_option", "usage_type",
                 "operation", "quantity", "unit", "unit_price", "sku_id", "catalog_sku_id", "sku_price_id", "meter_id",
                 "list_cost", "contracted_cost", "effective_cost", "coverage", "line_type_raw", "tenancy", "license_model",
-                "resource_id", "pricing_term", "purchase_option", "list_unit_price", "contracted_unit_price")},
+                "resource_id", "pricing_term", "purchase_option", "list_unit_price", "contracted_unit_price",
+                "commitment_term")},
             attributes=_jsonable(c.attributes),
         ))
     out = dict(
@@ -216,7 +219,8 @@ def to_schema(doc: internal.Document) -> Document:
         charges=charges,
         commitments=[dict(id=k.id, commitment_type=_cv(k.commitment_type), commitment_id=_cv(k.commitment_id),
                           status=_cv(k.status), term=_cv(k.term), payment_option=_cv(k.payment_option),
-                          amount=_cv(k.amount), charge_ids=k.charge_ids, cite=_cite(k.cite)) for k in doc.commitments],
+                          amount=_cv(k.amount), unused=_cv(k.unused), charge_ids=k.charge_ids, cite=_cite(k.cite))
+                     for k in doc.commitments],
         stated_facts=[dict(label=f.label, amount=_cv(f.amount), currency=f.currency, period=f.period, cite=_cite(f.cite))
                       for f in doc.stated_facts],
         completeness=doc.completeness,

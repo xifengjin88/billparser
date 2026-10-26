@@ -57,6 +57,7 @@ CANONICAL = {
     "resource_id": "The resource the line is for (AWS lineItem/ResourceId, Azure ResourceId, FOCUS ResourceId)",
     "pricing_term": "OnDemand or Reserved, as printed (AWS pricing/term)",
     "purchase_option": "All Upfront, Partial Upfront or No Upfront, as printed (AWS pricing/PurchaseOption)",
+    "commitment_term": "The commitment's term, as printed (AWS 1yr / 3yr, Azure 12 months)",
     "list_unit_price": "Price of one unit at the public list price (AWS publicOnDemandRate, Azure PayGPrice)",
     "contracted_unit_price": "Price of one unit after negotiated discounts (Azure UnitPrice, FOCUS ContractedUnitPrice)",
 }

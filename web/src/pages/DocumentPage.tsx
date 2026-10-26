@@ -285,6 +285,7 @@ function CommitmentsTab({ view }: { view: DocumentView }) {
       { key: 'term', header: 'Term', width: '100px', render: (k) => k.term ?? '—' },
       { key: 'pay', header: 'Payment', width: '130px', render: (k) => k.payment ?? '—' },
       { key: 'amount', header: 'Amount', width: '120px', align: 'right', render: (k) => money(k.amount) },
+      { key: 'unused', header: 'Unused', width: '120px', align: 'right', render: (k) => (k.unused == null ? '—' : money(k.unused)) },
       { key: 'charges', header: 'Charges', width: 'minmax(160px, 2fr)', render: (k) => k.charges.join(', ') },
     ]} />
   )
