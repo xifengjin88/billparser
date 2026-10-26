@@ -27,18 +27,24 @@ TOLERANCE = Decimal("0.05")
 ROUNDING = "rounding"           # the stated fact with the rounding between the printed total and its lines
 
 KIND_OF_CHARGE_TYPE = {"Tax": "tax", "Credit": "discount_or_credit", "Refund": "discount_or_credit",
-                       "Support": "support_fee", "Fee": "other", "Adjustment": "other"}
+                       "Support": "support_fee", "Fee": "other", "Adjustment": "other",
+                       "Negation": "commitment_negation"}
 MARKETPLACE = re.compile(r"\bmarketplace\b|^saas$", re.I)
 TAX = re.compile(r"\b(tax|vat|gst|mwst|ust)\b", re.I)
 STATUS = {"reconciled": "auto_accepted", "unreconciled": "auto_accepted", "auxiliary": "auto_accepted",
           "needs_review": "needs_review", "unsupported": "needs_review", "approved": "approved"}
 DOC_TYPE = {"price_sheet": "estimate", "recommendations": "other", "inventory": "inventory"}
-TEXT_FIELDS = ("pricing_model", "commitment_id", "instance_type", "operating_system", "database_engine",
-               "deployment_option", "usage_type", "unit")
+TEXT_FIELDS = ("pricing_model", "commitment_id", "commitment_type", "commitment_status", "instance_type",
+               "operating_system", "database_engine", "deployment_option", "usage_type", "unit", "line_type_raw")
+COST_FIELDS = ("list_cost", "contracted_cost", "effective_cost")    # typed beside the billed cost (Charge.cost)
+COST_TYPES = {"billed": "cost", "list": "list_cost", "contracted": "contracted_cost", "effective": "effective_cost"}
+USAGE_KINDS = {"usage", "marketplace_usage"}
+COMMITMENT_KINDS = {"commitment_fee", "commitment_negation"}
+HOW = "_how:"                   # per row: how a value was made ("printed", "derived", "text"); see spec._derive
 # the dimensions a roll-up keeps: lines that differ in none of them are one charge
 ROLLUP_KEYS = ["service_code", "service_name", "service_raw", "region", "account_id", "charge_type", "pricing_model",
                "instance_type", "operating_system", "database_engine", "deployment_option", "usage_type", "unit",
-               "commitment_id", "currency", "provider"]
+               "commitment_id", "currency", "provider", "coverage", "line_type_raw"]
 
 
 # ---------------------------------------------------------------- cites
@@ -148,6 +154,10 @@ def build(summary: dict, rows: pd.DataFrame | None, file_doc: FileDoc | None) ->
         _period(doc, summary, loc)
     _currency(doc, summary, loc)
     doc.commitments = _commitments(doc.charges)
+    usage = [c for c in doc.charges if c.kind.value in USAGE_KINDS]
+    doc.cost_types = [t for t, f in COST_TYPES.items() if any(getattr(c, f) is not None for c in usage)]
+    basis = (summary.get("header_fields") or {}).get("cost_basis")
+    doc.cost_basis = basis if basis in ("actual", "amortized", "unknown") else None
     if kind == "cost_lines":                           # an inventory or a price sheet prints counts, not money
         _totals(doc, summary, loc)
     _gaps(doc, summary, loc)
@@ -193,6 +203,12 @@ def _rollup(rows: pd.DataFrame) -> pd.DataFrame:
         df[k] = df[k].astype("string").fillna("")
     df["billed_cost"] = pd.to_numeric(df["billed_cost"], errors="coerce").fillna(0.0)
     agg: dict = {"billed_cost": "sum", "_src": "first"} if "_src" in df else {"billed_cost": "sum"}
+    for c in COST_FIELDS:                               # an all-empty group stays empty, never 0
+        if c in df:
+            df[c] = pd.to_numeric(df[c], errors="coerce")
+            agg[c] = lambda s: s.sum(min_count=1)
+    for c in [c for c in df.columns if str(c).startswith(HOW)]:
+        agg[c] = lambda s: "derived" if s.eq("derived").any() else (s.dropna().iloc[0] if s.notna().any() else None)
     if "quantity" in df:
         df["quantity"] = pd.to_numeric(df["quantity"], errors="coerce")
         agg["quantity"] = "sum"
@@ -263,6 +279,16 @@ def _charge(i: int, r: dict, loc: Locator, sections: dict[str, str]) -> Charge:
     for f in TEXT_FIELDS:
         if (v := _str(r.get(f))):
             setattr(c, f, cv(v, cite, "printed"))
+    for f in COST_FIELDS:                               # printed, or computed from printed columns of the row
+        if (d := _dec(r.get(f))) is not None:
+            derived = _str(r.get(HOW + f)) == "derived"
+            setattr(c, f, cv(d, cite, "inferred" if derived else "printed", None, "derived" if derived else None))
+    # coverage only where it applies: usage, and the commitment lines (a kind can change after the coverage step,
+    # e.g. a Support line found by service resolution)
+    if (v := _str(r.get("coverage"))) and c.kind.value in USAGE_KINDS | COMMITMENT_KINDS:
+        how = _str(r.get(HOW + "coverage"))
+        c.coverage = cv(v, cite, "printed" if how == "printed" else "inferred", None,
+                        None if how == "printed" else ("text" if how == "text" else "rule"))
     for f in ("quantity", "unit_price"):
         if (d := _dec(r.get(f))) is not None:
             setattr(c, f, cv(d, cite))
@@ -273,6 +299,7 @@ def _charge(i: int, r: dict, loc: Locator, sections: dict[str, str]) -> Charge:
     if (p := _str(r.get("product_code"))):
         c.sku_id = cv(p, cite)
     attrs: dict = {}
+    # effective_cost and list_cost: deprecated in 1.4: use the typed fields
     for k in ("service_raw", "category", "resolved_by", "charge_type", "account_name", "region_name", "effective_cost",
               "list_cost", "credits", "tax", "invoice_id", "price_per", "resource_type", "storage_gb", "_lines"):
         v = r.get(k)

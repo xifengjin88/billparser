@@ -94,6 +94,31 @@
    "from": [
     "bill/InvoiceId"
    ]
+  },
+  "usage_type": {
+   "from": [
+    "lineItem/UsageType"
+   ]
+  },
+  "line_type_raw": {
+   "from": [
+    "lineItem/LineItemType"
+   ],
+   "t": [
+    "strip"
+   ]
+  },
+  "coverage": {
+   "from": [
+    "lineItem/LineItemType"
+   ],
+   "t": [
+    "strip",
+    "coverage"
+   ]
   }
+ },
+ "derive": {
+  "effective_cost": "cur_effective(line_type_raw, billed_cost, col(\"reservation/EffectiveCost\"), col(\"savingsPlan/SavingsPlanEffectiveCost\"))"
  }
 }

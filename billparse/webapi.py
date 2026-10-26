@@ -115,6 +115,10 @@ class ChargeRow(BaseModel):
     cost: float | None = None
     cost_exact: str | None = None
     basis: str | None = None
+    list_cost: float | None = None
+    contracted_cost: float | None = None
+    effective_cost: float | None = None
+    coverage: str | None = None             # on_demand | reserved | savings_plan | committed_use | spot | unknown
     counted: bool
     kind: str
     kind_by: str = ""
@@ -227,6 +231,8 @@ class DocumentView(BaseModel):
     page_count: int = 1
     completeness: str
     confidence: ConfidenceOut | None = None
+    cost_types: list[str] = []              # billed, list, contracted, effective: the cost types the file gives
+    cost_basis: str | None = None           # actual | amortized | unknown (Azure exports)
     counted_total: str
     money_at_risk: str
     charges: list[ChargeRow]
@@ -483,6 +489,8 @@ def charge_row(c, gap_refs: set) -> ChargeRow:
                else (c.kind.source or ""))
     return ChargeRow(
         id=c.id, description=str(c.description.value), cost=_f(c.cost), cost_exact=_v(c.cost), basis=c.basis,
+        list_cost=_f(c.list_cost), contracted_cost=_f(c.contracted_cost), effective_cost=_f(c.effective_cost),
+        coverage=_v(c.coverage),
         counted=c.counted, kind=str(c.kind.value), kind_by=kind_by, service=_v(c.context.service),
         service_code=_v(c.service_code), region=_v(c.context.region), account=_v(c.context.account_id),
         instance_type=_v(c.instance_type), operating_system=_v(c.operating_system),
@@ -505,6 +513,7 @@ def view_of(doc: Document, row: dict, meta: dict, *, showing_reviewed: bool = Fa
         currency=_v(doc.currency), period_start=_v(doc.billing_period_start), period_end=_v(doc.billing_period_end),
         page_count=doc.page_count, completeness=doc.completeness,
         confidence=ConfidenceOut(**doc.confidence.model_dump()) if doc.confidence else None,
+        cost_types=list(doc.cost_types), cost_basis=doc.cost_basis,
         counted_total=str(doc.counted_total()), money_at_risk=str(contract.money_at_risk(doc)),
         charges=[charge_row(c, gap_refs) for c in doc.charges],
         totals=[TotalRow(id=t.id, label=str(t.label.value), printed=str(t.amount.value),
@@ -756,7 +765,9 @@ def charge_detail(sha256: str, charge_id: str, store: Store = Depends(get_store)
              "usage_type": c.usage_type, "operation": c.operation, "quantity": c.quantity, "unit": c.unit,
              "unit_price": c.unit_price, "pricing_model": c.pricing_model, "commitment_id": c.commitment_id,
              "commitment_type": c.commitment_type, "period_start": c.period_start, "period_end": c.period_end,
-             "marketplace_seller": c.marketplace_seller, "sku_id": c.sku_id, "meter_id": c.meter_id}
+             "marketplace_seller": c.marketplace_seller, "sku_id": c.sku_id, "meter_id": c.meter_id,
+             "list_cost": c.list_cost, "contracted_cost": c.contracted_cost, "effective_cost": c.effective_cost,
+             "coverage": c.coverage, "commitment_status": c.commitment_status, "line_type_raw": c.line_type_raw}
     fields = [FieldOut(field=k, value=str(v.value), origin=v.origin, source=v.source, confidence=v.confidence,
                        cite=_cite(v.cite)) for k, v in named.items() if v is not None]
     return ChargeDetail(id=c.id, description=str(c.description.value), cite=_cite(c.cite), fields=fields,

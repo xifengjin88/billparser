@@ -21,7 +21,8 @@ from svcres.resolver import Resolver
 from svcres.seeds import AZURE_FAMILY_TO_CATEGORY, FEE_SERVICES
 
 COMMITTABLE = {"Compute", "Databases", "Containers", "Analytics"}
-NON_USAGE = {"Tax", "Credit", "Refund", "Purchase", "Fee", "Support", "Adjustment"}
+# Negation (AWS SavingsPlanNegation) cancels covered usage printed at the on-demand rate: not usage, not a credit
+NON_USAGE = {"Tax", "Credit", "Refund", "Purchase", "Fee", "Support", "Adjustment", "Negation"}
 
 
 # ---------------------------------------------------------------- services
@@ -158,7 +159,7 @@ def _one_provider(rows: pd.DataFrame, picked: pd.Series, res: Resolver) -> pd.Se
 
 # ---------------------------------------------------------------- analysis
 TYPE_OF_CHARGE = {"Tax": "tax", "Credit": "credit", "Refund": "credit", "Purchase": "commitment_fee",
-                  "Support": "support_fee", "Fee": "fee"}
+                  "Support": "support_fee", "Fee": "fee", "Negation": "commitment_negation"}
 
 
 def _kinds(df: pd.DataFrame) -> pd.Series:

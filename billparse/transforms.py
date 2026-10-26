@@ -22,6 +22,7 @@ CANONICAL = {
     "billed_cost": "Cost charged for the line",
     "effective_cost": "Amortized cost, if the file has it",
     "list_cost": "Cost at list / on-demand price",
+    "contracted_cost": "Cost after negotiated discounts, before commitments",
     "credits": "Credits applied to the line (negative)",
     "quantity": "Usage quantity",
     "unit": "Unit of measure",
@@ -43,14 +44,20 @@ CANONICAL = {
     "pricing_model": "On Demand, Reserved, Savings Plan, Spot, Commitment",
     "usage_type": "Provider usage type (USE1-BoxUsage:m5.xlarge, APS3-TimedStorage-ByteHrs)",
     "commitment_id": "Reservation, savings plan or commitment ID",
+    "commitment_type": "The provider's commitment kind, as printed (Reserved Instance, Savings Plan, ...)",
+    "commitment_status": "used or unused (unused commitment capacity)",
+    "coverage": "How the usage was priced: on_demand, reserved, savings_plan, committed_use, spot, unknown",
+    "line_type_raw": "The provider's own line type, unchanged (SavingsPlanCoveredUsage, DiscountedUsage, ...)",
 }
-NUMERIC = {"billed_cost", "effective_cost", "list_cost", "credits", "quantity", "unit_price", "tax"}
+NUMERIC = {"billed_cost", "effective_cost", "list_cost", "contracted_cost", "credits", "quantity", "unit_price",
+           "tax"}
 DATES = {"charge_start", "charge_end"}
 
 CHARGE_TYPE_MAP = {
     "usage": "Usage", "purchase": "Purchase", "tax": "Tax", "credit": "Credit",
     "refund": "Refund", "fee": "Fee", "support": "Support", "adjustment": "Adjustment",
-    "rifee": "Purchase", "savingsplanrecurringfee": "Purchase", "savingsplancoveredusage": "Usage",
+    "rifee": "Purchase", "savingsplanrecurringfee": "Purchase", "savingsplanupfrontfee": "Purchase",
+    "savingsplancoveredusage": "Usage", "savingsplannegation": "Negation",
     "discountedusage": "Usage", "bundleddiscount": "Credit", "edpdiscount": "Credit",
     "privaterate discount": "Credit", "unusedreservation": "Purchase", "unusedsavingsplan": "Purchase",
     "roundingadjustment": "Adjustment", "new": "Purchase", "renew": "Purchase",
@@ -175,6 +182,55 @@ def t_json_sum(s: pd.Series, key: str = "amount") -> pd.Series:
     return s.map(f)
 
 
+# A provider line type or pricing model -> how the usage was priced. Keys are lower case with spaces, "_" and "-"
+# removed. Line types that are not usage (tax, credit, fee, ...) have no coverage: None, never "unknown".
+COVERAGE_MAP = {
+    "usage": "on_demand", "ondemand": "on_demand", "standard": "on_demand",
+    "discountedusage": "reserved", "reservation": "reserved", "reservations": "reserved", "reserved": "reserved",
+    "rifee": "reserved", "unusedreservation": "reserved",
+    "savingsplancoveredusage": "savings_plan", "savingsplannegation": "savings_plan", "savingsplan": "savings_plan",
+    "savingsplanrecurringfee": "savings_plan", "savingsplanupfrontfee": "savings_plan",
+    "unusedsavingsplan": "savings_plan",
+    "committed": "committed_use", "committedusediscount": "committed_use", "cud": "committed_use",
+    "spot": "spot", "dynamic": "spot",
+}
+NOT_USAGE = {"tax", "credit", "refund", "fee", "discount", "bundleddiscount", "edpdiscount", "privateratediscount",
+             "adjustment", "roundingadjustment", "roundingerror", "purchase", "support"}
+COVERAGES = ("on_demand", "reserved", "savings_plan", "committed_use", "spot", "unknown")
+
+
+def coverage_of(v) -> str | None:
+    if v is None or (isinstance(v, float) and v != v) or not str(v).strip():
+        return None
+    k = re.sub(r"[\s_-]+", "", str(v).lower())
+    if k in NOT_USAGE:
+        return None
+    return COVERAGE_MAP.get(k, "unknown")
+
+
+def t_coverage(s: pd.Series) -> pd.Series:
+    """A line type or pricing model as a coverage value (see COVERAGE_MAP)."""
+    return s.map(coverage_of)
+
+
+# GCP credit types that mean the usage was covered by a committed use discount
+CUD_CREDITS = {"COMMITTED_USAGE_DISCOUNT", "COMMITTED_USAGE_DISCOUNT_DOLLAR_BASE"}
+
+
+def t_commitment_credit(s: pd.Series) -> pd.Series:
+    """A GCP credits cell (JSON list): "committed_use" when one credit is a committed use discount, else None."""
+    def f(v):
+        if v is None or v == "":
+            return None
+        try:
+            arr = json.loads(v) if isinstance(v, str) else v
+        except (ValueError, TypeError):
+            return None
+        types = {str(x.get("type", "")).upper() for x in arr if isinstance(x, dict)} if isinstance(arr, list) else set()
+        return "committed_use" if types & CUD_CREDITS else None
+    return s.map(f)
+
+
 def t_upper(s: pd.Series) -> pd.Series:
     return s.map(lambda v: str(v).upper() if v is not None else None)
 
@@ -190,7 +246,8 @@ def t_scale(s: pd.Series, factor: float) -> pd.Series:
 TRANSFORMS: dict[str, Callable] = {
     "number": t_number, "currency": t_number, "date": t_date, "strip": t_strip,
     "regex": t_regex, "map": t_map, "charge_type": t_charge_type, "json_sum": t_json_sum,
-    "upper": t_upper, "strip_suffix": t_strip_suffix, "scale": t_scale,
+    "upper": t_upper, "strip_suffix": t_strip_suffix, "scale": t_scale, "coverage": t_coverage,
+    "commitment_credit": t_commitment_credit,
 }
 
 # Hand-written escape hatches, referenced by name from specs. The LLM may not create these.

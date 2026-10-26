@@ -172,13 +172,16 @@ function DocumentBody({ view }: { view: DocumentView }) {
         </div>
       )}
 
-      <div className="mb-5 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
+      <div className="mb-5 grid grid-cols-2 gap-2 sm:grid-cols-4 xl:grid-cols-8">
         <Stat label="Type" value={label(v.doc_type)} />
         <Stat label="Provider" value={v.provider ?? '—'} />
         <Stat label="Currency" value={v.currency ?? '—'} />
         <Stat label="Period" value={v.period_start && v.period_end ? `${v.period_start} → ${v.period_end}` : '—'} />
         <Stat label="Counted total" value={v.charges.length ? money(v.counted_total) : '—'} />
         <Stat label="Money at risk" value={money(v.money_at_risk)} hint="Amounts of open gaps plus the charges they point at" />
+        <Stat label="Cost types" value={v.cost_types?.length ? v.cost_types.join(', ') : '—'}
+              hint="The cost types the file gives: billed, list, contracted, effective" />
+        <Stat label="Cost basis" value={v.cost_basis ?? '—'} hint="Azure exports: actual or amortized cost" />
       </div>
 
       <Tabs value={tab} onValueChange={(t) => setParams({ tab: String(t) }, { replace: true })}>

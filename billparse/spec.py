@@ -73,6 +73,12 @@ def check_spec(spec: dict) -> None:
         problems = check_context(spec["context"])
         if problems:
             raise SpecError("; ".join(problems))
+    post = (spec.get("meta") or {}).get("post") or []
+    if post:
+        from .costs import POST
+        unknown = [p for p in post if p not in POST]
+        if unknown:
+            raise SpecError(f"Unknown meta.post step(s): {unknown}; known: {sorted(POST)}")
     text_rx = (spec.get("detect") or {}).get("text")
     if text_rx is not None:
         re.compile(text_rx)
@@ -153,7 +159,7 @@ def run(spec: dict, doc: Document, catalog_dir=None) -> Extraction:
     if (spec.get("reshape") or {}).get("unpivot"):
         ext.source_rows = len(raw)
     rows = _map_columns(spec, raw, ext)
-    rows = _derive(spec, rows)
+    rows = _derive(spec, rows, raw)
     rows = _filter(spec, rows)
     meta = spec.get("meta") or {}
     if meta.get("provider") and "provider" not in (spec.get("columns") or {}):
@@ -161,6 +167,10 @@ def run(spec: dict, doc: Document, catalog_dir=None) -> Extraction:
     if meta.get("currency") and rows.get("currency") is not None and rows["currency"].isna().all():
         rows["currency"] = meta["currency"]
     ext.rows = rows.reset_index(drop=True)
+    if meta.get("post"):
+        from .costs import POST
+        for step in meta["post"]:
+            POST[step](ext)
     _totals_from_fields(spec, ext)
     if not ext.stated_totals:
         ext.stated_totals += _auto_totals(doc)
@@ -319,7 +329,8 @@ def _map_columns(spec: dict, raw: pd.DataFrame, ext: Extraction) -> pd.DataFrame
     return out
 
 
-NEVER_ADDED = {"billed_cost", "tax", "unit_price"}   # money columns: a second cost changes the sum; a price can be list or net
+# money columns: a second cost changes the sum; a price can be list or net
+NEVER_ADDED = {"billed_cost", "tax", "unit_price", "list_cost", "contracted_cost", "effective_cost"}
 
 
 def _keep_unmapped(raw: pd.DataFrame, out: pd.DataFrame, used: set) -> None:
@@ -344,9 +355,27 @@ def _keep_unmapped(raw: pd.DataFrame, out: pd.DataFrame, used: set) -> None:
     out["_extra"] = extra.where(extra.ne(""), None)
 
 
-def _derive(spec: dict, rows: pd.DataFrame) -> pd.DataFrame:
+HOW = "_how:"                                       # per row: was a derived value printed or computed (contract)
+
+
+def _derive(spec: dict, rows: pd.DataFrame, raw: pd.DataFrame | None = None) -> pd.DataFrame:
+    """Each derive expression, with how each value was made: "printed" when the expression copied a printed value
+    (it left a mapped value as it was, or a function such as cur_effective selected a printed column), "derived"
+    when it computed one."""
     for fld, e in (spec.get("derive") or {}).items():
-        rows[fld] = expr.evaluate(e, rows)
+        before = rows[fld] if fld in rows else None
+        out = expr.evaluate(e, rows, raw)
+        how = out.attrs.get("how")
+        if how is None:
+            same = before.astype(object).eq(out.astype(object)) if before is not None else \
+                pd.Series(False, index=rows.index)
+            how = pd.Series("derived", index=rows.index).where(~same, "printed")
+        out = out.copy()
+        out.attrs = {}
+        if pd.api.types.is_float_dtype(out):            # computed money: no float noise (4.800000000000001)
+            out = out.where(how.eq("printed") if isinstance(how, pd.Series) else False, out.round(10))
+        rows[fld] = out
+        rows[HOW + fld] = pd.Series(how, index=rows.index).where(out.notna(), None)
     return rows
 
 
