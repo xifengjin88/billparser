@@ -178,7 +178,7 @@ def run(spec: dict, doc: Document, catalog_dir=None) -> Extraction:
     if meta.get("post"):
         from .costs import POST
         for step in meta["post"]:
-            POST[step](ext)
+            POST[step](ext, spec.get("_cost_basis"))      # _cost_basis: a large file's, from its first rows
     _totals_from_fields(spec, ext)
     if not ext.stated_totals:
         ext.stated_totals += _auto_totals(doc)

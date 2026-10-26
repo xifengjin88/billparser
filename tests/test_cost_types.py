@@ -92,9 +92,11 @@ def test_cur_effective_cost_only_from_the_amortized_columns(pipe):
     sp = next(c for c in usage if line_type(c) == "SavingsPlanCoveredUsage")
     assert ri.effective_cost.value == Decimal("3.6") and sp.effective_cost.value == Decimal("1.44")
     for c in doc.charges:                       # spread into the usage they cover: 0, computed
-        if line_type(c) in ("SavingsPlanNegation", "SavingsPlanRecurringFee", "RIFee"):
+        if line_type(c) == "SavingsPlanNegation":
             assert c.effective_cost.value == 0 and c.effective_cost.origin == "inferred"
             assert c.effective_cost.source == "derived"
+        if line_type(c) in ("SavingsPlanRecurringFee", "RIFee"):   # their unused part is not in this file: unknown
+            assert c.effective_cost is None
 
     _, bare = parse(pipe, FILES / "aws_cur2_no_amortized.csv.gz")
     assert "effective" not in bare.cost_types and bare.cost_types == ["billed", "list"]

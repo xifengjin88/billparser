@@ -1064,6 +1064,8 @@ export interface components {
             payment?: string | null;
             /** Amount */
             amount?: string | null;
+            /** Unused */
+            unused?: string | null;
             /** Charges */
             charges: string[];
         };

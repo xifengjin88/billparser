@@ -211,6 +211,7 @@ class CommitmentRow(BaseModel):
     term: str | None = None
     payment: str | None = None
     amount: str | None = None
+    unused: str | None = None                # the commitment paid for but not used (from its lines)
     charges: list[str]
 
 
@@ -559,7 +560,8 @@ def view_of(doc: Document, row: dict, meta: dict, *, showing_reviewed: bool = Fa
         facts=[FactRow(label=f.label, amount=str(f.amount.value), currency=f.currency, period=f.period,
                        cite=_cite(f.cite)) for f in doc.stated_facts],
         commitments=[CommitmentRow(type=str(k.commitment_type.value), id=_v(k.commitment_id), term=_v(k.term),
-                                   payment=_v(k.payment_option), amount=_v(k.amount), charges=k.charge_ids)
+                                   payment=_v(k.payment_option), amount=_v(k.amount), unused=_v(k.unused),
+                                   charges=k.charge_ids)
                      for k in doc.commitments],
         runs=[RunOut.model_validate({**{k: r.get(k) for k in RunOut.model_fields},
                                      "elapsed_ms": r.get("elapsed_ms") or 0, "model_calls": r.get("model_calls") or 0})

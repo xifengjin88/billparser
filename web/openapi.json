@@ -2697,6 +2697,17 @@
       ],
       "title": "Amount"
      },
+     "unused": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Unused"
+     },
      "charges": {
       "items": {
        "type": "string"

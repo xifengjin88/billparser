@@ -79,6 +79,8 @@ EXPECTED = {
     "aws_cur_legacy_full.csv.gz": ("builtin", 26.24), "aws_cur2_flat.csv.gz": ("builtin", 26.24),
     "aws_cur2_map.csv.gz": ("builtin", 26.24), "azure_usage_full.csv": ("builtin", 55.98),
     "focus_full.parquet": ("builtin", 18.14), "gcp_export_full.json": ("builtin", 186.00),
+    # task 04: commitment term and payment option
+    "aws_cur_legacy_terms.csv.gz": ("builtin", 26.24),
 }
 
 

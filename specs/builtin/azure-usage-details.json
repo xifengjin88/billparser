@@ -204,6 +204,11 @@
      "json_get": "ImageType"
     }
    ]
+  },
+  "commitment_term": {
+   "from": [
+    "Term"
+   ]
   }
  },
  "derive": {

@@ -185,13 +185,22 @@
   },
   "purchase_option": {
    "from": [
-    "pricing/PurchaseOption"
-   ]
+    "pricing/PurchaseOption",
+    "savingsPlan/PaymentOption"
+   ],
+   "coalesce": true
   },
   "resource_id": {
    "from": [
     "lineItem/ResourceId"
    ]
+  },
+  "commitment_term": {
+   "from": [
+    "pricing/LeaseContractLength",
+    "savingsPlan/PurchaseTerm"
+   ],
+   "coalesce": true
   }
  },
  "derive": {

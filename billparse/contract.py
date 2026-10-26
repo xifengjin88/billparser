@@ -37,7 +37,7 @@ DOC_TYPE = {"price_sheet": "estimate", "recommendations": "other", "inventory": 
 TEXT_FIELDS = ("pricing_model", "commitment_id", "commitment_type", "commitment_status", "instance_type",
                "operating_system", "database_engine", "deployment_option", "usage_type", "unit", "line_type_raw",
                "sku_id", "sku_price_id", "meter_id", "operation", "tenancy", "license_model", "resource_id",
-               "pricing_term", "purchase_option")
+               "pricing_term", "purchase_option", "commitment_term")
 COST_FIELDS = ("list_cost", "contracted_cost", "effective_cost")    # typed beside the billed cost (Charge.cost)
 COST_TYPES = {"billed": "cost", "list": "list_cost", "contracted": "contracted_cost", "effective": "effective_cost"}
 USAGE_KINDS = {"usage", "marketplace_usage"}
@@ -56,7 +56,8 @@ def weakest(values) -> str | None:
 ROLLUP_KEYS = ["service_code", "service_name", "service_raw", "region", "account_id", "charge_type", "pricing_model",
                "instance_type", "operating_system", "database_engine", "deployment_option", "usage_type", "unit",
                "commitment_id", "currency", "provider", "coverage", "line_type_raw", "sku_id", "sku_price_id", "meter_id",
-               "operation", "tenancy", "license_model", "pricing_term", "purchase_option"]   # never resource_id: one per line
+               "operation", "tenancy", "license_model", "pricing_term", "purchase_option",
+               "commitment_status", "commitment_term"]   # never resource_id: one per line. commitment_status: unused apart (analysis)
 UNIT_PRICES = ("list_unit_price", "contracted_unit_price")    # kept on a rolled line when all its lines agree
 
 
@@ -434,6 +435,28 @@ def _commitment_kind(cid: str, charges: list[Charge]) -> str:
     return "savings_plan" if "saving" in text else "reserved_instance" if "reserv" in text else "commitment"
 
 
+def _most(charges: list[Charge], field: str):
+    """The value most of a commitment's lines print for a field (its term, its payment option), with its cite."""
+    vals = [getattr(c, field) for c in charges if getattr(c, field) is not None]
+    if not vals:
+        return None
+    top = Counter(str(v.value) for v in vals).most_common(1)[0][0]
+    return next(v for v in vals if str(v.value) == top)
+
+
+UNUSED_FEES = {"rifee", "savingsplanrecurringfee"}       # AWS: their effective cost is the unused part (task 02)
+
+
+def _unused_of(charges: list[Charge]):
+    """The commitment paid for but not used: the effective cost of its AWS RI and Savings Plan fee lines and of its
+    lines marked unused (Azure, FOCUS). None when it has no such line, or one prints no amortized cost."""
+    lines = [c for c in charges if (c.commitment_status and str(c.commitment_status.value) == "unused")
+             or re.sub(r"[\s_-]+", "", str(v.value if (v := c.line_type_raw) else "")).lower() in UNUSED_FEES]
+    if not lines or any(c.effective_cost is None for c in lines):
+        return None
+    return cv(sum((c.effective_cost.value for c in lines), Decimal(0)), lines[0].cite, "inferred", None, "rule")
+
+
 def _commitments(charges: list[Charge]) -> list[Commitment]:
     groups: dict[str, list[Charge]] = {}
     for c in charges:
@@ -445,7 +468,8 @@ def _commitments(charges: list[Charge]) -> list[Commitment]:
         amount = sum((c.cost.value for c in cs if c.cost and c.kind.value == "commitment_fee"), Decimal(0))
         out.append(Commitment(id=f"k{i}", commitment_type=cv(kind, cs[0].cite, "inferred", None, "rule"),
                               commitment_id=cv(cid, cs[0].cite), amount=cv(amount, cs[0].cite, "inferred") if amount else None,
-                              charge_ids=[c.id for c in cs], cite=cs[0].cite))
+                              term=_most(cs, "commitment_term"), payment_option=_most(cs, "purchase_option"),
+                              unused=_unused_of(cs), charge_ids=[c.id for c in cs], cite=cs[0].cite))
     return out
 
 

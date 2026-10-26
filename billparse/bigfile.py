@@ -470,13 +470,16 @@ class Scan:
 
 
 def scan(spec: dict, info: FileInfo, sample: Document, catalog_dir: Path | None = None, out: Path | None = None,
-         full: bool = True, on_progress: Callable[[str], None] | None = None, unmapped: dict | None = None) -> Scan:
+         full: bool = True, on_progress: Callable[[str], None] | None = None, unmapped: dict | None = None,
+         cost_basis: str | None = None) -> Scan:
     """Read the whole file in chunks with the spec. full: the steps of a parse (attributes, coverage, services, the
     rows to `out` as Parquet, the rolled-up lines); else only the spec, the cleaning and the statistics (the
     regression gate). unmapped: the fields guessed on the sample for columns the spec does not name, used for every
     chunk (else each chunk would guess from its own first rows). Raises TooLarge when the file grows past
-    MAX_UNCOMPRESSED_GB."""
-    spec = dict(spec, _no_extra=True, **({"_unmapped": unmapped} if unmapped is not None else {}))
+    MAX_UNCOMPRESSED_GB. cost_basis: the export's basis told from the sample (Azure actual or amortized), for chunks
+    whose own rows cannot tell it."""
+    spec = dict(spec, _no_extra=True, _cost_basis=cost_basis,
+                **({"_unmapped": unmapped} if unmapped is not None else {}))
     pa.set_cpu_count(max(1, int(setting("LARGE_IO_THREADS", 2))))
     pa.set_io_thread_count(max(1, int(setting("LARGE_IO_THREADS", 2))))
     res = Scan(path=out)
@@ -676,7 +679,7 @@ def _cap(rolled: pd.DataFrame, res: Scan, factor: int) -> pd.DataFrame:
         return rolled
     order = rolled["billed_cost"].abs().sort_values(ascending=False).index
     keep, rest = rolled.loc[order[:contract.MAX_CHARGES - 1000]], rolled.loc[order[contract.MAX_CHARGES - 1000:]]
-    same = ["service", "category", "charge_type", "provider", "currency", "coverage", "_month"]
+    same = ["service", "category", "charge_type", "provider", "currency", "coverage", "commitment_status", "_month"]
     rest = rest.copy()
     for k in [k for k in ROLL_KEYS if k in rest and k not in same]:
         rest[k] = ""
