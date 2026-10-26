@@ -156,6 +156,13 @@ class ChargeRow(BaseModel):
     quantity: float | None = None
     unit: str | None = None
     unit_price: float | None = None
+    usage_type: str | None = None
+    operation: str | None = None
+    sku_id: str | None = None
+    resource_id: str | None = None
+    commitment_id: str | None = None
+    list_unit_price: float | None = None
+    contracted_unit_price: float | None = None
     section: str | None = None
     source: str
     cite: CiteOut
@@ -519,7 +526,9 @@ def charge_row(c, gap_refs: set) -> ChargeRow:
         instance_type=_v(c.instance_type), operating_system=_v(c.operating_system),
         database_engine=_v(c.database_engine), deployment_option=_v(c.deployment_option),
         pricing_model=_v(c.pricing_model), quantity=_f(c.quantity), unit=_v(c.unit), unit_price=_f(c.unit_price),
-        section=c.section_id, source=c.cite.label(), cite=_cite(c.cost.cite if c.cost else c.cite),
+        usage_type=_v(c.usage_type), operation=_v(c.operation), sku_id=_v(c.sku_id), resource_id=_v(c.resource_id),
+        commitment_id=_v(c.commitment_id), list_unit_price=_f(c.list_unit_price),
+        contracted_unit_price=_f(c.contracted_unit_price), section=c.section_id, source=c.cite.label(), cite=_cite(c.cost.cite if c.cost else c.cite),
         has_gap=c.id in gap_refs)
 
 
@@ -807,7 +816,10 @@ def charge_detail(sha256: str, charge_id: str, store: Store = Depends(get_store)
              "commitment_type": c.commitment_type, "period_start": c.period_start, "period_end": c.period_end,
              "marketplace_seller": c.marketplace_seller, "sku_id": c.sku_id, "meter_id": c.meter_id,
              "list_cost": c.list_cost, "contracted_cost": c.contracted_cost, "effective_cost": c.effective_cost,
-             "coverage": c.coverage, "commitment_status": c.commitment_status, "line_type_raw": c.line_type_raw}
+             "coverage": c.coverage, "commitment_status": c.commitment_status, "line_type_raw": c.line_type_raw,
+             "sku_price_id": c.sku_price_id, "resource_id": c.resource_id, "tenancy": c.tenancy,
+             "license_model": c.license_model, "pricing_term": c.pricing_term, "purchase_option": c.purchase_option,
+             "list_unit_price": c.list_unit_price, "contracted_unit_price": c.contracted_unit_price}
     fields = [FieldOut(field=k, value=str(v.value), origin=v.origin, source=v.source, confidence=v.confidence,
                        cite=_cite(v.cite)) for k, v in named.items() if v is not None]
     return ChargeDetail(id=c.id, description=str(c.description.value), cite=_cite(c.cite), fields=fields,

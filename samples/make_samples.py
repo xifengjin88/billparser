@@ -207,6 +207,194 @@ def aws_cur2_product_map() -> float:
     return round(sum(r["line_item_unblended_cost"] for r in out), 2)
 
 
+# ---------------------------------------------------------------- task 03: every attribute and ID column filled
+FULL_LEGACY = {"lineItem/Operation": "RunInstances", "product/tenancy": "Shared",
+               "product/licenseModel": "No License required", "pricing/PurchaseOption": "",
+               "lineItem/ResourceId": "i-0abc123def4567890"}
+
+
+def _legacy_full_rows() -> list[dict]:
+    """The legacy CUR rows of aws_cur_legacy, with operation, tenancy, license model, public on-demand rate, purchase
+    option and resource ID filled where a real CUR fills them."""
+    rows = []
+    for r in _legacy_rows():
+        r = dict(r, **FULL_LEGACY)
+        ut, typ = r["lineItem/UsageType"], r["lineItem/LineItemType"]
+        q = float(r["lineItem/UsageAmount"] or 0)
+        r["pricing/publicOnDemandRate"] = round(float(r["pricing/publicOnDemandCost"] or 0) / q, 6) if q else 0
+        if "InstanceUsage" in ut or "HeavyUsage" in ut:
+            r.update({"lineItem/Operation": "CreateDBInstance:0014", "product/licenseModel": "No license required",
+                      "lineItem/ResourceId": "arn:aws:rds:us-east-1:444455556666:db:orders"})
+        if "Out-Bytes" in ut:
+            r.update({"lineItem/Operation": "", "product/tenancy": "", "product/licenseModel": "",
+                      "lineItem/ResourceId": ""})
+        if typ in ("RIFee", "DiscountedUsage"):
+            r["pricing/PurchaseOption"] = "No Upfront"
+        if typ in ("SavingsPlanRecurringFee", "Tax"):
+            r.update({"lineItem/Operation": "", "product/tenancy": "", "product/licenseModel": "",
+                      "lineItem/ResourceId": ""})
+        if "c5.large" in ut:
+            r["product/operatingSystem"] = "Linux"
+        if "BoxUsage" in ut or "InstanceUsage" in ut or "HeavyUsage" in ut:
+            r.setdefault("product/instanceType", "")
+        rows.append(r)
+    # the RI fee is for the RDS instance: its type and engine
+    for r in rows:
+        if r["lineItem/LineItemType"] == "RIFee":
+            r.update({"product/instanceType": "db.r6g.large", "product/databaseEngine": "PostgreSQL",
+                      "product/deploymentOption": "Multi-AZ"})
+    return rows
+
+
+def _write_gz_csv(rows: list[dict], name: str) -> None:
+    cols = list(dict.fromkeys(k for r in rows for k in r))
+    buf = io.StringIO()
+    pd.DataFrame(rows, columns=cols).to_csv(buf, index=False)
+    (OUT / name).write_bytes(gzip.compress(buf.getvalue().encode()))
+
+
+def aws_cur_legacy_full() -> float:
+    rows = _legacy_full_rows()
+    _write_gz_csv(rows, "aws_cur_legacy_full.csv.gz")
+    return round(sum(r["lineItem/UnblendedCost"] for r in rows), 2)
+
+
+CUR2_MAP_KEYS = {"product/ProductName": "product_name", "product/operatingSystem": "operating_system",
+                 "product/databaseEngine": "database_engine", "product/deploymentOption": "deployment_option",
+                 "product/region": "region", "product/tenancy": "tenancy", "product/licenseModel": "license_model"}
+
+
+def _cur2_name(h: str) -> str:
+    """A legacy CUR header as its CUR 2.0 column (lineItem/UsageAccountId -> line_item_usage_account_id)."""
+    special = {"product/regionCode": "product_region_code", "product/instanceType": "product_instance_type",
+               "reservation/ReservationARN": "reservation_reservation_a_r_n",
+               "savingsPlan/SavingsPlanARN": "savings_plan_savings_plan_a_r_n", "pricing/RateCode": "pricing_rate_code",
+               "pricing/PurchaseOption": "pricing_purchase_option", "identity/LineItemId": "identity_line_item_id",
+               "savingsPlan/SavingsPlanEffectiveCost": "savings_plan_savings_plan_effective_cost"}
+    if h in special:
+        return special[h]
+    group, name = h.split("/", 1)
+    group = {"lineItem": "line_item", "savingsPlan": "savings_plan"}.get(group, group)
+    return f"{group}_" + re.sub(r"(?<=[a-z0-9])([A-Z])", r"_\1", name).lower()
+
+
+def _cur2_full_rows(as_map: bool) -> list[dict]:
+    out = []
+    for r in _legacy_full_rows():
+        o = {}
+        for k, v in r.items():
+            if k.startswith("resourceTags/") or k in ("product/instancesku", "product/vcpu"):
+                continue
+            if as_map and k in CUR2_MAP_KEYS:
+                continue
+            o[_cur2_name(k) if not (k in CUR2_MAP_KEYS) else "product_" + CUR2_MAP_KEYS[k]] = v
+        if as_map:
+            o["product"] = json.dumps({m: r[k] for k, m in CUR2_MAP_KEYS.items() if r.get(k) not in (None, "")})
+        out.append(o)
+    return out
+
+
+def aws_cur2_flat() -> float:
+    """CUR 2.0 with every product attribute as its own column (an export that selects product.x AS product_x)."""
+    rows = _cur2_full_rows(as_map=False)
+    _write_gz_csv(rows, "aws_cur2_flat.csv.gz")
+    return round(sum(r["line_item_unblended_cost"] for r in rows), 2)
+
+
+def aws_cur2_map() -> float:
+    """CUR 2.0 with the product attributes in the product map column (JSON text)."""
+    rows = _cur2_full_rows(as_map=True)
+    _write_gz_csv(rows, "aws_cur2_map.csv.gz")
+    return round(sum(r["line_item_unblended_cost"] for r in rows), 2)
+
+
+def azure_usage_full() -> float:
+    """Azure cost details (MCA, amortized) with MeterId, ReservationId, BenefitId, PayGPrice, UnitPrice, ResourceId and
+    AdditionalInfo; VM meter names are sizes (D4s v5), one of them Spot."""
+    rid, sp = "11111111-2222-3333-4444-555555555555", "/providers/Microsoft.BillingBenefits/savingsPlanOrders/abc/savingsPlans/def"
+    vm = "/subscriptions/aaaaaaaa-1111-2222-3333-444444444444/resourceGroups/web/providers/Microsoft.Compute/virtualMachines/"
+    rows = []
+
+    def row(d, cat, meter, model, q, payg, unit, eff, meter_id, info=None, sub="", **extra):
+        return {"SubscriptionId": "aaaaaaaa-1111-2222-3333-444444444444", "SubscriptionName": "Prod",
+                "Date": d.strftime("%m/%d/%Y"), "MeterCategory": cat, "MeterSubCategory": sub, "MeterName": meter,
+                "ProductName": f"{cat} {sub} - {meter} - US East".replace("  ", " "),
+                "MeterId": meter_id, "ProductId": "DZH318Z0BQ4L", "Quantity": q, "PayGPrice": payg, "UnitPrice": unit,
+                "EffectivePrice": eff, "CostInBillingCurrency": round(q * eff, 6), "UnitOfMeasure": "1 Hour",
+                "ChargeType": "Usage", "PricingModel": model, "ResourceLocation": "eastus", "BillingCurrencyCode": "USD",
+                "AdditionalInfo": json.dumps(info) if info else "", **extra}
+    for d in DAYS[:3]:
+        # a Windows meter (license included), a Linux Spot meter, a Linux meter running Windows with Azure Hybrid
+        # Benefit (image type Windows_Server BYOL), and an Ubuntu image
+        rows.append(row(d, "Virtual Machines", "D4s v5", "OnDemand", 24, 0.38, 0.34, 0.34,
+                        "0f1e2d3c-0000-1111-2222-333344445555",
+                        {"ImageType": "", "ServiceType": "Standard_D4s_v5", "UsageType": "ComputeHR"},
+                        sub="Dsv5 Series Windows", ResourceId=vm + "web-1"))
+        rows.append(row(d, "Virtual Machines", "D4s v5 Spot", "Spot", 24, 0.20, 0.05, 0.05,
+                        "0f1e2d3c-0000-1111-2222-333344445556", sub="Dsv5 Series", ResourceId=vm + "batch-1"))
+        rows.append(row(d, "Virtual Machines", "E8ds v5", "Reservation", 24, 0.50, 0.45, 0.30,
+                        "0f1e2d3c-0000-1111-2222-333344445557",
+                        {"ImageType": "Windows_Server BYOL", "ServiceType": "Standard_E8ds_v5", "UsageType": "ComputeHR"},
+                        sub="Edsv5 Series", ReservationId=rid, ResourceId=vm + "db-1"))
+        rows.append(row(d, "Virtual Machines", "B2ms", "SavingsPlan", 24, 0.08, 0.08, 0.06,
+                        "0f1e2d3c-0000-1111-2222-333344445558", {"ImageType": "Canonical", "UsageType": "ComputeHR"},
+                        sub="BS Series", BenefitId=sp, ResourceId=vm + "tools-1"))
+        rows.append(row(d, "Storage", "P10 Disks", "OnDemand", 1, 0.66, 0.66, 0.66,
+                        "0f1e2d3c-0000-1111-2222-333344445559",
+                        ResourceId="/subscriptions/aaaaaaaa-1111-2222-3333-444444444444/resourceGroups/web/providers/"
+                                   "Microsoft.Compute/disks/web-1-os"))
+    pd.DataFrame(rows).to_csv(OUT / "azure_usage_full.csv", index=False)
+    return round(sum(r["CostInBillingCurrency"] for r in rows), 2)
+
+
+def focus_full() -> float:
+    """FOCUS with the SKU, SKU price, resource, commitment and unit-price columns."""
+    rows = []
+
+    def row(d, svc, sku, billed, list_p, contracted_p, q, pricing, cid=None, res=None):
+        return {"BilledCost": billed, "EffectiveCost": billed, "ListCost": round(list_p * q, 6),
+                "ContractedCost": round(contracted_p * q, 6), "ListUnitPrice": list_p, "ContractedUnitPrice": contracted_p,
+                "BillingCurrency": "USD", "ChargePeriodStart": f"{d}T00:00:00Z",
+                "ChargePeriodEnd": f"{d + timedelta(days=1)}T00:00:00Z", "ChargeCategory": "Usage",
+                "PricingCategory": pricing, "CommitmentDiscountId": cid,
+                "CommitmentDiscountType": "Savings Plan" if cid else None, "ProviderName": "AWS", "ServiceName": svc,
+                "SkuId": sku, "SkuPriceId": f"{sku}.JRTCKXETXF.6YS6EN2CT7", "ResourceId": res,
+                "SubAccountId": "111122223333", "RegionId": "us-east-1", "ConsumedQuantity": q, "ConsumedUnit": "Hours",
+                "ChargeDescription": f"${list_p} per On Demand Linux {'m5.xlarge' if pricing == 'Standard' else 'c5.large'} "
+                                     "Instance Hour",
+                "x_UsageType": f"USE1-BoxUsage:{'m5.xlarge' if pricing == 'Standard' else 'c5.large'}",
+                "x_Operation": "RunInstances"}
+    for d in DAYS[:3]:
+        rows.append(row(d, "Amazon EC2", "RVS26QBX9XP34QN6", 4.608, 0.192, 0.192, 24, "Standard",
+                        res="arn:aws:ec2:us-east-1:111122223333:instance/i-0abc"))
+        rows.append(row(d, "Amazon EC2", "JRTCKXETXFVB2RYV", 1.44, 0.085, 0.085, 24, "Committed",
+                        cid="arn:aws:savingsplans::111122223333:savingsplan/7a2c", res="arn:aws:ec2:us-east-1:111122223333:instance/i-0def"))
+    pd.DataFrame(rows).to_parquet(OUT / "focus_full.parquet", index=False)
+    return round(sum(r["BilledCost"] for r in rows), 2)
+
+
+def gcp_export_full() -> float:
+    """GCP detailed export with sku.id, resource.name and system labels (the machine type)."""
+    recs = []
+    for d in DAYS[:3]:
+        for sku_id, sku, cost, spec, name in [
+                ("CP-COMPUTEENGINE-VMIMAGE-N2-STANDARD-4", "N2 Instance Core running in Americas", 50.0, "n2-standard-4", "web-1"),
+                ("D973-5D65-BAB2", "E2 Instance Core running in Americas", 12.0, "e2-medium", "tools-1")]:
+            recs.append({"billing_account_id": "01ABCD-234567-89EFGH",
+                         "service": {"id": "6F81-5844-456A", "description": "Compute Engine"},
+                         "sku": {"id": sku_id, "description": sku},
+                         "usage_start_time": f"{d}T00:00:00Z", "usage_end_time": f"{d}T23:59:59Z",
+                         "project": {"id": "shop-prod", "name": "shop-prod"}, "location": {"region": "us-east1"},
+                         "resource": {"name": f"projects/shop-prod/zones/us-east1-b/instances/{name}",
+                                      "global_name": f"//compute.googleapis.com/projects/shop-prod/instances/{name}"},
+                         "system_labels": [{"key": "compute.googleapis.com/machine_spec", "value": spec},
+                                           {"key": "compute.googleapis.com/cores", "value": "4"}],
+                         "cost": cost, "currency": "USD", "usage": {"amount_in_pricing_units": 24, "pricing_unit": "hour"},
+                         "credits": [], "cost_type": "regular"})
+    (OUT / "gcp_export_full.json").write_text(json.dumps(recs))
+    return round(sum(r["cost"] for r in recs), 2)
+
+
 def _azure_rows(amortized: bool) -> list[dict]:
     """Azure cost details (EA) in one export style: on-demand, Spot and reservation-covered VM usage, and the
     reservation's purchase (actual) or its unused part (both styles; it costs 0 in the actual export)."""
@@ -597,7 +785,8 @@ if __name__ == "__main__":
         fn()
         print("ok", fn.__name__)
     for fn in (aws_cur2_commitments, aws_cur2_no_amortized, azure_amortized, azure_actual, focus_commitments,
-               gcp_commitments, aws_cur_legacy, aws_cur2_product_map):
+               gcp_commitments, aws_cur_legacy, aws_cur2_product_map, aws_cur_legacy_full, aws_cur2_flat,
+               aws_cur2_map, azure_usage_full, focus_full, gcp_export_full):
         print("ok", fn.__name__, "total", fn())
     german_xlsx(OUT / "german_invoice.xlsx")
     print("ok german_xlsx")

@@ -14,7 +14,8 @@ import { Label } from '@/components/ui/label'
 import { fileSize, money, ms, uploadTime, usd, when } from '@/lib/format'
 import { cn } from '@/lib/utils'
 
-const ACCEPT = '.pdf,.csv,.tsv,.xlsx,.xls,.json,.yaml,.yml,.tf,.txt,.pptx,.docx,.md'
+// what the parser reads; .gz and .zip hold exports (a CUR is .csv.gz), drag and drop takes any file
+const ACCEPT = '.pdf,.csv,.tsv,.xlsx,.xlsm,.xls,.json,.jsonl,.parquet,.gz,.zip,.yaml,.yml,.tf,.txt,.pptx,.docx,.md'
 
 export function UploadPage() {
   const settings = useSettings()

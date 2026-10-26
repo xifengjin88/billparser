@@ -50,7 +50,7 @@ def test_columns_by_their_exact_names(pipe, name):
     assert v(ec2.instance_type) == "m5.xlarge" and v(ec2.operating_system) == "Linux"
     assert v(ec2.sku_id) == "RVS26QBX9XP34QN6"
     assert v(ec2.sku_price_id) == "RVS26QBX9XP34QN6.JRTCKXETXF.6YS6EN2CT7"
-    assert v(ec2.pricing_model) == "OnDemand" and v(ec2.context.region) == "us-east-1"
+    assert v(ec2.pricing_term) == "OnDemand" and ec2.pricing_model is None and v(ec2.context.region) == "us-east-1"
     ri = by_type(doc, "DiscountedUsage")[0]
     assert (v(ri.instance_type), v(ri.database_engine), v(ri.deployment_option)) == ("db.r6g.large", "PostgreSQL",
                                                                                      "Multi-AZ")

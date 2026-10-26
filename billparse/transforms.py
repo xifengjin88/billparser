@@ -51,9 +51,17 @@ CANONICAL = {
     "sku_id": "The provider's SKU of the line, as printed (AWS product/sku, FOCUS SkuId, GCP sku.id)",
     "sku_price_id": "The provider's id of the exact price of the line (AWS pricing/RateCode, FOCUS SkuPriceId)",
     "meter_id": "The provider's meter id (Azure MeterId)",
+    "operation": "The provider's operation (AWS lineItem/Operation: RunInstances, CreateDBInstance:0002)",
+    "tenancy": "Shared, Dedicated or Host (AWS product/tenancy)",
+    "license_model": "License included, bring your own license, no license required (AWS product/licenseModel)",
+    "resource_id": "The resource the line is for (AWS lineItem/ResourceId, Azure ResourceId, FOCUS ResourceId)",
+    "pricing_term": "OnDemand or Reserved, as printed (AWS pricing/term)",
+    "purchase_option": "All Upfront, Partial Upfront or No Upfront, as printed (AWS pricing/PurchaseOption)",
+    "list_unit_price": "Price of one unit at the public list price (AWS publicOnDemandRate, Azure PayGPrice)",
+    "contracted_unit_price": "Price of one unit after negotiated discounts (Azure UnitPrice, FOCUS ContractedUnitPrice)",
 }
 NUMERIC = {"billed_cost", "effective_cost", "list_cost", "contracted_cost", "credits", "quantity", "unit_price",
-           "tax"}
+           "tax", "list_unit_price", "contracted_unit_price"}
 DATES = {"charge_start", "charge_end"}
 
 CHARGE_TYPE_MAP = {
@@ -232,6 +240,35 @@ def t_json_sum(s: pd.Series, key: str = "amount") -> pd.Series:
     return s.map(f)
 
 
+def _json_value(v, key: str):
+    """key's value in a cell: a JSON object (text or dict), or a list of {"key": k, "value": v} pairs (GCP labels)."""
+    if v is None or (isinstance(v, float) and v != v):
+        return None
+    if isinstance(v, str):
+        if not v.strip():
+            return None
+        try:
+            v = json.loads(v)
+        except ValueError:
+            return None
+    if isinstance(v, dict):
+        out = v.get(key)
+    elif isinstance(v, (list, tuple, np.ndarray)):
+        out = next((x.get("value") for x in v if isinstance(x, dict) and x.get("key") == key), None)
+    else:
+        return None
+    if out is None or isinstance(out, (dict, list)):
+        return None if out is None else json.dumps(out)
+    out = str(out).strip()
+    return out or None
+
+
+def t_json_get(s: pd.Series, key: str = "") -> pd.Series:
+    """One key's value from a JSON object cell, e.g. Azure AdditionalInfo {"ServiceType": "Standard_D4s_v5"}, or from a
+    key/value list (GCP system_labels [{"key": "compute.googleapis.com/machine_spec", "value": "n2-standard-4"}])."""
+    return map_unique(s, lambda v: _json_value(v, key))
+
+
 # A provider line type or pricing model -> how the usage was priced. Keys are lower case with spaces, "_" and "-"
 # removed. Line types that are not usage (tax, credit, fee, ...) have no coverage: None, never "unknown".
 COVERAGE_MAP = {
@@ -299,7 +336,7 @@ TRANSFORMS: dict[str, Callable] = {
     "number": t_number, "currency": t_number, "date": t_date, "strip": t_strip,
     "regex": t_regex, "map": t_map, "charge_type": t_charge_type, "json_sum": t_json_sum,
     "upper": t_upper, "strip_suffix": t_strip_suffix, "scale": t_scale, "coverage": t_coverage,
-    "commitment_credit": t_commitment_credit,
+    "commitment_credit": t_commitment_credit, "json_get": t_json_get,
 }
 
 # Hand-written escape hatches, referenced by name from specs. The LLM may not create these.
@@ -312,7 +349,7 @@ def apply_transforms(s: pd.Series, steps: list) -> pd.Series:
             name, kw = step, {}
         else:
             (name, arg), = step.items()
-            primary = {"regex": "pattern", "strip_suffix": "suffix", "scale": "factor", "json_sum": "key",
+            primary = {"regex": "pattern", "strip_suffix": "suffix", "scale": "factor", "json_sum": "key", "json_get": "key",
                        "map": "mapping", "date": "fmt", "number": "decimal", "currency": "decimal"}.get(name)
             if isinstance(arg, dict) and not (name == "map" and "mapping" not in arg):
                 kw = arg                                       # {"regex": {"pattern": "...", "group": 2}}

@@ -14,6 +14,7 @@ import billparse.analyze as analyze_mod
 import billparse.api as api
 from billparse import webapi
 from billparse.pipeline import Pipeline, Settings
+from billparse.schema import SCHEMA_VERSION
 
 ROOT = Path(__file__).resolve().parents[1]
 FILES = ROOT / "samples" / "files"
@@ -74,7 +75,7 @@ def test_parse_in_background_then_view(client):
     assert {f["field"] for f in detail["fields"]} >= {"cost", "kind", "service", "service_code"}
     # the output contract, as invoice-parser's GET /documents/{sha}
     doc = client.get(f"/documents/{sha}").json()
-    assert doc["schema_version"] == "1.4" and len(doc["charges"]) == 6 and doc["completeness"] == "reconciled"
+    assert doc["schema_version"] == SCHEMA_VERSION and len(doc["charges"]) == 6 and doc["completeness"] == "reconciled"
     # the same file again is the stored result
     assert _parse(client, "summary_invoice.pdf")["cached"] is True
 

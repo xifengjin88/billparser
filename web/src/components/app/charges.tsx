@@ -65,6 +65,13 @@ export const CHARGE_COLUMNS: Column<ChargeRow>[] = [
   { key: 'dep', header: 'Deployment', width: '110px', render: (c) => opt(c.deployment_option) },
   { key: 'qty', header: 'Qty', width: '90px', align: 'right', render: (c) => opt(c.quantity?.toLocaleString()) },
   { key: 'price', header: 'Unit price', width: '100px', align: 'right', render: (c) => opt(c.unit_price?.toLocaleString()) },
+  { key: 'listUnit', header: 'List unit price', width: '120px', align: 'right', render: (c) => opt(c.list_unit_price?.toLocaleString()) },
+  { key: 'contractedUnit', header: 'Contracted unit price', width: '150px', align: 'right', render: (c) => opt(c.contracted_unit_price?.toLocaleString()) },
+  { key: 'usageType', header: 'Usage type', width: '200px', render: (c) => opt(c.usage_type) },
+  { key: 'operation', header: 'Operation', width: '150px', render: (c) => opt(c.operation) },
+  { key: 'sku', header: 'SKU', width: '170px', render: (c) => c.sku_id ? <span className="font-mono text-xs">{c.sku_id}</span> : opt(null) },
+  { key: 'resource', header: 'Resource', width: '220px', render: (c) => c.resource_id ? <span className="font-mono text-xs" title={c.resource_id}>{c.resource_id}</span> : opt(null) },
+  { key: 'commitment', header: 'Commitment', width: '220px', render: (c) => c.commitment_id ? <span className="font-mono text-xs" title={c.commitment_id}>{c.commitment_id}</span> : opt(null) },
   { key: 'source', header: 'Source', width: '200px', render: (c) => <span className="text-xs text-muted-foreground">{c.source}</span> },
 ]
 

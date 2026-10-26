@@ -1010,6 +1010,20 @@ export interface components {
             unit?: string | null;
             /** Unit Price */
             unit_price?: number | null;
+            /** Usage Type */
+            usage_type?: string | null;
+            /** Operation */
+            operation?: string | null;
+            /** Sku Id */
+            sku_id?: string | null;
+            /** Resource Id */
+            resource_id?: string | null;
+            /** Commitment Id */
+            commitment_id?: string | null;
+            /** List Unit Price */
+            list_unit_price?: number | null;
+            /** Contracted Unit Price */
+            contracted_unit_price?: number | null;
             /** Section */
             section?: string | null;
             /** Source */
