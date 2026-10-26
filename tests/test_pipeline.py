@@ -69,6 +69,10 @@ EXPECTED = {
     "messy_report.csv": ("mapper", 6438.05), "custom_workbook.xlsx": ("mapper", 1653.32),
     "spend_optimizer_pivot.xlsx": ("mapper", 54094.50), "reseller_invoice.pdf": ("mapper", 3414.88),
     "summary_invoice.pdf": ("mapper", 12513.18), "custom_api.json": ("mapper", 677.76),
+    # task 01: commitments, negations and the cost types each export prints
+    "aws_cur2_commitments.csv.gz": ("builtin", 34.76), "aws_cur2_no_amortized.csv.gz": ("builtin", 34.76),
+    "azure_amortized.csv": ("builtin", 32.84), "azure_actual.csv": ("builtin", 177.16),
+    "focus_commitments.parquet": ("builtin", 22.85), "gcp_commitments.json": ("builtin", 213.00),
 }
 
 

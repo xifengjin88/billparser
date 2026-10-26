@@ -24,7 +24,7 @@ from pathlib import Path
 import pandas as pd
 
 from . import agent as agent_mod
-from . import contract
+from . import contract, coverage
 from . import llm as llm_mod
 from .analyze import analyze, resolve_services
 from .attributes import extract as extract_attributes
@@ -283,6 +283,7 @@ class Pipeline:
                              + ([{"label": "llm total", "amount": out["total"], "kind": "llm_claim"}]
                                 if out.get("total") is not None else []))
             clean_rows(ext)
+            coverage.apply(ext.rows)
             att = Attempt("llm_extract_direct", None, ext=ext, llm_calls=1)
             att.verdict = validate(ext)
             att.verdict["confidence"] = min(att.verdict["confidence"], 0.65)   # never auto-accept
@@ -299,6 +300,7 @@ class Pipeline:
             normalize_regions(att.ext.rows)
             if len(att.ext.rows) <= ATTRIBUTE_ROWS:
                 extract_attributes(att.ext.rows)
+            coverage.apply(att.ext.rows)
             kind = (spec.get("meta") or {}).get("kind", "cost_lines")
             if kind != "cost_lines":
                 att.verdict = {"status": "auxiliary", "confidence": 1.0 if not att.ext.rows.empty else 0.0,

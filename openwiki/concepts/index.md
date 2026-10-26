@@ -1,0 +1,6 @@
+# Files
+
+- [Infrastructure-as-code inventory](iac-inventory.md) - How billparse reads CloudFormation and Terraform files as an inventory of AWS resources with quantities and sizes (no prices), through the built-in iac spec and billparse/iac.py.
+- [Output contract: documents, charges and cites](output-contract.md) - The Document schema billparse returns (charges, sections, stated totals, commitments, facts, gaps, completeness, confidence; every value with a cite), how contract.build fills it from parsed rows, how totals are re-tested, and the strict export projection.
+- [Service resolution, attributes and analysis](services-and-analysis.md) - How billparse maps line labels and codes to canonical AWS, Azure and GCP services (svcres catalog and resolver), sets charge kinds and areas, and computes the analysis numbers (spend by service, category and kind, period, forecast, commitment-eligible spend).
+- [Validation, completeness and confidence](validation-and-confidence.md) - How billparse/validate.py cleans extracted rows and turns evidence checks (labels, line math, stated totals, tree checks, row coverage, dual extraction, currency, plausibility, service resolution) into a confidence score, a status, a completeness value and repair feedback.

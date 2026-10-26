@@ -52,6 +52,10 @@ export const CHARGE_COLUMNS: Column<ChargeRow>[] = [
   { key: 'description', header: 'Description', width: 'minmax(260px, 3fr)', render: (c) => <span title={c.description}>{c.description}</span> },
   { key: 'cost', header: 'Cost', width: '120px', align: 'right', render: (c) => <span className={c.counted ? '' : 'text-muted-foreground line-through'}>{money(c.cost_exact)}</span> },
   { key: 'kind', header: 'Kind', width: '140px', render: (c) => <span title={c.kind_by}>{c.kind.replaceAll('_', ' ')}</span> },
+  { key: 'coverage', header: 'Coverage', width: '120px', render: (c) => opt(c.coverage?.replaceAll('_', ' ')) },
+  { key: 'list', header: 'List cost', width: '110px', align: 'right', render: (c) => c.list_cost == null ? opt(null) : money(c.list_cost) },
+  { key: 'contracted', header: 'Contracted cost', width: '130px', align: 'right', render: (c) => c.contracted_cost == null ? opt(null) : money(c.contracted_cost) },
+  { key: 'effective', header: 'Effective cost', width: '120px', align: 'right', render: (c) => c.effective_cost == null ? opt(null) : money(c.effective_cost) },
   { key: 'service', header: 'Service', width: 'minmax(160px, 1.5fr)', render: (c) => opt(c.service) },
   { key: 'code', header: 'Service code', width: '150px', render: (c) => c.service_code ? <span className="font-mono text-xs">{c.service_code}</span> : <span className="text-amber-700 dark:text-amber-400">none</span> },
   { key: 'region', header: 'Region', width: '110px', render: (c) => opt(c.region) },
@@ -95,7 +99,10 @@ function ChargeDetailPanel({ sha, charge }: { sha: string; charge: ChargeRow }) 
     <>
       <SheetHeader>
         <SheetTitle className="pr-8 break-words">{charge.description}</SheetTitle>
-        <SheetDescription>{money(charge.cost_exact)} · {charge.kind.replaceAll('_', ' ')} · {charge.id}</SheetDescription>
+        <SheetDescription>
+          {money(charge.cost_exact)} · {charge.kind.replaceAll('_', ' ')}
+          {charge.coverage ? ` · ${charge.coverage.replaceAll('_', ' ')}` : ''} · {charge.id}
+        </SheetDescription>
       </SheetHeader>
       <div className="space-y-4 px-4 pb-6">
         {d.isLoading ? <Loading what="Reading the charge" /> : d.error ? <ErrorBox error={d.error} /> : d.data && (

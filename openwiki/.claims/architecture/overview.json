@@ -1,0 +1,154 @@
+{
+  "schemaVersion": 1,
+  "pageVersion": "sha256:8dcc0a3a1d092b276555f914fea0aafb8af09f976bc350ccb315b7b1f88869e1",
+  "claims": [
+    {
+      "id": "claim_41ffdfc8526e42a5837171950e61137e",
+      "statement": "A file whose sha256 already has a stored result is returned from the store with cached true unless force is set; otherwise the upload is saved before parsing.",
+      "evidence": [
+        {
+          "resource": "repo://billparse/pipeline.py#L139-L144",
+          "version": "repo-lines-v1:sha256:495bcbe13726fe500319708d38e6f691bf230fd0008cdf217712081790aae02a:eyJzZWxlY3RlZExpbmVDb3VudCI6NiwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiMDFiYTQ3MTljODBiNmZlOTExYjA5MWE3YzA1MTI0YjY0ZWVlY2U5NjRlMDljMDU4ZWY4Zjk4MDVkYWNhNTQ2YiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMWFkNmZlZTk3MDJmZjZhNjgwMWQ3NDQyZDE3OWQ2ZmNiMzQwOTczOTcwN2U4MjgzOGEzNGUyODZkZGViYjlkMyIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiNTRkY2Q3MGNkMGZlYWQwNzM3NGYzODkzNThhN2I2YTFmNGRmZmY5Yzc1MzBkM2Q0NDNjMzNhMzlkY2ExZTZhZiIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiZTE2ZmExNDFkMGMwYWM5Mzc1YmQwZjEzNjZjM2I2YjRkODJhMDBmNTU2NDAyNDU1ODAzMzFkY2Y5YTVhZjIyYyJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_cbd3b9046cc74e5ea5afa25d3e59a9f6",
+      "statement": "A file whose regions are all scanned or empty ends as unsupported without routing.",
+      "evidence": [
+        {
+          "resource": "repo://billparse/pipeline.py#L146-L149",
+          "version": "repo-lines-v1:sha256:dc1de769e0628688065d60650bb7056ede1cd58232a58c3bf08025f2a959a068:eyJzZWxlY3RlZExpbmVDb3VudCI6NCwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiMDFiYTQ3MTljODBiNmZlOTExYjA5MWE3YzA1MTI0YjY0ZWVlY2U5NjRlMDljMDU4ZWY4Zjk4MDVkYWNhNTQ2YiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMmM1YmVlMzY1YjQ1ZTJkNjE4ZTMwODVkMDUzYTM2NjZjYTEwZmU3YjI0YmUxM2I4YjE3NTExMWY5OGRkYzYwYyIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiOGM0NDEwY2FiMDIxZTgwYzA3Y2FiYmQ0ZmE1YTIwZTg0N2Q0YzJkZGE2ZGRkOWNmMzJhMDM1NjU5OWRmMDllOCIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiNjkwOGI0YzdjNmY4YzNkOTYwZmVkYTE1YjQ1ODc2MDhkYTcwZGEyYjk2NzJiMjNkZGY1MDIzZWEyZWVmNjRiNCJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_5bff4c3d72ce405784a9514bfb4184cd",
+      "statement": "Routes are tried in the order builtin, learned, mapper, llm_spec, llm_extract; the first accepted attempt wins, else the attempt with the highest confidence.",
+      "evidence": [
+        {
+          "resource": "repo://billparse/pipeline.py#L151-L164",
+          "version": "repo-lines-v1:sha256:05bd36b9f59f7da3028794b5eecd6fc45083fbd9f694db6b1858013a3f5f752b:eyJzZWxlY3RlZExpbmVDb3VudCI6MTQsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjYyOWNhMjdiMjQ1MWFmYTQyNmExYjNlMjVlNTU5Y2IzMjQwODlmNjNkNmJmZmQxNTE1ZjdlYjZiYzUzOTBmZTkiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImNjNWI3ZDVjOWU2MDE1YTFiZTc4NGYyZTA2ZTIxYmZkMjI0OGY4YmEzNzI1MzA2OTc3MTMxMmY4MmI1NzYwMjUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImViMWY1MmI0ZDJlY2Y5M2MyOWYwMzViMDhiMDA0OGI1YjRhMzM2MjAwYzY4NGM1MTc4ZmMzNGVmMjgwOTUxYjQifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_95f16412739741b6bf3075138c00a576",
+      "statement": "After routing, services are resolved, an alternative extraction may be made, and validate runs again with the resolution share; auxiliary results skip this.",
+      "evidence": [
+        {
+          "resource": "repo://billparse/pipeline.py#L171-L183",
+          "version": "repo-lines-v1:sha256:6c03d00ea2f02fa9a3c1e961d062fc7b5f0ceb133477c2d3b749f4d3c71bd608:eyJzZWxlY3RlZExpbmVDb3VudCI6MTMsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImU0ODRmMWIwNDkwZjk0OTk4NzRhNjNmYWZiMjVhM2QwZWMxN2E2NzhjOWJlYzNjZDZlMzQ5MjlmZDgwMTMyMzUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjIzZDliYzg2ODY0YWUwZGE5NThkYTM1ZDZlYzk2OGJmMzBmMmExMGRlOTlmMzA2Yzk1ZWMwNTU1ZTZiNjllNjQiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjdmNzg2ZWE3M2E4YzIzMDAyM2Q3NGFjYTU3NjljOTYzNWQzY2U2OWZmMWZlMjkzOGZlZmJiNzI5YjMwZTQwZDIifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_65cde9752bb44785bdfdfadd678b4208",
+      "statement": "_finish saves accepted mapper and LLM specs as candidates, links accepted specs to the file, runs the analysis for cost lines, builds and saves the contract, saves rows and summary, and journals records and review items.",
+      "evidence": [
+        {
+          "resource": "repo://billparse/pipeline.py#L358-L409",
+          "version": "repo-lines-v1:sha256:3da214b5763dc9e9890d41a149d8102aa7c80531f1437ad83fe8fcdb0dc6f4e0:eyJzZWxlY3RlZExpbmVDb3VudCI6NTIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImI0NGRkZTI1NzlhNWQ1ZDk1NmU0NTExODZhOTAzNzllZjkxY2U3M2Y4NjgxZWZiYTAwMzlkNGE1NDJmNTg3YjciLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjdjNmQwYzJkNjcwYzZhNWY1YWRmNjQxMDliYjUyMmE2MjYyMWEyYjk3NzBiZTRlYTdjMzJlZTc1ZTY1MWU4YmMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImU3MDQ2YTdmYjk3NWQyMzg5MzNlYmQyYzIwNDdhNDQ2MDZhZDAwYTdhNThiMGU3OTA1YzFjNTFiYzZmMTY3NmUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjU4MzcwZTE5ZjAyYzc3YmZlNjdkNDRmOGI2YzA4NTg3ZWI1NTNjNjExOGMwNzgxOGQ2OWE1MWVhM2MyMDZlZmUifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_990148e1975143558a078adee16f355c",
+      "statement": "parse_bytes runs the agent step after the parse and records one run per non-cached parse.",
+      "evidence": [
+        {
+          "resource": "repo://billparse/pipeline.py#L92-L115",
+          "version": "repo-lines-v1:sha256:cca8f365e349e7ee2dbd17436234525b1981d98e6470ac68eec42fef7acbb7c2:eyJzZWxlY3RlZExpbmVDb3VudCI6MjQsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijc3MmY5Njk1Yzc0NjdjNzQ3NzNjOWNlN2ZjNDI5YzVkMGQwZTQ4N2YzYzUxZDE1ZDY2NjhhM2QyNDA3MmJiOTUiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImE2YzYyZjlmYmQwOTM4OGU3YzNhZTE4MGVlNTQ1MWIwZWRhZmM3OWJlNGI4ZTlkZjM4ZjA1OTU0NjEwMjhmMGMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjJkZDJlMjhmNDJhYzRmNDgwYmE1NDU4NDM2MDNjMmU1YjYxMTZlODE4ZDY4MWY4MmQ3MTlmMzNhYjExYjc0MmMifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_56fd8844f5154991bc5ad5c5d729b588",
+      "statement": "Background parses run in an in-process ThreadPoolExecutor sized by PARSE_WORKERS (default 2) with an in-memory task registry keyed by sha256; a second start for a file being parsed joins the running task.",
+      "evidence": [
+        {
+          "resource": "repo://billparse/webapi.py#L583-L585",
+          "version": "repo-lines-v1:sha256:e62ca9f8bda2ab5d13bf5072c6ffca9aba014456d6c4bb9404e8b031d0481fb3:eyJzZWxlY3RlZExpbmVDb3VudCI6MywiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiMWY2NzQ5MzQ5YWZhYTlmNDlmYTlmZTMwOWQ1ODE5MDAwNTNiNTc2ZWRmZDQ2NjZiMWM0OTU0Yjc2ZGZmYzQxMSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiYjI2MmM4NTQxYzczMGUwNmE5MjM0ZjNjMTA4Njc1YzA1OGY4ZTM3NjkyZDZiZjZlNDRmMDhkYjYzNzI4ZTJlMiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiYzVkNmFmNjRkNmMxODVmYTgzNmY4ZTYxZjZiZTJkN2Y0OWQxMzM1NDZmYmQyM2I3MWYwY2ZmZDQ2ZDk3ODRiYiIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiZTlhMmY0NDlkMmMyOTRmNjQ2MGZjNTk3ZGZiZmFmYzgzOGQ4NTljYWY5MDZlNmQ1M2IyZWYwZjdlYmY4ZThhMiJ9"
+        },
+        {
+          "resource": "repo://billparse/webapi.py#L643-L666",
+          "version": "repo-lines-v1:sha256:1482f8447c67f3bae609b2f9ef6102c48e32bd4b6969739f04222689fae9db72:eyJzZWxlY3RlZExpbmVDb3VudCI6MjQsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjM4N2M1N2YyMTA2NWUzYjgzMjQyNTI3Njk4ZGUzOTI2MTBhNWYwM2M3MGYzOTA0MzdmMjkxOTA4ODY5ZDFhODkiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjBiYTBjYmRhZTczMzlkYjZlNjJjODViOGU2ZWRjMGM2ZjcyMmJiOTQ1MTgxYTY5OTAxYzJkMzhiNmYwOTY2YzIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImYyNjY2MGMwOWFlNWM0NWY5OWJhNGUyMDFhNTFkNmFhMWFiMjE3NDkwMzNkN2Q3YmU3ZjU2N2VmOTQ1ZTQzYTEiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjNlZDYwYmEzNzczY2Y5NWRiYTU2OTI3MmQ4MmY3ZDI5ZjYyMjhhN2UyYjA1YjE2MGVhNTg5NzkxOTllN2EwMGQifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_448213594bfb4131af2ed105857c3e85",
+      "statement": "GET /parse/tasks/{sha256} returns 404 for parses not started since the API started.",
+      "evidence": [
+        {
+          "resource": "repo://billparse/webapi.py#L689-L694",
+          "version": "repo-lines-v1:sha256:19042bb8bf8528d02965d5e8687179eb2ac3ae08d2f84d12661f71e0f55fa5cf:eyJzZWxlY3RlZExpbmVDb3VudCI6NiwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiZTQ3ODI1YTU5N2MxMzkzODFhOGQ0ZjgwMmZmMGMyNmYxZjgxNjhmMTRhMDZhODRhY2UwYjNjMTZmMDVlMjVhOCIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMDQ2MWM4NDA1NDA2YmZjMWYxOTZjY2Y1MTViYWZiMTE3MWE3OTM1YTYwY2M1YjhiMzVhNjM2ZDNiM2Y3NTRjMyIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiYjk5MTE5YjUzMDA0ZGI3ZDZiNTc4MmFiNzZkNGUzNGY0MzdmNmMxYzM3Y2QxNjg4YzlhZTk5NjBhYmJiZDNhNSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiNmI2OTI3MDM5YmFiYmJhNTM2NmU1YWM0NjBkODkxODU5NTU4YWQ1M2EyOTY3YzlkMTUxODc1MWE3NDc0OWU5NiJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_dcc42be5e5b946b58271d9b792aedfcb",
+      "statement": "parse-current re-parses the stored file without the LLM and without the agent step.",
+      "evidence": [
+        {
+          "resource": "repo://billparse/webapi.py#L727-L735",
+          "version": "repo-lines-v1:sha256:cb95e25a3864244891f33ab0bb63103f097766791749c91c0cb1e1fb3d7e7951:eyJzZWxlY3RlZExpbmVDb3VudCI6OSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiOTA1NWJkYzgyNWFhNTRkMjE0ZmEzYjZmNzMyNGU1OTZlYmZiMjM3MGY5MWQzZDUwMmZkNDdjNGU0ZmFjY2U5NSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMDFiYTQ3MTljODBiNmZlOTExYjA5MWE3YzA1MTI0YjY0ZWVlY2U5NjRlMDljMDU4ZWY4Zjk4MDVkYWNhNTQ2YiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiNTY2NDc3NDk3ZTAwM2MzYzA0MjhiMWI2NGU2MGM4MDFiNzViZTZiNTQ1YjQ2OGU1ZDEyYTBhZmNkN2E0OWZmZiIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiOGVlYTVjZGQ2Y2U4ZmUzMTcyY2Q4Yjk3OTQ0ZDRlMmI1YmRiNzFhZTYyODkxNGU3OTI3ZWEwZmE1NjM3Y2JjNCJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_54e43bf85e5a4a0d80953f9669492ab3",
+      "statement": "The web API keeps one Pipeline per choice of spec-route model and agent model, from the backend and fallback choices.",
+      "evidence": [
+        {
+          "resource": "repo://billparse/webapi.py#L55-L69",
+          "version": "repo-lines-v1:sha256:4f6a5f8ef174c21517b06c09d8267f0dd3cbfd99eabdf40d8405d098e21fced0:eyJzZWxlY3RlZExpbmVDb3VudCI6MTUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijg1YjdjZDdkOWYyNjk0MjIxYWE4ZDZhY2U5MzliOTBiMjA0MjYwZGQxNGRkOWM3Njk0YzViY2ZlNTY4MzhiYzkiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImM5NWE4NmQzNjI3ZDM0MWRlZTFkMjY3NTk1YmJhZGQ3OWQyNGYyYjhiNjlkOTljMWFjMDQ3NmNjOGRhOTM0MjciLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjIzYzUwOTY0NGVmMmM4MWUwY2MzNTBlYTY2NTgxOTVmMjM4YzE5NGZhZWJjYzZkNjIyMzE4ZDY5YmYyOWQwMGEiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImQyYTBlYzQ1ODg1Y2E1MGY5MzlhODIzOGI5ZTMwNmU4ZTY1MzQ1OTc5ZWQ4YTdlM2NmNjcwYWQzZDY5M2Q1ZWEifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_5f26b5e555b54180b9a8f2eb675ea285",
+      "statement": "POST /parse parses in the request and returns status, lane, completeness, confidence, timings, model calls, costs and the contract document.",
+      "evidence": [
+        {
+          "resource": "repo://billparse/api.py#L90-L111",
+          "version": "repo-lines-v1:sha256:0292b0520df7fea24d2e46fc2200bca8d0dc1ba4a1011faff8544ba8ae7eb508:eyJzZWxlY3RlZExpbmVDb3VudCI6MjIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijg3YWVhM2ExZWQyN2M3OWY5ZjRhODFkYjhiYjVjOTcxZWY2MDJmMzA0NGJhODdhZWJmMTdiNDkzOWU2ZGEzMWEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjBhNjc1N2JhODZhZGE3NTU4NDMyZjExYjJjN2NiZmNiODc2MzBiM2QxZjY3MDZmMWY2YzgzYzJlZTdhNDhmYTIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjRjMjU2Mzk2M2ZkOWUyMDRiZGY3ZWE2NDg1NWU1NDI5MTM4OGMyN2RhZmRmYjVmYTZiYjg4MTI2ODlmYjA0MjIiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjQ5Nzc2Y2UyOTNlYTVmY2QyNTYyOWY1Mzc4MjhhMGM2ZGUzODJkMDFkYmRjNjA5MWFkMjYwNmU2ZWE5ZjBlMDMifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_ef36817f22cf4279b401f24b5c17db9b",
+      "statement": "Internal statuses map to invoice-parser statuses: reconciled, unreconciled and auxiliary become auto_accepted; needs_review and unsupported become needs_review.",
+      "evidence": [
+        {
+          "resource": "repo://billparse/contract.py#L33-L34",
+          "version": "repo-lines-v1:sha256:201313f094a3184564aae3d54ac170f72bf8c423c5187c113ad0ab95df213ca8:eyJzZWxlY3RlZExpbmVDb3VudCI6MiwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiYzY4YmRjM2U5MWFmMjUyNzZlMTYzNGNkMjllODMzNmU3NTUzMTljNDM1YjA5YjM3ZWExM2NhYTljMWZmOTA4MSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiYjBkNTI3ZTg0ZjZiNDUxOTA4ZjVlYTA2NDlmZWM3NzFmYzNkNzFhYjVhOTA2NGZjYzk0M2RiOTI4MzA2OTBhZiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiZDQ0N2RjYjA5MThlNDA1YzJmNTUzYzQ1YzBiMmMyOWJkMzM1OTE5MWE3MmUzM2Y0NTIwZDhkYzFiMTU3MzIyYyIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiOGJiOTI4MzI4NzNkODcyYzc0NjY2MzU0NDQ0M2RjYTcwMjE1OGZiZWFkMmZiNjcwZmI1OGFhZGE3MDg2NmU1NyJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_e88cc3d3138442de993b22261bfb5519",
+      "statement": "The CLI offers parse, nightly, specs, review, metrics, synonym and agent commands, and --no-llm turns the LLM routes off.",
+      "evidence": [
+        {
+          "resource": "repo://billparse/cli.py#L55-L102",
+          "version": "repo-lines-v1:sha256:a45e4aa0d0e3d1158e2ad96c87bac0b20bf661fa2618c41d672bc900e75b0106:eyJzZWxlY3RlZExpbmVDb3VudCI6NDgsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImFhZmFmYmU2YjlmOWI1OGYxNWNjNGE5ZGNmNzZjMjFhYWQ3ZDM1YTA4M2VhODZlOTI3ZTIzNWFmYTExMmY5NzUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijk1MTdmNmFjNDg0ZmYyMWExNWY1ZDY2MTFjMWIyMWVlZTkzYWU1ZTY0NTY4NDVjYTRmOGNhMjk2NTUwMDU0ZDQiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImFiNzBmZjEyNGVlM2JlMDZhZmJjZWZlYjE5ZTNiZjQ5MTUwMzBjODM3MzMyNzczNzIxNzZjMzZkZjM3ZTQ3ZGMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjZlMDRmYzBkZTA2MWI0NThlZDJiYjdmMDRiMzY4ZjZjM2MwM2YxMDA0MmNlMGUwMzQ1NzEwMWQ3ZGJhZjIyOWIifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_cd8299f38ba84c49922a413232d0c224",
+      "statement": "The API loads .env and configures logging before importing modules that read settings.",
+      "evidence": [
+        {
+          "resource": "repo://billparse/api.py#L13-L16",
+          "version": "repo-lines-v1:sha256:a3d337fc5a9fa2adf44a794c7e5bf6937841479c8df74b00222a136179bc8ca2:eyJzZWxlY3RlZExpbmVDb3VudCI6NCwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiNTM4NGJmZGIyZGYzODBiNjU1N2NjN2E3MWQxNjg5MTQxNWJjY2FhODc2OTk0MDZlMjM2Zjc1MmM2NDE1Mzg5ZiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMDFiYTQ3MTljODBiNmZlOTExYjA5MWE3YzA1MTI0YjY0ZWVlY2U5NjRlMDljMDU4ZWY4Zjk4MDVkYWNhNTQ2YiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiYmRhZWE0YTUzM2JjMDRlYjUxMzZiZDlhOTJkNzAxNTJjNGM5NTk3NGRmMTE0ZmRkZTY3YzkzZTFjYzE5NTM0ZSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiNDdjNmUyZmYyYzk1MmNhOTEzNmE4ZDAzOTJkOTA2YzUyMzUxNWZlNDgxYjIxNWY2ZDFiZDcyMTMyZDE2OGRlMCJ9"
+        }
+      ]
+    }
+  ],
+  "verification": {
+    "by": "openwiki/0.7.2",
+    "at": "2026-10-25T20:19:27.415Z"
+  }
+}

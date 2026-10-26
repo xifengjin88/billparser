@@ -1,0 +1,122 @@
+{
+  "schemaVersion": 1,
+  "pageVersion": "sha256:5028edaf841943cc8d32ec427cdf4586e4fe02c358babe353857fffa916a358b",
+  "claims": [
+    {
+      "id": "claim_e3a1f24b1750481f864c5c233d09a142",
+      "statement": "IaC files become an inventory of resources with quantities and no prices; every row has an empty billed_cost.",
+      "evidence": [
+        {
+          "resource": "repo://billparse/iac.py#L1-L12",
+          "version": "repo-lines-v1:sha256:0cf2db9a72e53f2e8ffaa4b82293e7d641723b082380908a8a8ce6d8a9ef96a9:eyJzZWxlY3RlZExpbmVDb3VudCI6MTIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImJkOGY3ZWU3MTMxOTRiNjFlZjRhYzU0Y2UyZDY4MjBmNjU0YjI0NTJlNDA4MGQwZTc2ZjdhZGNiOWM0YTA4NjMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjczYjFiN2VkYTNiMTczODY2ODNjNzNjYTkzOGQ4ZjMzNWU5NWM3Y2Q0MzE2OGYzODU3OThkYjQwMDg1N2UzNzQiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjFhYWY3NjM3Y2I2ZTdlNWRiODVkNjM0Mjc0NjAxNGRmMDQxY2NkNTU4YTkyMGIyOWViNmFjNzE5ZDdiYWY1YzIifQ"
+        },
+        {
+          "resource": "repo://billparse/iac.py#L357-L374",
+          "version": "repo-lines-v1:sha256:4f533eae6b9560172012ea3ffbc73691cd3c052077a6e2d26468431fa51419d1:eyJzZWxlY3RlZExpbmVDb3VudCI6MTgsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjA4MTE3YTRhZDc3NzRhYjMzZDNlYTI1YWNmZTBhZTAwNDY2OWVkMTkxZjBmNGU1OTAxYWI5NjE4MDY5MzU0ZDEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjBmZmI2NmU1NDJiNGEyZTg1NmRkZDJkNmQ0MjU1Y2NjM2JiNTE0NTMwYzEzOTJjOTc5NWNlZDg5MWMyMWQ4OGUiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImE1OGViOTFmOWIxYTk0Y2RmYTg4Yjg2ZmQwNWYzZjk1NDdlZjE1OTQ4NWM1NWRlNGRiZTMwN2U4YjViZjNiNDkiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_745ee9bfd36a493792a21e2cba422047",
+      "statement": "The built-in iac spec has source iac, kind inventory and a detect.text regex for CloudFormation and Terraform markers.",
+      "evidence": [
+        {
+          "resource": "repo://specs/builtin/iac.json",
+          "version": "repo-file-v1:sha256:679853505751b3a134b146573e3494a21cd93c5761c7b41118eb10df633ff791"
+        }
+      ]
+    },
+    {
+      "id": "claim_32098b02a18e4efd816302f0abdc877d",
+      "statement": "spec.run reads an iac source with iac.read and iac.rows and turns IaC gaps into warnings.",
+      "evidence": [
+        {
+          "resource": "repo://billparse/spec.py#L128-L134",
+          "version": "repo-lines-v1:sha256:d0546af032f2430403ad458e4ecae9b5854ee79027b043c0f668e9be6502a668:eyJzZWxlY3RlZExpbmVDb3VudCI6NywiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiYjMwOWM3YmMyNjAzZDU5MDliNDRiNWRjZDUxY2M0ZTEyZTQwY2UxNzMzZGEwMzVkYzk1OTVmYTk0NzdmY2ZlZCIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNDU1NjZjZDFlZjI1MmMxZDJkMzhjNWYzYjU2OGQ5MmVmNzE4MGMyYTQ2OWM5YmNkNjk0ZDA2YWU1MjA3ZTFiNSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiOWM4ZjExMDc1NjUwNWVjYzUzY2JmMmM1YzViMzE4MjU1MTU5ZWM3MjgwN2ExZTcyYmIyY2ZkODc5NTY2ZmJjYiIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiYTU4ODFiMDUzZjFlMzQ0ZjdhZGUyYTZhZDZiN2FjNjFmMGFmZjcyNjVjMzUxMDJhNzgyNmMzOTYzMDAwNGJhMSJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_9d759a3c2f3a45a888028ad91786d71d",
+      "statement": "CloudFormation parameters take their defaults; a false condition excludes the resource, and an undecidable condition keeps it and records a gap.",
+      "evidence": [
+        {
+          "resource": "repo://billparse/iac.py#L134-L185",
+          "version": "repo-lines-v1:sha256:4f3b3802917f12b0f53cca44bb29356e223effc734a8cd92e384f1a1874e112d:eyJzZWxlY3RlZExpbmVDb3VudCI6NTIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjFmODM5NzM5OTUyOTA3Y2QyOWRjOGI4ODM4Y2UyMDNhNmQxYTk4NzViNGU5YjQ5ZjIwMzlkMmZmOWMzZmU3ZTQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImY2YWQwNTJjNDRiOTUzZjBkODMyODZhMmRkZGVjMjE4NWU3ZjE4OWRiMGU0ZjUwMmM2ZjA2ZjM0NzU4NDU0YTQiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImY4NWUzYTYyYWViZDc3YzY1YzJiOGI4Yzk1MmQyNzczMWYyNjI1NWZmNTJkNzM5NjIyOWEwY2IzZjI2NDkyMjMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjgzZGJiYTM5YjE3MWQxMjA2NGQ3Mzc4NTk4NzljODE2ZjEzNzhhZDRkNGMwZjU3NTI2YmI3MGJhNTg0ZTMxOTEifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_460795379a034a1dbb643d46ecd30616",
+      "statement": "A nested CloudFormation stack is recorded as a gap because its template is not in the file.",
+      "evidence": [
+        {
+          "resource": "repo://billparse/iac.py#L186-L189",
+          "version": "repo-lines-v1:sha256:8e5d6cdb91d7cb728cf44ba95bd6336e2ae5da9ec1744207f115bff24d678cb3:eyJzZWxlY3RlZExpbmVDb3VudCI6NCwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiMGM0Zjk4YWU1OWZiNDc4YTcyZjJiNWM1OTJiZTE3ZTgzNWQ3MzgzNzJmOWM3MjgxMmMyZTQxNjBlM2MyZmMxZSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiYjY5YmNhZWExZGYxNGQ4YmQ2MjdmYjhmM2JlODAxODllMmJjNTRmOWU0MTVhODFiNzJlYWIxYWQ3MjU2MWJkMCIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiYTRiODJjMWMzMmM5ZTVlMTQ4NjUwMTdjNjU3MjQwODAxODA4MTI2MzhkM2JlMTFlYjYzYTYzNTczYjE2NzhmZiIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiNjVjNjI3ZWUwNjdlM2UwMjBhM2VmYWIyN2ZiNDZjZTBiNjQyZGFmMGU4ZGMwYjU2Mzg0NDAzZjFjMmU5NGI1NSJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_00d8bec302034ed5b9877b7a05856f47",
+      "statement": "Auto Scaling groups count their desired capacity (else minimum size) and take the instance type from their launch template, in CloudFormation and Terraform.",
+      "evidence": [
+        {
+          "resource": "repo://billparse/iac.py#L195-L205",
+          "version": "repo-lines-v1:sha256:b7b60cf8374cc09f8d390d124d8d17b1258a9e5c0db82962028f0c17824e3e23:eyJzZWxlY3RlZExpbmVDb3VudCI6MTEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjE5Y2Y1ZDAwOTk4ODgzMDQ3ODhmZGY1YzdlNjczYWRjYzQxNTY1N2EwYTY0ZWY3MzYxOGNhNTczM2M5NWQ2MDkiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjA1ZWMxZDQyMGM3MGQ5NGIwZjZjMWUxYTY0Y2Y4ZTIwMWQzMjI3ZDU2NmZiNDE3NzEyZGJjNzIyNTlmYzE2NzciLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjRmNjNkOGRiNTkyYTQ1OWU1YzY5NWUyYzQxOTA1YzIxMjJmN2QyMTRjMTJlN2Y2NTZhZTJhOTk4M2YxZmEzMDAifQ"
+        },
+        {
+          "resource": "repo://billparse/iac.py#L285-L292",
+          "version": "repo-lines-v1:sha256:1924be4709ca0896e0e3459ce6475f4f0cafd4e1edcc3680005354d944e44430:eyJzZWxlY3RlZExpbmVDb3VudCI6OCwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiN2ZjMGE5ZWM2YjE3MTg0MjcyOTJkMDI2M2Q3M2MzYjkwYWFjOWUzOTVlNzg0MGY3NTJlOGUzM2JjMDAzNWJhZSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiYjU1ZTY4MDgzNDI3N2U4YWRlNDk5MDc5ZmI1MTIxMjcyNDU4ZDQzYTYxYjI2MDAxNTU0ZmI4ZmY0OGIzZjk4OCIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiYmVmODY1NDY2ODI4MjRjMGQ3Njg0MWZjY2RjZDQ0YzFmNTFhNDc5ZGRkNGNmNGYwMDAwZDMyZjljNjk1NDM4YSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiNjA0NDIxMTE3NGRiMmNjNDg2N2ExNWNhOTUxZmMxYzcwZjJlZGZjNGVlZWI2YzRlNTBjYzBiMTQ1NWI3ODgxYiJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_e98517ba204e4b5bac3ca49ccc529660",
+      "statement": "Terraform count (with conditional expressions) and for_each give the number of instances, and a count of 0 with variable defaults excludes the resource.",
+      "evidence": [
+        {
+          "resource": "repo://billparse/iac.py#L268-L284",
+          "version": "repo-lines-v1:sha256:b1f927e533b7a60f3b4e161f969fb7a544fd735b22b0a32920438c4f34c61c07:eyJzZWxlY3RlZExpbmVDb3VudCI6MTcsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImY1NDRjMDE2YjM0MWQ3ZTk4ODM1MmU1ZjgyNDdmMWJjMjMxOGQ4MGZhMGVhMjgzNGMwZmRhYWE0M2I0ZmQxMTkiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImViYjJlODkyMzJkNTlmNjQ4YjFkNDBjZTY2NDNlZmYwNWVhYmI5NWJkZTMxYTJhZjhkYWJiOGIxNmIwODQzMjUiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjY2ODg0NzE5Y2Y5Zjg1MzNlZDE5MDliNTc2MDY0OGEzOTU0OGE2NjgwMDM5ZDE0ZjY4M2I5MDcxM2YwMDVjNTciLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjY3MGMxMjRiZWU4Y2M5MWE4NzQyM2VmMDliNjI4YjgzNjhlNGIyNDU2MzI2NzlkMjkxNDNkODU3NGU3MjUyNjMifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_e290bcb137024345b586745f9990591f",
+      "statement": "Terraform variables are collected across all files of the document before resources are counted, and the aws provider region gives the rows' region.",
+      "evidence": [
+        {
+          "resource": "repo://billparse/iac.py#L250-L266",
+          "version": "repo-lines-v1:sha256:a9aa82df979aa5cea639518eb2a706687058856aaecaa3540ab63e6ae780c13c:eyJzZWxlY3RlZExpbmVDb3VudCI6MTcsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImUxMzY5YjhmNzM4MzY2NzQ2NWJkNjc4NGJjM2M3MjI1MTUzNGQ0ZDg3M2Y4NDE5MjkyODZiNmZkYzNhZjc2Y2IiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjBiNDY4YWQwYWJkNWRmODYyMGJiOTRiZGZmZTg1ZjQyMTEwZWNkYThhZjc2NGE0ZDVjM2JhMDZiYWE1Zjc3M2YiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjhjMjNiZWIxYTZhYjUyY2VlNWY0NGVlZTMzMzIzYTdkNDk3YTU1ODRlNzYzYTg3Mzk1MzIzNjZiZTg3NGViZmEifQ"
+        },
+        {
+          "resource": "repo://billparse/iac.py#L341-L354",
+          "version": "repo-lines-v1:sha256:43f88f38da167fa08c6c8537813b09c8ef6a970ead73d1419f7281b32235daf1:eyJzZWxlY3RlZExpbmVDb3VudCI6MTQsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImYxNmYyOTJhM2I3MWI2NjExNjZjYzBjM2NhMjE2MmVkNDAxMDMyNzEwYTU3Njc3NjJlMmJlOTVlYzEzOWQ0MDUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImJjMTliNDBmNzBjNDM2MmE0MmJmMDIwMDdjNGIxNjI3YjE3OTEwMjE2NmMwNzA2ZTAyM2E1ODIzNjQ5NmZhYjQiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImY3MDljNWM4ZTkyZmIzMDNiZjBjZDc4MTA5OGUzODM4Yzk1MTE2ZjRiNWZhMjFmYjE3MzVkMGU4NzE5ODhmNGQiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImYwZjBkNmVhZWVhYzk0MTRkNTlkYjI2MzJkYjAwMzlhYjA4MDI4NTM3YmJjZDk3Y2Q1M2M3N2IxOTkyN2NlMWIifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_2764ee15d48449e387309d15a844b21d",
+      "statement": "Resources with no charge by themselves (VPC, subnet, security group, IAM, route table, internet gateway, launch template, network ACL, key pair) are excluded with a reason.",
+      "evidence": [
+        {
+          "resource": "repo://billparse/iac.py#L55-L58",
+          "version": "repo-lines-v1:sha256:e3aa7e61b3d9268bb00b281ec80d5533218ccb7a4b19edaae49c4074b95ae764:eyJzZWxlY3RlZExpbmVDb3VudCI6NCwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiMWZhNDcxYzFiYTAzNzdjYjBkNGNjODIwMTEwZjIxN2Y3YzNkNmQ1ZWQyMDRhMGM1N2E0ZWRjNzRhMDRjODZhOCIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNTY5OTA1Y2FmOGE1N2Q5OWIzZGZhYWNlMTdhODAwNjJiYWY0OGQwZTliM2FiZDM2NjMyNTBiMGU0MmYzZTMzZCIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiYzE3MmQxYjE5Y2EwZmM2MzlhYjE0NmY3Yjg4NDEwMTQ4NDQ1MmUzYTk1NWMwMjViZDRjMmYwYjUyMjc5OWUxZiIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiMTYzNTQ0MzI0MmJiNjkwM2EzMzBhM2UyOGIyM2E2NzMxZjI1OGU5MGZiNjkzN2I3MGU5YmJjMWU2NTNhODk3OSJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_d9bf1bc6d6c24cf7a596bce84df6c685",
+      "statement": "Each inventory row cites its file and line in _src and explains its count in _extra.",
+      "evidence": [
+        {
+          "resource": "repo://billparse/iac.py#L357-L374",
+          "version": "repo-lines-v1:sha256:4f533eae6b9560172012ea3ffbc73691cd3c052077a6e2d26468431fa51419d1:eyJzZWxlY3RlZExpbmVDb3VudCI6MTgsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjA4MTE3YTRhZDc3NzRhYjMzZDNlYTI1YWNmZTBhZTAwNDY2OWVkMTkxZjBmNGU1OTAxYWI5NjE4MDY5MzU0ZDEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjBmZmI2NmU1NDJiNGEyZTg1NmRkZDJkNmQ0MjU1Y2NjM2JiNTE0NTMwYzEzOTJjOTc5NWNlZDg5MWMyMWQ4OGUiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImE1OGViOTFmOWIxYTk0Y2RmYTg4Yjg2ZmQwNWYzZjk1NDdlZjE1OTQ4NWM1NWRlNGRiZTMwN2U4YjViZjNiNDkiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
+        }
+      ]
+    }
+  ],
+  "verification": {
+    "by": "openwiki/0.7.2",
+    "at": "2026-10-25T20:19:27.415Z"
+  }
+}

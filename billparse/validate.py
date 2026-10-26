@@ -21,6 +21,7 @@ from .tree import bound
 TOTAL_LABEL = re.compile(r"^\s*(?:grand\s+)?(?:sub)?\s*total\b|\b(?:amount|balance)\s+due\b|\binvoice\s+total\b", re.I)
 TAX_LABEL = re.compile(r"\b(?:sales\s+tax|tax|vat|gst|hst)\b", re.I)
 CREDIT_LABEL = re.compile(r"\b(?:credit|discount|refund|promotion|adjustment)\b", re.I)
+SAVINGS_PLANS_FEE = re.compile(r"^\s*savings\s+plans?\s+for\b", re.I)
 
 
 @dataclass
@@ -45,6 +46,10 @@ def clean_rows(ext: Extraction) -> list[str]:
     df.loc[tax, "charge_type"] = "Tax"
     credit = label.str.contains(CREDIT_LABEL).fillna(False).astype(bool) & df["charge_type"].isna() & (df["billed_cost"] < 0)
     df.loc[credit, "charge_type"] = "Credit"
+    # a Savings Plans "service" is the plan's fee (AWS: "Savings Plans for AWS Compute usage"), not usage it covers
+    if "service_raw" in df:
+        fee = df["service_raw"].astype("string").str.contains(SAVINGS_PLANS_FEE).fillna(False).astype(bool)
+        df.loc[fee & df["charge_type"].isna(), "charge_type"] = "Purchase"
 
     # group headers that name a provider ("Amazon Web Services") belong in provider, not service
     if "service_raw" in df:
@@ -154,6 +159,8 @@ def _line_math(df: pd.DataFrame) -> Check:
         return Check("line_math", "skip", "No quantity and unit price columns")
     sub = df.dropna(subset=list(need))
     sub = sub[(sub["quantity"] != 0) & (sub["unit_price"] != 0)]
+    if "charge_type" in sub:                           # a Savings Plan negation prints quantity x the on-demand
+        sub = sub[sub["charge_type"].ne("Negation")]   # rate but its amount cancels the covered usage
     if len(sub) < 3:
         return Check("line_math", "skip", "Too few lines with quantity and unit price")
     calc = sub["quantity"] * sub["unit_price"]
@@ -323,7 +330,7 @@ def _plausibility(df: pd.DataFrame) -> list[Check]:
             out.append(Check("currency", "warn", f"Multiple currencies: {list(cur)[:5]}", -0.05))
     if "charge_type" in df:
         neg = df["billed_cost"] < 0
-        unexplained = neg & ~df["charge_type"].fillna("").isin(["Credit", "Refund", "Adjustment"])
+        unexplained = neg & ~df["charge_type"].fillna("").isin(["Credit", "Refund", "Adjustment", "Negation"])
         if unexplained.sum() > max(2, 0.05 * len(df)):
             out.append(Check("negatives", "warn", f"{int(unexplained.sum())} negative lines not marked as credits", -0.05))
     return out

@@ -1,0 +1,174 @@
+{
+  "schemaVersion": 1,
+  "pageVersion": "sha256:e348b38dcc54712519ae1681f17f647dc92fc8a60967dc70836e38d92a1761a4",
+  "claims": [
+    {
+      "id": "claim_f525420c4ed54001846668ef133c3b8b",
+      "statement": "Every value in the output schema is a CitedValue with a value, a cite, an origin of printed or inferred, and optional confidence and source.",
+      "evidence": [
+        {
+          "resource": "repo://billparse/schema.py#L30-L57",
+          "version": "repo-lines-v1:sha256:f5a55f4d19bc1de8bd4466b0115852c24ad2d320fe91de863fdae8a0ec1443c0:eyJzZWxlY3RlZExpbmVDb3VudCI6MjgsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImIwNTdkMjdkMmU2YWM4MTk1MzQxYmIxZGY5MzQ2NDk2OGM1OTA1ZjkyMjM2NzZlZjNhYjM3YjQ5NGI4Zjg4ZDkiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjMxNWNmZjliNjNhMTM2NGRmN2RiMDJlOGE4ZTgzMWNiMGUwMTFhNjRiYzM5MzEzYTk4MmUwZGRjZjQxODVmMzciLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImU4NDgzMWYwZDlhM2VkMjE3OGVjYzEyMWI3MTY2NWU0M2M1ZWQ1ZTAzM2YzMjIwOWYzZTg4ODU3ZmE3MjQ0MGMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjI1MWEyYWRkODFiOWZkNzI5ZmRiMzk1NWU5NDA3ZDI5ZTM5MzNlNWEwMjA0ZmNmNjFmMjkwM2U2MjkyMDg1MWUifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_ee292edbc17f4e2a9e0a4f44b3623007",
+      "statement": "SCHEMA_VERSION is 1.3; 1.2 added database_engine and deployment_option on charges and 1.3 added confidence.",
+      "evidence": [
+        {
+          "resource": "repo://billparse/schema.py#L9-L9",
+          "version": "repo-lines-v1:sha256:92ea4f9200dc4c196d3cf9b40e5df47f25ca1c7c1de7a98cbaf6196dfe9d503a:eyJzZWxlY3RlZExpbmVDb3VudCI6MSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiOTJlYTRmOTIwMGRjNGMxOTZkM2NmOWI0MGU1ZGY0N2YyNWNhMWM3YzFkZTdhOThjYmFmNjE5NmRmZTlkNTAzYSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiOTJlYTRmOTIwMGRjNGMxOTZkM2NmOWI0MGU1ZGY0N2YyNWNhMWM3YzFkZTdhOThjYmFmNjE5NmRmZTlkNTAzYSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiMDIzYjYwYzQzYWZiYWZhOTQ3NTQ4MTc0Njc1ZGRiMDkxZDNkMzI1YTk1MDc4ODY2ZmExN2M2NzEyMjRlNzRhNCIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiNWE3MDY3Zjg4MTA5ZWJiMGUyYWJlNzg2MGI0YjMyZmQxOTM5ZGRiYmI3MjI2YjU5YWFhZDcxYzEwZmEwMGNjNSJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_4397d3a74d9c4eefa31e22f6d1f504ab",
+      "statement": "A Charge has a single cost field and contract._charge sets basis to billed for every charge.",
+      "evidence": [
+        {
+          "resource": "repo://billparse/contract.py#L246-L248",
+          "version": "repo-lines-v1:sha256:52ca43b445b7083b1bcac34551ac417ccd1c269091c9ef6f6c50b6d05366d622:eyJzZWxlY3RlZExpbmVDb3VudCI6MywiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiMDNiOTdhNTRkNGQzY2M3OTg2ODQ4MDMwNjgyZGFiZGM0NzY1YjBmM2UxNDQ5YjcxYTEyNWQyNjhlNDcyOTNiZCIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiZTNkZTYwY2ZjNzI3OTMxZjk5ZWY2OTRmOGNjNjlmMDQ5OWUxOGQ1NjgxMjI2MWRhYzE5MDhjY2RlYzMxYzdiOSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiMGIyNTdmMTg2NzJmZGY2ZjcwYTBiOTk2ZWU0M2MxMjcyMjE5MDFmMDFlZmM0ZDllNzEwODBmZGE4MGNhYWYxNSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiZDRmOGRjZGU3MDRiMThkN2RmMWQ3YThiMDE5OGViNzM0ZWQ0OGMyYzc2ODE2ZDdjZDFjNzk0M2VjYzkwZjhjZCJ9"
+        },
+        {
+          "resource": "repo://billparse/schema.py#L84-L119",
+          "version": "repo-lines-v1:sha256:30940ca8c9b0aa2c7a4ee8e4408de1aa052cf22ca2c6ad13f07836a36aa37a9b:eyJzZWxlY3RlZExpbmVDb3VudCI6MzYsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijc3NTRlMTkwZDI2MTA2YzI5NjVjZmY0MzI2ZGVjZjFlZTY1NWUxMWYyMDVkNTJhNzIyZGUxYjEzYWE1ZTUwNjEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImI0MWI1YzNkOTdlMjExZWVjYjM0NGNmNjljZGQ4MWQxMGE5NWY5ZmIxOGViMzUwYzczMjk3NDgyYjkzYTQ3ZTIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImNjOWE5ZjhiNTQ4ZmJmYjZlYzYwNTMyZTEyODA2ZWExMzY1ZDc4ZmJmZjQyMGI2ODkzM2Y3NjI0NWY0MDlmOWYiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjA1YTg3ODhlMzIxN2Q2ZTExMTRhOTcyZjQ5MGYwNzllMTdkNjVhMmY2MTQzOGU2MmE5MTk0NjFmYjc4OTEwMmEifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_17ed6344f8814a2abfc91a0af085e675",
+      "statement": "Charge kinds come from the charge type: Purchase is commitment_fee or marketplace_fee, Tax is tax, Credit and Refund are discount_or_credit, Support is support_fee, Fee and Adjustment are other, and anything else is usage or marketplace_usage.",
+      "evidence": [
+        {
+          "resource": "repo://billparse/contract.py#L27-L28",
+          "version": "repo-lines-v1:sha256:bc100a20ddcaaad11091e009af760f31603769b00b52c44586594805fd5b163d:eyJzZWxlY3RlZExpbmVDb3VudCI6MiwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiMGY3NDM5NTFlZWNmNjJkMDgwYmUwNjA4ZTI3M2E1NDE1ZDdlMjhjZDI0MTVmNTJkYWI4MTRhZjU5MjhhZTJiMSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMDFiYTQ3MTljODBiNmZlOTExYjA5MWE3YzA1MTI0YjY0ZWVlY2U5NjRlMDljMDU4ZWY4Zjk4MDVkYWNhNTQ2YiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiMGYwOWZjZTEwMGU1NTE2MTdjZWJiNWVjOTRhOWIzMDk4ZWI4OTVjM2M3NDBiNTA5Zjc2ZWEwNmZhOGZhODRkNyIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiNmJiZDAwMmJiYzUyMmUyNDZmNTE4ZjRlYzEyMmUzNWQ0ODMyMjc4OGE2MmViYmZlZTJmNmM1ODBlNzI2OWRmNyJ9"
+        },
+        {
+          "resource": "repo://billparse/contract.py#L93-L99",
+          "version": "repo-lines-v1:sha256:46a30d3427d05c6784652c42b883c54aca9c9221cca3763acbc90dd29dad1340:eyJzZWxlY3RlZExpbmVDb3VudCI6NywiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiODI2M2M4NjNjY2YzYWFkNWU0MDlhYzU5NzM4OTc2MTY4MDE1MmI0YzFmZGZjZjRkMGFjM2FhNTdhYTRjZjc2NiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMjkxYWRlMTE5OTg5MTYzYzY4NjFkNDkzNGQyZWE4M2ZlZjUyMzNkNzJmZmUwNjVmYWQzNTFlMTYzODdlNDU4YiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiNjgyMDA3ZmVjYjJiNTgxNWZlOWQwNTRkZGU0NWMxNWRhOWVjNWI0YWI0YzlkMDIxMGM4NmFjYzg1NmRiZDM2MiIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiYzQ1N2Q1MzVlMzEwM2E4OTA3M2Y2NGVmYzY2M2UzNzlmOGMzZTY3ZTNhZTU0ZTlkNjYxZjc4OTc1OTZhY2VhMiJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_b8c774f9364b46e8b30f73d83fca67eb",
+      "statement": "Effective cost, list cost, credits and other untyped values are kept only in Charge.attributes.",
+      "evidence": [
+        {
+          "resource": "repo://billparse/contract.py#L275-L289",
+          "version": "repo-lines-v1:sha256:7cf0083c0e7cf2100a3cc1563b3f320711d5412cb21f530daf317049f0d44e0b:eyJzZWxlY3RlZExpbmVDb3VudCI6MTUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjdjZmI2NDE1MWZlZDdmYTBkOTQxMzg0YTFhMzJiZTkyMmQ0YTgwOWIyNzU2YjA3ODc1N2Y2MWMzZjc2ZWRmMDkiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImE0OGNjMWJmMzYwYjljNmZjZmQ3Y2I3YWM5ZWMyNzAyZTFkNWViNDMzODAzNWUwMWRkMTRhZGM2ZjdmNzE0MjciLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjNjMzQ0ZGI4YWY1YmNmMzA2MDU4N2EzYjBiNTI1MTBjYzEyZmI4MTg1NDg2YzVhYjkwOWRjZDBjY2VlM2QzOGUifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_900cfadf657140169c902699d50c505b",
+      "statement": "Files with more than CONTRACT_MAX_CHARGES (default 50,000) lines are rolled up by ROLLUP_KEYS into charges that sum cost and quantity and count their lines.",
+      "evidence": [
+        {
+          "resource": "repo://billparse/contract.py#L188-L211",
+          "version": "repo-lines-v1:sha256:790bfcdc2880a8885bdb35b8b9b3436ea99595cc63a06d5d79ca91c308bc916a:eyJzZWxlY3RlZExpbmVDb3VudCI6MjQsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjUzZTliNGU5OTIyZjRiNDI4ZjA5YmZjNWU0OTg1NTYzYjliY2Y0ODUyM2E2OGM0ZDQ5ZmQxZjllYmI0MmU4YTEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjY2MTM0ZDM0YTUxNzZiMzUxYTJiYWYzMjczM2M5MGIxNjJjNmZjYmIyZWFhMzAxOTMyYTcwOTZkZjg2ZWNhODciLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjBiNDY4YWQwYWJkNWRmODYyMGJiOTRiZGZmZTg1ZjQyMTEwZWNkYThhZjc2NGE0ZDVjM2JhMDZiYWE1Zjc3M2YiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjBiMjJiYmQyNzYzYTA2MDQ5OWFhMGI3MDk3YTQwNTU5NTIzZjMyOTNiNWY0ZTBjMGU1ZDdhNzFiMjBmZWQ5MDYifQ"
+        },
+        {
+          "resource": "repo://billparse/contract.py#L22-L22",
+          "version": "repo-lines-v1:sha256:01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b:eyJzZWxlY3RlZExpbmVDb3VudCI6MSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiMDFiYTQ3MTljODBiNmZlOTExYjA5MWE3YzA1MTI0YjY0ZWVlY2U5NjRlMDljMDU4ZWY4Zjk4MDVkYWNhNTQ2YiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMDFiYTQ3MTljODBiNmZlOTExYjA5MWE3YzA1MTI0YjY0ZWVlY2U5NjRlMDljMDU4ZWY4Zjk4MDVkYWNhNTQ2YiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiODI3YmY3M2YwNjE3OWVlMjk3ZTBlN2RlNzZmNjM0ZWVjYTFmNWI3NjM3NzY0NWNiZmZiOTM5NmRjOTU3MWU5MiIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiZDgxNGIwNDBjZDM4MTk0NjJiMzA0ODJkZjhkM2JjNzQ5NWMwY2M5N2EwYjFjZDk4ZTk2ZTI5NTUzMmMyMWI4MCJ9"
+        },
+        {
+          "resource": "repo://billparse/contract.py#L38-L40",
+          "version": "repo-lines-v1:sha256:abf8bda9155ed3e19f25f56eba114dd985a165757330c5bf6335069d596303e2:eyJzZWxlY3RlZExpbmVDb3VudCI6MywiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiY2RhYzIzMjFlMzhmZGExMTg5ZTMzMTQ5NDcyM2RhOGJiYTJmZDIzNTg3YzVhMjc4NGUxMGIzMjA2MjNhNzg0NyIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiZThjZGIzNmU3YzM1YWRiZTM0OWNhNTc5ZjczM2ZkZDE5MDdhZDc3NWM5MjUwZWU2MzhkNDVjZjc1YTljMDNkZiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiOGJiOTI4MzI4NzNkODcyYzc0NjY2MzU0NDQ0M2RjYTcwMjE1OGZiZWFkMmZiNjcwZmI1OGFhZGE3MDg2NmU1NyIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiZWYxN2UwMTA5ODkxZjhjMzhjNzhiODU3MzJlOTZhZGQxZTExNzMzMjE1YTc5NjZhODMwOTZiMzc3N2IwM2E4NCJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_ff98d08f1b7440258b816d1bddfb4a67",
+      "statement": "Locator turns a row's _src into a page and line cite for page regions and a table and row cite for other regions.",
+      "evidence": [
+        {
+          "resource": "repo://billparse/contract.py#L45-L68",
+          "version": "repo-lines-v1:sha256:4eaae7b862f83a05afcf8490bdba6ac1bb5ba188f22fd2b7889c30bc19ab2c9d:eyJzZWxlY3RlZExpbmVDb3VudCI6MjQsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijk0YmMyNjhmMzFiZjQ1NTI3ZTY3ZjJhZDUzMmFkNjNiN2UwMzFkNWQ5MDA1NTZlZTQyOGYwMjAxYjI5MDdjZTYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImIxZTBjNjg2NzY1OTJiMmUzMDUxMTM3NzYwY2E0YzZjMzgyZDg4OWM0OGZjYmM4NzlmMmMxZTZjOTQzMGNkYWEiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjY1NzVlOWY4Yzc4MmIyNDI2YjUyN2JkZDNhOTJkZjdkODA0ZDM2OTI1OGRkMGJkOWI0YmYwZjE3NzViOTVmMTYifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_df7fc51ad0b0444e81eb9ef041f31eb1",
+      "statement": "Stated totals from another route or the LLM's own sum are not added to the contract; a tree proof adds a rounding stated fact.",
+      "evidence": [
+        {
+          "resource": "repo://billparse/contract.py#L362-L396",
+          "version": "repo-lines-v1:sha256:73fc439cf2495b5868f59d55ad9894d2e62be1e4c80f12b664c8a0321662d3a7:eyJzZWxlY3RlZExpbmVDb3VudCI6MzUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQ2NWNjMWRhY2U5NmIyODhmZmI3Nzg0MDgzZDM3MzY2ODQyMjNlODE5YmMxZGM1OWZiZWY3NzY5MmIwOTg0MjciLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjlmMTY0Y2ViYzFkNTNjMTk3MmZmYTU3ZmRiNGFlMjVhZDc1ZmI0YzU5MjZkZGFkMTc0NThmYzg5YTc5M2JjYWMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjBiNDY4YWQwYWJkNWRmODYyMGJiOTRiZGZmZTg1ZjQyMTEwZWNkYThhZjc2NGE0ZDVjM2JhMDZiYWE1Zjc3M2YiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImU0MjRiNjRiOGMxMTg0ZWVkZGE5NGFiN2JlMmE3ZDVkNzNiMmU3NmUyNjY1OGM5MzhhODRmNTQyYzFjOTgyYzkifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_a86dd24f3e5c43c496c05fe003fd3eed",
+      "statement": "rereconcile tests grand totals against counted charges (with tree rounding to half a cent, or all, non-tax or plus-tax sums within a tolerance), then sets completeness to contradicted, reconciled or the parse's own value.",
+      "evidence": [
+        {
+          "resource": "repo://billparse/contract.py#L426-L472",
+          "version": "repo-lines-v1:sha256:b3e351713a85e6cefa01cf3288f83ef1000f86acb882a75f7139edfc6eeaefaf:eyJzZWxlY3RlZExpbmVDb3VudCI6NDcsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjNlZTY3MjgwM2VlYmE2ZDNlZmE2MWVlYmY0ZTBkNTJhMmRkMjQxYWM4NDNlZDEyYTA1ZTY3YTE1MWFjOTRlNDgiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjdkZGEzZTI0ZmM3NDRjZjkwYWVkNTRiYmM1YjBjYmY3ZTllOTM5OTdlOTJmMjU5NGM0ODVjM2ZmZjdmZGNkNTkiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjVkY2I5ZGU2YWFlNGNhZWNjYmIzMmZlZTRiMTNmN2JlMTc1YmVjZmIyZjM5Yjc2OGE0MzBlZjBjZTQxZTExYTciLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImFmNDA2ZTZmNTZiYzk3ODAzNzFjMzEwOTkyNDNkMTQ2ODYzOWUyOGZjZjkwOTc2MTM4MGIxMmZhNjNjZjM5NTAifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_a63b40eb53d4489cbc02f0866ddac26f",
+      "statement": "build never reports a better completeness than the parse: a contradicted parse stays contradicted with low confidence.",
+      "evidence": [
+        {
+          "resource": "repo://billparse/contract.py#L149-L153",
+          "version": "repo-lines-v1:sha256:ba324179018abb217ee8f5ff70d93de8259297bd4dc7ace1d5ea95d6c84b3280:eyJzZWxlY3RlZExpbmVDb3VudCI6NSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiZjQ2Y2MzNDlmNDkyZDNlYmFjNTVhZTg3NGZjY2MxZDkwYmU0NzAyY2JlZGM4Y2IyZjgzZTY4ZTM3ZWJkYmY4MCIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNDVlNmM1NGFlNDQyNGEwNjVlMWNjN2ZjNmQyYWI0MGUzZWZmNjgyYTgxMjVjMjExN2JhZDUwNDdiOTJiMTIwYSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiNGEzZWYyN2IxMzE5MjZkODNlZWY3MWJhMDBlZjg3ZDhhYjVkYzcxYjdjYTM1NzQ0YWNmZTBmZDAwODIwNzQ4MyIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiNGUwMWIzZDkzYzM0ZjJmYzNkMDg1YzcxZTE5MDUwNTJlMjhjYjhkMjA2OTc0NGVmNmRhNmI1YTBjNjYwZGEzYSJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_505eca6fc0e24f85a95d2e45ad6785bd",
+      "statement": "Confidence is high only for a reconciled document with no reasons, medium for a consistent document whose only reasons are missing service codes, and low otherwise.",
+      "evidence": [
+        {
+          "resource": "repo://billparse/contract.py#L475-L492",
+          "version": "repo-lines-v1:sha256:2e026a81d0ee4062a0ea6c21d2d8ca68f6d1fd7f35b0a67b9d9373835123f4b4:eyJzZWxlY3RlZExpbmVDb3VudCI6MTgsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjcwZDg2ZGZkNWU0MDFjMjI4YmE3MTJmOGRmZjY2NWJjNmRiOTc2NjYyNzA5ZWRkYWVjZGY4ZTdiZDA2YjNmY2IiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjYyMjQ0ZDA1MTA2OWQ3YWU0ODIyYTU5Mjg2ZmNmY2IzOWVmMGY3YzEyZGUzMDRjNzM5ZmJmODU2ZGUyZmIwM2MiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImI3YjczZWU2NGQ4YWE5OWJiZDllOTc0Njc5YWE2YTFkMzk1NTNhYzA0ZDM4Zjg0MzA4ZmZiMWYyNmZkYTVjOTYiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImFhMDUzZmUwMDA5ZTUyYjljNjhjMTUwZTA4OTgxYjgzZTIxYzY2Nzg4ZjMwOGM3ZjBmNzQzNTFkMGY1YTMyZTgifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_2a131bfc2f8b4127bb772e6d5ace367b",
+      "statement": "Gaps are added for unexplained printed amounts, mismatched subtotals, and up to 500 usage charges with a non-zero cost and no service code.",
+      "evidence": [
+        {
+          "resource": "repo://billparse/contract.py#L24-L24",
+          "version": "repo-lines-v1:sha256:cc0a653fc0c302b1a482056c553f52e56e3568d56821e5884114e2f2e0aca4a5:eyJzZWxlY3RlZExpbmVDb3VudCI6MSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiY2MwYTY1M2ZjMGMzMDJiMWE0ODIwNTZjNTUzZjUyZTU2ZTM1NjhkNTY4MjFlNTg4NDExNGUyZjJlMGFjYTRhNSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiY2MwYTY1M2ZjMGMzMDJiMWE0ODIwNTZjNTUzZjUyZTU2ZTM1NjhkNTY4MjFlNTg4NDExNGUyZjJlMGFjYTRhNSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiMWVmZTc1ODRiYmNlMDFjMjJhYTg5M2NmNzUwYTU1MDJmYjBhMTM5MWIxYjAxMGVlYzE1ZDgxY2JkMGZmODNjNCIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiZjU2OTg2MTdiYWU5Zjg1MmIyN2UwZDM1Y2Q0YjM0Nzc5Zjk5MGIzMjMwNjgwMTAyNjg0YjY1MjQ3MjkzOWY2ZiJ9"
+        },
+        {
+          "resource": "repo://billparse/contract.py#L399-L419",
+          "version": "repo-lines-v1:sha256:c004d04ad4282292e09f3f71b5c61b27d582e8e8bfd315f7976047c0aaf229be:eyJzZWxlY3RlZExpbmVDb3VudCI6MjEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImUzNjE2ODQ1OTk1MDc5OGQ2Y2E2MTM0ZjdiMTljMTNhMWI0NWUyMWVjNDU5NzdkNzg1YmM5NDBkZGZkMDU3OWYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImE2ZTcxZDFmZTg5MGQwMzNmN2M5YTE3NzhhNjNlNTE2MWVlM2I1MWZiMGMzNTI3ZjQyMzI0NTNhNjYwMzIyNTIiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6Ijk1OGE5ZTZlNDQwMjhlNmY2NjEyNmM3YzcwMDJjMDEyNjQ1NTFmNTNmNDZhMjgyNDQ3YzBlNTU5NjYxZDIwMTQifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_04831e02e4164f49b926c5da5dc7a7a1",
+      "statement": "export.to_schema projects the internal document onto strict models that forbid extra fields, and review-only details go into the sidecar.",
+      "evidence": [
+        {
+          "resource": "repo://billparse/export.py#L1-L23",
+          "version": "repo-lines-v1:sha256:daaa203ac3d22416c284d1711bcbdea0a4a2db9cd5c6b117aa85c7866beb74dc:eyJzZWxlY3RlZExpbmVDb3VudCI6MjMsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjY4ZDYxYzU0MDdhMTBjMGZiYTJmMzdmMzQ2MGNkYTU0NTE2ZmE5YWFmMDVkZDYwMWUxY2E0ZWFhMWY1MGE0NmYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjIyMTMzZTFlNjU4ZWI2MDg2NTU1YmE0YzBlYzkwZGFiYzQ1YjM5ODMwMmMyNDkyZTFmNTYxZjQ4NGFkNDY5OTciLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjlhZGM4ZDZhYjYyN2FjZTYwZTZjM2FlZWQ5OGYyNjk0Yjc0ZTM1MGFhZDk1NjQ5YmNkMzlkODJiOGY4YzU0YjIifQ"
+        },
+        {
+          "resource": "repo://billparse/export.py#L178-L224",
+          "version": "repo-lines-v1:sha256:9e1a94d730bf519ea32041df7d5886b2e22ef05807b52002e635ee054457b9bd:eyJzZWxlY3RlZExpbmVDb3VudCI6NDcsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImFmYjhmZjE5NmE4NGJjYmUzOTY4M2Q4YmU4ZTIzY2NjNmRlOWFmMDQzZjRlM2FiZWZkMmNmNzU1OWQ0ZjIxY2MiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQ4OTNmNDBlMzc4MWViODk2YzgyZDA0NmEwODA2N2ExMWUzNWNkZjJmMWRmYWYyNmZlYTkwYjhkYjY2NzY0MTMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjA5NWQ4MmIxOTI1MDNkNTMwN2Q0ZDhjOTM1Yzk3ODk2YTVhYjRlNjJkOGYxZWExYzMzMzI2YjcxY2MxNWU2ZjIiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6Ijc4ZDc3MGZkMmEyNjRhYjVjMWRlMTE0NjYwNWNmOGYzODE4YmM5MWU2YzkwNWVmY2U0ODRmMTllMGI3Y2QwNGYifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_94f820ab99c849cb99d931209043a169",
+      "statement": "The pipeline saves the contract document, meta and source bundle as store parts doc, meta and bundle.",
+      "evidence": [
+        {
+          "resource": "repo://billparse/pipeline.py#L117-L127",
+          "version": "repo-lines-v1:sha256:407eceed5bf9b843baefbc170aec750d2448cc977a6526417fa770e64c4ca276:eyJzZWxlY3RlZExpbmVDb3VudCI6MTEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjgyYzZmMzg1OWJmYTU5MjU1ZTY0YjUxYWFjMzVkMzI3MzM0YzBhZTMzYjUzNDgwMmI0OTY2MTU2MmE3ZjExOTMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjJkZTBmZjZiMzRmMzkzY2RmNDNhMDRkNGE3OTE3ZDg2NDFjZjBmYWNlNGU2NTM0ZTQ3MzczOGE4YjZiMWEzYTQiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjExNzQ1YWZiMDUxYmZjMDgyZTk5ODBlNjIzZmVlNDU3Y2M5YmM0MzM3OWI3MTNkYWI4NWY5NDU4MWEwZWZiYzEiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImE4Njg2MjdiZWZiMWM0NjNkYWQzOGU3NGVjMjM2MDRlZjRjYTMwNWM5MDQ2MWZlNTg5ZGI5YmQ1NDBkNjQxZjMifQ"
+        }
+      ]
+    }
+  ],
+  "verification": {
+    "by": "openwiki/0.7.2",
+    "at": "2026-10-25T20:19:27.415Z"
+  }
+}

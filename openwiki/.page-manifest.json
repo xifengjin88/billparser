@@ -1,0 +1,124 @@
+{
+  "schemaVersion": 1,
+  "pages": {
+    "/openwiki/architecture/agent.md": {
+      "pageVersion": "sha256:9b09b37ddb8716641dbaf2f13b1d72ae178738f675dc4a380614f71ad0767068",
+      "completedBy": "claude-code",
+      "completedRunId": "807f5d38-530d-42a9-8075-d4dcbff894af",
+      "gitHead": "9ccfd743df26062d87acca66a16f7a127f4ade53",
+      "sourceFingerprint": "sha256:604da1620b90ff59110cace2d89f7070ab4d2766b7a8cc2b75e1a116a35a0a06"
+    },
+    "/openwiki/architecture/document-model.md": {
+      "pageVersion": "sha256:5ae27c6d5febc905041406f8f71dde7feab0d41e37668b72bd82b600c1200c76",
+      "completedBy": "claude-code",
+      "completedRunId": "807f5d38-530d-42a9-8075-d4dcbff894af",
+      "gitHead": "9ccfd743df26062d87acca66a16f7a127f4ade53",
+      "sourceFingerprint": "sha256:604da1620b90ff59110cace2d89f7070ab4d2766b7a8cc2b75e1a116a35a0a06"
+    },
+    "/openwiki/architecture/layout-and-tree.md": {
+      "pageVersion": "sha256:a25ce16e45b068d9b491b1d594cf3346cf974314d838dfdb4f29ff1e11d0ebb3",
+      "completedBy": "claude-code",
+      "completedRunId": "807f5d38-530d-42a9-8075-d4dcbff894af",
+      "gitHead": "9ccfd743df26062d87acca66a16f7a127f4ade53",
+      "sourceFingerprint": "sha256:604da1620b90ff59110cace2d89f7070ab4d2766b7a8cc2b75e1a116a35a0a06"
+    },
+    "/openwiki/architecture/llm-and-induction.md": {
+      "pageVersion": "sha256:b2f3a60e63f821e18248dad897cee3d0ec211c9a4c048e4ab70644d17c70b2cb",
+      "completedBy": "claude-code",
+      "completedRunId": "807f5d38-530d-42a9-8075-d4dcbff894af",
+      "gitHead": "9ccfd743df26062d87acca66a16f7a127f4ade53",
+      "sourceFingerprint": "sha256:604da1620b90ff59110cace2d89f7070ab4d2766b7a8cc2b75e1a116a35a0a06"
+    },
+    "/openwiki/architecture/overview.md": {
+      "pageVersion": "sha256:8dcc0a3a1d092b276555f914fea0aafb8af09f976bc350ccb315b7b1f88869e1",
+      "completedBy": "claude-code",
+      "completedRunId": "807f5d38-530d-42a9-8075-d4dcbff894af",
+      "gitHead": "9ccfd743df26062d87acca66a16f7a127f4ade53",
+      "sourceFingerprint": "sha256:604da1620b90ff59110cace2d89f7070ab4d2766b7a8cc2b75e1a116a35a0a06"
+    },
+    "/openwiki/architecture/routing-and-specs.md": {
+      "pageVersion": "sha256:5c2cc8fd47777a5f702785630bca17b3a0c47c00ca0f633d5c89fd800f87919d",
+      "completedBy": "claude-code",
+      "completedRunId": "807f5d38-530d-42a9-8075-d4dcbff894af",
+      "gitHead": "9ccfd743df26062d87acca66a16f7a127f4ade53",
+      "sourceFingerprint": "sha256:604da1620b90ff59110cace2d89f7070ab4d2766b7a8cc2b75e1a116a35a0a06"
+    },
+    "/openwiki/architecture/rule-mapper.md": {
+      "pageVersion": "sha256:cb9ba1ec22dd1d9ffa479804716f27c2641b3d3fce11ed9f05fb2437440c06f5",
+      "completedBy": "claude-code",
+      "completedRunId": "807f5d38-530d-42a9-8075-d4dcbff894af",
+      "gitHead": "9ccfd743df26062d87acca66a16f7a127f4ade53",
+      "sourceFingerprint": "sha256:604da1620b90ff59110cace2d89f7070ab4d2766b7a8cc2b75e1a116a35a0a06"
+    },
+    "/openwiki/concepts/iac-inventory.md": {
+      "pageVersion": "sha256:5028edaf841943cc8d32ec427cdf4586e4fe02c358babe353857fffa916a358b",
+      "completedBy": "claude-code",
+      "completedRunId": "807f5d38-530d-42a9-8075-d4dcbff894af",
+      "gitHead": "9ccfd743df26062d87acca66a16f7a127f4ade53",
+      "sourceFingerprint": "sha256:604da1620b90ff59110cace2d89f7070ab4d2766b7a8cc2b75e1a116a35a0a06"
+    },
+    "/openwiki/concepts/output-contract.md": {
+      "pageVersion": "sha256:e348b38dcc54712519ae1681f17f647dc92fc8a60967dc70836e38d92a1761a4",
+      "completedBy": "claude-code",
+      "completedRunId": "807f5d38-530d-42a9-8075-d4dcbff894af",
+      "gitHead": "9ccfd743df26062d87acca66a16f7a127f4ade53",
+      "sourceFingerprint": "sha256:604da1620b90ff59110cace2d89f7070ab4d2766b7a8cc2b75e1a116a35a0a06"
+    },
+    "/openwiki/concepts/services-and-analysis.md": {
+      "pageVersion": "sha256:ad1d80db2044e487c27c0a87aac2d7cc6127e457f1d2ad44f9ce510a15bff158",
+      "completedBy": "claude-code",
+      "completedRunId": "807f5d38-530d-42a9-8075-d4dcbff894af",
+      "gitHead": "9ccfd743df26062d87acca66a16f7a127f4ade53",
+      "sourceFingerprint": "sha256:604da1620b90ff59110cace2d89f7070ab4d2766b7a8cc2b75e1a116a35a0a06"
+    },
+    "/openwiki/concepts/validation-and-confidence.md": {
+      "pageVersion": "sha256:74bae38c4302016987c1a081fc940b6fca2bfbc378f1748b48de0290b9e10d4e",
+      "completedBy": "claude-code",
+      "completedRunId": "807f5d38-530d-42a9-8075-d4dcbff894af",
+      "gitHead": "9ccfd743df26062d87acca66a16f7a127f4ade53",
+      "sourceFingerprint": "sha256:604da1620b90ff59110cace2d89f7070ab4d2766b7a8cc2b75e1a116a35a0a06"
+    },
+    "/openwiki/integrations/http-api-and-web-app.md": {
+      "pageVersion": "sha256:f785b644c52e55bd5673764a7eaaf3e088367cb66c40a164313c7a925d03a814",
+      "completedBy": "claude-code",
+      "completedRunId": "807f5d38-530d-42a9-8075-d4dcbff894af",
+      "gitHead": "9ccfd743df26062d87acca66a16f7a127f4ade53",
+      "sourceFingerprint": "sha256:604da1620b90ff59110cace2d89f7070ab4d2766b7a8cc2b75e1a116a35a0a06"
+    },
+    "/openwiki/operations/local-development.md": {
+      "pageVersion": "sha256:b45238cc9477dea2244a7b38b1ba175402a5647061f188b81142a253c9de218e",
+      "completedBy": "claude-code",
+      "completedRunId": "807f5d38-530d-42a9-8075-d4dcbff894af",
+      "gitHead": "9ccfd743df26062d87acca66a16f7a127f4ade53",
+      "sourceFingerprint": "sha256:604da1620b90ff59110cace2d89f7070ab4d2766b7a8cc2b75e1a116a35a0a06"
+    },
+    "/openwiki/operations/storage-and-database.md": {
+      "pageVersion": "sha256:f69d205dee824332ea90d198796adea4b226c0c585df1969ac3cca005e014e5d",
+      "completedBy": "claude-code",
+      "completedRunId": "807f5d38-530d-42a9-8075-d4dcbff894af",
+      "gitHead": "9ccfd743df26062d87acca66a16f7a127f4ade53",
+      "sourceFingerprint": "sha256:604da1620b90ff59110cace2d89f7070ab4d2766b7a8cc2b75e1a116a35a0a06"
+    },
+    "/openwiki/quickstart.md": {
+      "pageVersion": "sha256:24ef5ded08a75c8cd28c00a24ab3a34f7d123dfdbe6bd18dcb8dec3ea8986fae",
+      "completedBy": "claude-code",
+      "completedRunId": "807f5d38-530d-42a9-8075-d4dcbff894af",
+      "gitHead": "9ccfd743df26062d87acca66a16f7a127f4ade53",
+      "sourceFingerprint": "sha256:604da1620b90ff59110cace2d89f7070ab4d2766b7a8cc2b75e1a116a35a0a06"
+    },
+    "/openwiki/testing/tests-and-corpus.md": {
+      "pageVersion": "sha256:a62fb27dcdce2129bb253978f001edefb8e3304a2b151daa4cde6288e26478a7",
+      "completedBy": "claude-code",
+      "completedRunId": "807f5d38-530d-42a9-8075-d4dcbff894af",
+      "gitHead": "9ccfd743df26062d87acca66a16f7a127f4ade53",
+      "sourceFingerprint": "sha256:604da1620b90ff59110cace2d89f7070ab4d2766b7a8cc2b75e1a116a35a0a06"
+    },
+    "/openwiki/workflows/learning-and-review.md": {
+      "pageVersion": "sha256:d5097e76f7d0d84efa90ae6b9d02324a01914369d3b8f9135353bc341f3ddc2f",
+      "completedBy": "claude-code",
+      "completedRunId": "807f5d38-530d-42a9-8075-d4dcbff894af",
+      "gitHead": "9ccfd743df26062d87acca66a16f7a127f4ade53",
+      "sourceFingerprint": "sha256:604da1620b90ff59110cace2d89f7070ab4d2766b7a8cc2b75e1a116a35a0a06"
+    }
+  }
+}

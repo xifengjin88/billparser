@@ -1,0 +1,144 @@
+{
+  "schemaVersion": 1,
+  "pageVersion": "sha256:f785b644c52e55bd5673764a7eaaf3e088367cb66c40a164313c7a925d03a814",
+  "claims": [
+    {
+      "id": "claim_67cc9a21f5d946849d8655c2578ef4d3",
+      "statement": "billparse.api creates one FastAPI app with the Swagger page at GET /parse and includes the auth and webapi routers, with a login middleware, a signed session cookie and GZip compression.",
+      "evidence": [
+        {
+          "resource": "repo://billparse/api.py#L39-L48",
+          "version": "repo-lines-v1:sha256:3715e46aae4ed81ffc6d0798a2351f729c6b822fc85ae5540f41b618c2bbd0ee:eyJzZWxlY3RlZExpbmVDb3VudCI6MTAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjJmNzBlMGJlZmU3ZjYzZWI0MDk3NGU0Y2Y3ZDU4NTgxNDExNzA0NzYxNzYxNjg4YzU5NGY1MzA4YjRhNTU3MTAiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjVkOTRhYzFkZjEwY2FmYTg1Yzc0ZjU0MTczZThmMDEwYjExYmJmZGFlOWJlNTVjOGMwMTc1N2ZkZWFlZmUyNzgiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImEyNGNlMmI2ZTEyZTBhZWJhODdlMjM3NDM3ZDU2YjE0ZGE0MTg2Zjc2ODAyY2E3ZTEwOTE5MGUyM2VlOTQ5NDkifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_5922a495753447bf9f99aa3bb4b519ff",
+      "statement": "With AUTH=google every path except /health and /auth/ needs an admitted person and otherwise gets 401; with AUTH off everything is open.",
+      "evidence": [
+        {
+          "resource": "repo://billparse/auth.py#L127-L134",
+          "version": "repo-lines-v1:sha256:d0e602cd42318188297eed1521c105cd11a5237d08abffaf2280b64f3ece2a0f:eyJzZWxlY3RlZExpbmVDb3VudCI6OCwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiZGZlODE5MmYxMTViZjEyMThkMjFhNzFjMzhmYWU5MThmMTQ3NDU3MWU5Yzc5N2JlM2Q4NTkyYWE0NTdlNzM3OSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMDFiYTQ3MTljODBiNmZlOTExYjA5MWE3YzA1MTI0YjY0ZWVlY2U5NjRlMDljMDU4ZWY4Zjk4MDVkYWNhNTQ2YiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiNzMyNDM0NDBkM2Q0Njk5MGRhMDA1MWJhMWM1OGU1ZTlhM2UzZThiMWQ4NmY4YmM1OWYzOGU0NDJiZjk5Njc3NiIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiZDU0ZjIyMDA4MjkxMGIxNDg0NjIzMTI5NGZjN2EwMjJiMWM2NDcxZThjYmRhMzk5OTU3MDY4ZjgzN2Q5OWE3MSJ9"
+        },
+        {
+          "resource": "repo://billparse/auth.py#L35-L40",
+          "version": "repo-lines-v1:sha256:6a8e5533ce2ea4e0a558f1ce4ee5a6ecee6794e6ccc1d1f6a4689af576596da3:eyJzZWxlY3RlZExpbmVDb3VudCI6NiwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiYTM5N2Q1NDk0NzRmMzIxNjJhMzIxYmIxY2YwMzQ4NjdkYmFkZDEzNTgxYzYwM2FiMzQ0OTAzMDEyZjIxM2I3YiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiZmYxNzdiMTQ5ODJkY2UxNWVmZGE4Yzc4ZWU2NzFkNzU2ZjBhMzAzNmNhZmQ3NjBjMWQ1YmJhOGJlYzkwMzQxNCIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiZDQ3ZTMyZDliNDI4ZDJjOGVlODc1MzYwNjc0ZTJhZjg1N2NhOTdlNDM0YmZiZjUyYzNiYWE3YzFiOGNhNDg1YyIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiYjI0OThkNTMxZmYwODEwMTQ3MzlmOGNjZWJjMDUzYjQ5YjE1YmNiM2ZhYzliNDIwNTE5MjdjOGQ2M2RhZDliYSJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_f3876391afb048c899e58e782fea48d8",
+      "statement": "Google sign-in requires a verified account of ALLOWED_EMAIL_DOMAIN (default archera.ai) and an invite code at the first sign-in, with at most 8 wrong codes per session.",
+      "evidence": [
+        {
+          "resource": "repo://billparse/auth.py#L1-L13",
+          "version": "repo-lines-v1:sha256:1214dfd5159c95826709288ff796c742276e7a21893508c54980251956bf467c:eyJzZWxlY3RlZExpbmVDb3VudCI6MTMsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjRlNmM0ODQyNWQzOTA1MmY3MTQzNjYyM2YwZWFkOWM0ODY1MTcxMTI2NzRkMWQ2NTFhOGRlN2VmYWI3YjhiMWYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImNjYzJjZGM5OTAyYzA5Mjk1NTNiMDNiNzAxMjIxMmYzMGIzNGQwZjdjZGYzODQ0MWVkMzEzNTdjYmUzNmE5YTMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImJlY2U3ZjEzYjdiNmEzNTE2ZmNkNGI1NDMyZDg1OGU1ZjVhMjUyMDRlNjY3OGQ5MzEwZjA1MzNlOTU0NzlmNDUifQ"
+        },
+        {
+          "resource": "repo://billparse/auth.py#L36-L36",
+          "version": "repo-lines-v1:sha256:799d915ba7e7ac03ffabfbf09e3f3d0c76bcab6f8a2668b9de4ee44449e3cb9e:eyJzZWxlY3RlZExpbmVDb3VudCI6MSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiNzk5ZDkxNWJhN2U3YWMwM2ZmYWJmYmYwOWUzZjNkMGM3NmJjYWI2ZjhhMjY2OGI5ZGU0ZWU0NDQ0OWUzY2I5ZSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNzk5ZDkxNWJhN2U3YWMwM2ZmYWJmYmYwOWUzZjNkMGM3NmJjYWI2ZjhhMjY2OGI5ZGU0ZWU0NDQ0OWUzY2I5ZSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiYTc2YWU5ZGMxYzFmNzViMjM5ZjdhNDZiMWYwYWQ5YTYyYjFkYmJiOGMyY2E3NTBiMmQxNGRmMDI5NTc1NDdhMSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiYzVkNTI2YjlmNWYyYWE0NDAxNjNmZjkxNTBhMTJlZTNhZjk5MWQ4NDAyNWMzZmMzODRhZTBmNTQ2NzZiNmYyOCJ9"
+        },
+        {
+          "resource": "repo://billparse/auth.py#L43-L56",
+          "version": "repo-lines-v1:sha256:bcd911c6fb87bcf9fa3be2ed43fc1b2e15b3efb4025961d2412230d9d6e8f432:eyJzZWxlY3RlZExpbmVDb3VudCI6MTQsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImQwYTBmMjYwYTc0YzZiMWUyMjkxYTU2MmZlMjY5ZGMwOTM3YjI3OTBmYjgyN2M5OGY0MGNkYTFhZjMyYWIwYjgiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjQ1NjQ5ZGJjZjY0YjA2NzM0NTkyZjhlZjczMjNiZmY4NjI1Njg0OTE3ODRjNjJhNTliZjQ4OThhM2Q4YmU5OTIiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjE3Nzg5ZWVjYTFjNGQwNmEyYWZiMDg1ZjYyNjM2ZTZiNmMxZjM4ZWVhY2RmMjgxZGY2NWNhNTkwYzhlM2QxMGQifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_96ab855c47f0458b90b2b3460937040d",
+      "statement": "Redirect targets after sign-in are limited to local paths to avoid open redirects.",
+      "evidence": [
+        {
+          "resource": "repo://billparse/auth.py#L98-L102",
+          "version": "repo-lines-v1:sha256:806330d4bce6277d807034c90fe6cd3fd39d582fdbdbb2f004fb5418b8c5e99b:eyJzZWxlY3RlZExpbmVDb3VudCI6NSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiOGMyY2NhMDJhMjgwNTNhY2EyMmJiMzE3MDcxOGQ5MGIyMzI2MTQwMGYyZWIzZmY0YTQ5NThmODdkOTA5ODIxZSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMTYyZmFjM2UzZmMzMDgwZmQ2Y2VkNTlmMzUzMWVhNTk0NDRlNDNhYjk1YmI3MzNjNTU4MWQ5Y2UyMGY3MTU3ZSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiZDhiMDdmYTAwZGI0NGI5ZDk3MDg1YWI0MDhmYTY4ZTNlOTAzOWQ4M2QzZmJlMDExMzEwNWNkMWVkMTA4MGE1NyIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiMTg2YjljNzA5YjllMjJmODAyNWY0NWQ0YjdkZDVjYWMyN2E4N2IzZGYzMzQ4OWRlZmI1NjhjMTRjNGUyYmQyYyJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_92437c63537143cbb79979bc2618f94f",
+      "statement": "Uploads larger than MAX_UPLOAD_MB (default 500) are refused with 413.",
+      "evidence": [
+        {
+          "resource": "repo://billparse/webapi.py#L40-L40",
+          "version": "repo-lines-v1:sha256:f246b8f9ad05d380dc83955c99441bbf6cd729631508826a6c460f9367602690:eyJzZWxlY3RlZExpbmVDb3VudCI6MSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiZjI0NmI4ZjlhZDA1ZDM4MGRjODM5NTVjOTk0NDFiYmY2Y2Q3Mjk2MzE1MDg4MjZhNmM0NjBmOTM2NzYwMjY5MCIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiZjI0NmI4ZjlhZDA1ZDM4MGRjODM5NTVjOTk0NDFiYmY2Y2Q3Mjk2MzE1MDg4MjZhNmM0NjBmOTM2NzYwMjY5MCIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiYjRjN2EyNDhhMzBhMzYxNGJjOGJlYzU3MDMyNjUwYzVjY2E2MjQyNjk5YTAzMTc5OGM0M2JmMmY2ZjA1OGExNyIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiNGJhNjQ4YzE2MjdkODlmMzlhNDA1NWRkMDk1NmNmMGVlNDJiNmJkYmNiNGViN2ZlYjYxN2EyZDIzOTY3MTRjMSJ9"
+        },
+        {
+          "resource": "repo://billparse/webapi.py#L76-L80",
+          "version": "repo-lines-v1:sha256:17582cdae05e9e68718653c2a66d689c122f0894b51cda5eff5af83120c79569:eyJzZWxlY3RlZExpbmVDb3VudCI6NSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiOTgyOGU5NDVlNDA3NjRjYTA2OWEyYWQ2ZTY4NWJlZjgwZjQxODQxODBkMmQyYmFmZmZkYjA5OTlmMmY5NDBjNiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiYjgzYmFmYmRkMzIwNmI0MzZhMzNlZTEzNTUyYTBlZTQ5NWNhODg4MmY0YjBmZmZlYjA1MDllZWE5MmZiYjU2OSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiYWQwOWQzMGY3N2IzNGJjMmE4NDQ4MGNmYTNiZGU5YzAzYTk3ODJjNWM2MTk2YjhhMjNhMmYxOGI0NTZlNzZkNCIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiY2UyYmEwYTE5MWFhZDhjYmQ2MmIyZmQ4YTE3ZjdhNzU4NzUwYmJiMDg1ZjZlZTM2ZjRkMWEyMGQyMjE4YjcyZiJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_c5b08328de5f4c2d80958e3db029a6ac",
+      "statement": "The parse task endpoint reports progress from the running agent job's trace and, when done, status, lane, completeness, charges, gaps, timings, model calls and cost.",
+      "evidence": [
+        {
+          "resource": "repo://billparse/webapi.py#L590-L637",
+          "version": "repo-lines-v1:sha256:b521f063690e25c86757e3e498b680ed55fce36c9f5ab7d9fc7a21b78aff3205:eyJzZWxlY3RlZExpbmVDb3VudCI6NDgsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjhjMzIzYTZiZDIwZmU0YTY2N2U4NWEyYjcyNzg3NmJlMzhkN2IyNzc5NmU3OTNlYjVjY2JlNWFmY2E4NTJhY2QiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjZmNDdkZjRmNGNiYjZhODUyNTc4YmFlYWRmNjZmZTc1MmI0ZGUyZWQ2ZTc4YmU3YTIzOWJmM2YxOWQ1YjY2ODkiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjY0Yzg3YWFiZjIyMWQ0ZmRlN2NkNjBhZDE4MGNlZDA4MDgxMjQxOTk0M2ViOWU3YmE3NjU5MDUwNDBjNmE5YjUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjIyNDJhZDY5NjQ2MGMwODJlOWM4NGE3YjNjOTFiZmJlNDQyMzZmMWI1YTA2ZDVjMzUwOGI2ZTBmNWFmNWFmNWMifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_f6f3674e7da2424aadc0f0ad7ae2a00a",
+      "statement": "GET /settings tells the web app which model choices, keys, learner state, upload limit, kinds, document types and review checklist apply.",
+      "evidence": [
+        {
+          "resource": "repo://billparse/webapi.py#L570-L578",
+          "version": "repo-lines-v1:sha256:9c3a183a44a94129ded8af2ebeada8b0ef993ddbd26a852401938dba6c3ee68f:eyJzZWxlY3RlZExpbmVDb3VudCI6OSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiZmJlZGQyZjM3YzM5MGNmZDZiMmE0YjY4ODliOTU5NmNmZTc4NGRkNmQ3ZDM5YTA5MWM1MDY0NmVjNTNlZDhhMSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiYzMxZjk1NDY0MDU4NDBkYjc3OWYzNDcwYmRkNjQ5ODQ3ZjJlZDE1YjAxYTdkNmYzOTE0MTQ0MmI5NmZlMWNlYSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiODQ0Mjk5YjljYzA0NTRiMGU5YTc3YjE0NWIzNjk1Mzc1MThlMzIxZWRiOGE3ZTQ4OGVhNDgyYmFjZmEwMzA1MiIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiODY3N2YwMzE0NDc3NjJjYTI0MTI2ODI2ZTFiYzQ5MzE3M2ZmODIxMGVmYTJiMmI5MmRmN2U5Y2Y3YjFkZjBhYiJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_36d590cb6571469fa5884d2c8501889e",
+      "statement": "Web app API types are generated: pnpm gen:api writes the OpenAPI document with scripts/export_openapi.py and runs openapi-typescript into src/api/schema.d.ts.",
+      "evidence": [
+        {
+          "resource": "repo://scripts/export_openapi.py",
+          "version": "repo-file-v1:sha256:638efd6f893ecb405d3904d3eccbded312f91e830c078bdeda609a9b64f58549"
+        },
+        {
+          "resource": "repo://web/package.json",
+          "version": "repo-file-v1:sha256:b38c5e330c2b5e966b4ca4681ebfdcf08618a5ac1343932398e244dc351a6766"
+        },
+        {
+          "resource": "repo://web/src/api/client.ts#L1-L24",
+          "version": "repo-lines-v1:sha256:3881a94d7dda65871364b9eacfe409e63780a89e7b1c68a1103fe021e3d90725:eyJzZWxlY3RlZExpbmVDb3VudCI6MjQsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImZiODA4ZTFiZTQyNDFlNjY1MzE0M2Q1ODY2Y2E2ZWEwM2E0OTE1MjhhMWY1MWRiYjg5MmNhZWUyYTYyZmQ2OTciLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjE3NzkwNDcxNjJhYzRjYjQ4N2JlM2Y4MGE1NTQxNTM0MmVjODU4MzM4NTc4NDkxOWE1NTVkZTUxMGViMDRjYTcifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_31c75aa685c54789a64df0483b877f74",
+      "statement": "The web app routes are upload, documents, review, jobs, costs, specs and mapping pages.",
+      "evidence": [
+        {
+          "resource": "repo://web/src/router.tsx",
+          "version": "repo-file-v1:sha256:a3b362086b38a68da7baf58fd325d0b2407905e30fca8c7e9b87c241b612c378"
+        }
+      ]
+    },
+    {
+      "id": "claim_1c62b8d9ad3f4213bec64f679b217e56",
+      "statement": "nginx forwards /api/ to the API container.",
+      "evidence": [
+        {
+          "resource": "repo://web/nginx.conf#L14-L16",
+          "version": "repo-lines-v1:sha256:03084d93c7e588d7b57bd2dc903f33a0819ed44175e624a9e5b0ee879817d18f:eyJzZWxlY3RlZExpbmVDb3VudCI6MywiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiNWZjYTA0Y2Q5NzlkNGE1MDIwMzNjMTU0ZmE3NWI1YTU4MjFhMWI2NjU4MzYzOWRiZDA3YjNlOGQ3MWE0ZThkMSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiYTE0OGE4YjZlMGEyN2ZkY2I5ZGQ2OTI4NmQ5NDk1ZmU1MTFhN2YyNTk4NWE5NzA1MTEzM2Q4NzcxMGY5NjYzZSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiOGU1MjE5OTE4Y2UxNzk5YWRjODcxZGQ4Y2I1MGE3ZGRlY2M1NWE0NGU1N2ZmOGE4ZTllZTZhMWU1YTIzMDY5YyIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiYzk1ZjRjZGU0NDUzN2JiYjE0YTQwYzkxM2I2OTI2MzdlMzcxYmMwNTIwMmE0NGNiMmJjZjUzOTk3OTEyMGEwNCJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_b83cbc1a0667498c991901f9a8094e9c",
+      "statement": "highlight.py colors each source line by role: flagged, gap, total, charge, not counted, section and fact, with the first matching role winning.",
+      "evidence": [
+        {
+          "resource": "repo://billparse/highlight.py#L1-L29",
+          "version": "repo-lines-v1:sha256:eb41d208831efe9fce0fc9dbcf2fef4fe817c3fbb3f1f636714c2a426d674ffd:eyJzZWxlY3RlZExpbmVDb3VudCI6MjksImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjI1MzU3YzI1OWE1NDlkYjRkYTNlMmQwN2Y0MTFmZWQ0NDdkYzdjZDYxMzg1NTk1Yjc3NDBiMGUyMjFkNDkyNmUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAzOGZjNWZhYjE2N2NmZDZkNDgxODZkNDdiNjdjMDlmNTZkMGQ4NjU4NzYzZGJlYzllNzRlYTdkYTU4MzFiNzAiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjE3YTcwOGE0ODBlZDM5ZjQ4MDRlZjdmMmRkOWRiMzdhODRlMDMzMjkxYjRiZGU0MmFjMWNjMGNlNTYwYWIzMDAifQ"
+        }
+      ]
+    }
+  ],
+  "verification": {
+    "by": "openwiki/0.7.2",
+    "at": "2026-10-25T20:19:27.415Z"
+  }
+}

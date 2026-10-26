@@ -110,6 +110,27 @@
    "from": [
     "cost_type"
    ]
+  },
+  "list_cost": {
+   "from": [
+    "cost_at_list"
+   ]
+  },
+  "line_type_raw": {
+   "from": [
+    "cost_type"
+   ],
+   "t": [
+    "strip"
+   ]
+  },
+  "coverage": {
+   "from": [
+    "credits"
+   ],
+   "t": [
+    "commitment_credit"
+   ]
   }
  },
  "derive": {

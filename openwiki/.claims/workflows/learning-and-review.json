@@ -1,0 +1,120 @@
+{
+  "schemaVersion": 1,
+  "pageVersion": "sha256:d5097e76f7d0d84efa90ae6b9d02324a01914369d3b8f9135353bc341f3ddc2f",
+  "claims": [
+    {
+      "id": "claim_b58dfec27111454d885e6468dbadef6e",
+      "statement": "The regression gate runs a spec version on every file the spec was accepted on and fails on a row count change above max(1, 1%), a total change above max(0.05, 0.1%), a confidence drop above 0.05, or an error.",
+      "evidence": [
+        {
+          "resource": "repo://billparse/learn.py#L26-L51",
+          "version": "repo-lines-v1:sha256:1b41f53279a1488cbcb6d6598400b41b4ce78065b944a0cf475d5716dcdadfca:eyJzZWxlY3RlZExpbmVDb3VudCI6MjYsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjY2MzBhYWY5MjBkN2ExMzZkZjk1ODRjYmEwMDJjOTM1NTU2MjhhZThiOGQwZjljZWQ0ZTVlOGY0OWJhNmViMDAiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImVmMjRkNWNmMGMxZjVmOTMxNmFiNWZjZGEzZWVlMjUzOGQxOTQzNjViZjRhYmQxY2E1ZDZkZjIxYzQ2ODMyOTYiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6Ijk3MmRjZTYxMTFiOTI3ODM5NGU1NjJhYjZkMzExY2M4M2Y0ZjNmMDE5NzQxZGQ1M2JiYjg0ODYwNzgzNjI5MmIifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_d88bf6f13b5c4126a4927ef0b2dee932",
+      "statement": "repair_spec asks the LLM to fix a learned spec with validator feedback, requires the failing file to stop needing review, and saves the new candidate version only when the regression gate passes.",
+      "evidence": [
+        {
+          "resource": "repo://billparse/learn.py#L54-L82",
+          "version": "repo-lines-v1:sha256:ba85a4fceb58acc60460f800e244216558bd0a2eb88229f64110da4563789d18:eyJzZWxlY3RlZExpbmVDb3VudCI6MjksImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAwMjFkYjhjYjI0YWE0ZTA1ZWZiNTdlNmRhOTMyNjI3MTZjMzI2ZDc2MTc4NDhjYjlhMDg0MTlhMTJkMzkwYzciLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImRiOWRmYWQzYzU2NjViY2IxMGUzY2YwYTZjZjQ2ZDRlMDFhMTA5MGQ0MzJjMDc3ZGM2YjZiYzFjMjI2M2Q2ODkiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjcxNjY1YTUxNGYwNDZhOWY0N2ZmMWY2Njk0Zjg3N2U5ZjZkYjdlNGQ5YTBhZTM1MjUzN2UyMzI4MzVlM2YyMTIiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjUyZGRiMGFlMTc5MDhkZmExZjI3NWY2ZGM5YzE4YzZhZGJlODg5MmU4NjRmZjk2Y2U1MWExNzhlNTk5ZmU2NjkifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_23d2dd2b92f944ef99fb9566f2131682",
+      "statement": "The learning run retries open review items, repairing the learned spec that failed or the closest learned spec by fingerprint similarity of at least 0.5, then parses the file again.",
+      "evidence": [
+        {
+          "resource": "repo://billparse/learn.py#L112-L136",
+          "version": "repo-lines-v1:sha256:3205932b35f97885c290e327ea8126140aee0430f925450469faf3ace6262efe:eyJzZWxlY3RlZExpbmVDb3VudCI6MjUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjZiYTJkMzg0YjU3NGNlY2M1ZjY4NmM2YTNhZTQyMTBhMjI1ODFiOTNlNjM5NDA5MmY0M2ViMzhmOTI0YTM3NGQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjBjNmYwZjVjMzZlZGE3MTEwYTM2MjNlZjA5YjMzODhhYTRhYjRhNDhjOGNlMThmOTI3ZTRmMjU0MzdlMzRmOGIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImViNTM1NDNhMDQ0MzkzZDU5NDQxNTAxY2Q3NTA3ZjE5MmY0ODg0Zjg0MGYyOTFkZTNjMzVmMDEwMDIzNDgyODkiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImFiYjk1OTg4YzAxYjkzYjBiNzVmMDU1MGZhMDgwYTI2ZGYzYWFmMmMzZmU5NmUwZWU4MDE1MDZkODE1MzhmYzUifQ"
+        },
+        {
+          "resource": "repo://billparse/learn.py#L85-L95",
+          "version": "repo-lines-v1:sha256:fa1b24f31a34eb1c3764012abbe46d508254d8966303821a968296b2eaf44b83:eyJzZWxlY3RlZExpbmVDb3VudCI6MTEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjhlZDg3ZWE2MDNhYjc5ODA4NWRmMGQwYTMxMTdjY2FmMzg5ZjgyZGNmYzJjMWU1MmE4MzQ4ZGFhYWExNzBjNWUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjRjODEwOGQ5NjNlNTI2MmI5NDc5ODdhOTBkOTUxM2NhMWI1Yzc3MWJjYWY3ODAwYzY3NTY3YzUwMWE4ZDIzODQiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjI3NTA1YmVkZTVhNjAzODVkMGRhNDQzZTBlOTdmNmJiNTFlODAwNWZhYjNkNWNhN2M3MTYwYzRjMDNkNDVjMjAifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_188ad3cc606447e28aca5bc2f90027ee",
+      "statement": "Candidate specs are promoted to verified after at least 3 linked files with confidence of at least 0.75.",
+      "evidence": [
+        {
+          "resource": "repo://billparse/learn.py#L21-L22",
+          "version": "repo-lines-v1:sha256:fd2f00a1d94bf5cdaec0393ac00ed77d1bcaa4029b44b794ac970a51e103c04f:eyJzZWxlY3RlZExpbmVDb3VudCI6MiwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiZjhiM2M2MDMzZGRjZWI0MTI2NWQ3OWU5YWRkNWY4ZDBhYmM3MGZkZGMwYmY2Zjk5ODc1YTBiNzJiMGQ4OWZmYSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMmU4NTE5M2YzYzRjN2ExZjgxNzJlNDIwZGZhNTUyNjI5N2NhZWU0MDNmODczMDE4ZTRhMzMwMTc4MmExMjYyYSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiYTkxYjUyZDg1N2MwODhhZmNiYjM3NTZjY2U3ODM0MGI2M2FjOGNmNmNkNGE5ZTE1Y2VhNTJiNzg1MWNmN2U4OCIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiZWYyNGQ1Y2YwYzFmNWY5MzE2YWI1ZmNkYTNlZWUyNTM4ZDE5NDM2NWJmNGFiZDFjYTVkNmRmMjFjNDY4MzI5NiJ9"
+        },
+        {
+          "resource": "repo://billparse/learn.py#L98-L109",
+          "version": "repo-lines-v1:sha256:116d25a28fa98dde104e15c8f30e723f77a3148c373a1c1da52ae9285c0e1b5b:eyJzZWxlY3RlZExpbmVDb3VudCI6MTIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjZlMmY1NTViM2VhODc4NjI3MGU4MGQ3NzQ3MmYzMjNiMDIxYTY4M2E1MDM1M2UxNDA1YjcyNTc0ZDlkODdiYjAiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImVkN2E1YTIwMDk4ZjY2ZGE4OTY0NTNhNTY0MDcwZjhhMmUzNmMxOTJmOWJhNmUzOTIyMDA0NDI1ZmMxMDFmZmEiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImQ1YzgxODk0ZDhmYzg4NGQ0ZjMwMjVkMWMwYjlkZGY0NDE3NjQ3YjE2NGUxNmM0ZGI2MWIyNjE1M2VlMzkxZGQifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_0fb731bb7d0a4c0d9e0a58a3e1ecf303",
+      "statement": "The learning run writes its report with metrics to the nightly folder of the data directory.",
+      "evidence": [
+        {
+          "resource": "repo://billparse/learn.py#L141-L148",
+          "version": "repo-lines-v1:sha256:019d28ca93cdbddbf9630b0c3e41862821150855b071232cf0021d36e45374d6:eyJzZWxlY3RlZExpbmVDb3VudCI6OCwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiNzBiZmIwZGM5YjhhMjExZjE0NjJhNjM3NDBlNDljNDVkYWI0NzUwZDQwYzVmODU3NDExMTkzM2VlODRhMzhkZSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiZDVlMWExNzNkNWIxNGExMzkxN2FjMDhkOGUxMWI2NWI2ZDkwZDk1NGFlMjQ2NGViYjdkMTYzNzNlMTU0Nzk4ZSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiNGVhOTUyNDJlY2E3NGU0YWQzNzM0ZjQzYzVkY2Y2Y2ZjMzRhOGM0MzE3MzQ4ZmRiMjE1NjU5ZTczNGM4NWJiZSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiYzhhZGM2NTc5N2QzMjZiNTc1YjI2ZmQ0NjdiNGEyOWE4NjNjMGFmNDQzOTEwZmE5ZjQyOGM2MDMxMzE1NTNhYiJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_739b26d619dd4aec8a5eb4d8de2db8c1",
+      "statement": "Metrics count accepted share, reconciled share, first-route success, share with no LLM call, average LLM calls and files per route over the latest record per file.",
+      "evidence": [
+        {
+          "resource": "repo://billparse/learn.py#L151-L171",
+          "version": "repo-lines-v1:sha256:b8c471347a76127f101678e63418304a3fb19ac8fca724e02c8451e290613686:eyJzZWxlY3RlZExpbmVDb3VudCI6MjEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImM1NjlhZTQ5M2JlYjczMWU1OGFiYjNhMTg1NzA2YjdjZjlmZTQyOTAxZDIxN2QxMjI3MWUwYzVmOTgyMDAzM2QiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImQ1MDk5MmNjMGU1MmUzY2U4N2RjNWRlOTNiNTFjNDYwNjU4MTYxYzU4NThmZTIwZTVmYTVhMWFlNTQ3YzI4MTMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjY0OWQ5NTBlYWZiMDYxYzQxYjcyZjQ5ZDg1MzcyM2Q3ODQ2NTI2N2ZmNzA1NThlZTJlODlhMmI4Mjc4YmZkMzQiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_55eceaff79e940e6a365a99b486ab9ce",
+      "statement": "API spec statuses map trusted to verified, draft to candidate and disabled to disabled; built-ins report trusted and cannot be edited through PUT.",
+      "evidence": [
+        {
+          "resource": "repo://billparse/api.py#L135-L136",
+          "version": "repo-lines-v1:sha256:2b919869f503b7b64ad236175c859b8536f2a8988dfbf81c12f4880cb5029c96:eyJzZWxlY3RlZExpbmVDb3VudCI6MiwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiZjdiZDE4OWM4NzRlOGRmMzY0MjkyZDcwMGUxMWZmOTQ1OTcwNWFkNzNkODkzMTE5MTJmZTFlYmRmZmNjYTFmZSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiZjM3NjZmMDcyOThkNjQ4MWRhNzEyYmQ5YWY4MDdmMWQyOTY1OWVlYmNiYTQ2OTE4NjdkMGRiNjE5OWI0ZTU2MyIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiZTIzNzgyMzg5OTUxMGVlYTMwNWJjYTBiNTc5ZjYwM2FkNTAwZTY2OTg2YzIyOTZlYzY5ZTE2ZWU2MmYzMzUyYyIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiNzJmM2ViZjhkMGIwYTcxOWFkNjg1Nzk5MTVlZjkyY2NiYjlhZTIxOTdlZjIzMWY5MTlmYTUwYjUzNmJiMGRkOCJ9"
+        },
+        {
+          "resource": "repo://billparse/api.py#L177-L203",
+          "version": "repo-lines-v1:sha256:408f538ae544e841856a026b70049777ac0dbea096cd44b1e99de7821c5b5db9:eyJzZWxlY3RlZExpbmVDb3VudCI6MjcsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImRiZGVlN2E3YzY2ODViZjNiYWYyNGVhNDM5YjlkMTdlYTNhNjdhMTU1YTVjYTA5YzY1MjVlZGQ5MTBhMmRjZGYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImRlMzZkMjM3ZGZlZDNjZTdiYzRiYmMzNjNjMTJkNGI3YWRmYjM5NTEyNzNlNjBjNzJkZjA3ZjAzMmZiZDgxZGQiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjA5OTFmNjE0ZGRmMjVjNjQxMGI5ZDQ4ZjlkYzdhYWNiOWMxNDM2OTgzZTU5MjAxMDA5MWU3ZjBiZWE4NzUwZGMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjQzNjUwOTA2MzAyYTNjMDU3M2FhZDY5ZWY0MTA5Y2VkNGY0MjMwYTgxNjAwMDUzYzM2MWYzYTViZTk4NzFmMmYifQ"
+        },
+        {
+          "resource": "repo://billparse/webapi.py#L537-L537",
+          "version": "repo-lines-v1:sha256:a7d2d06fee90875b2e778a35f9406d1e374622c9be488d188d456afd98c7a46a:eyJzZWxlY3RlZExpbmVDb3VudCI6MSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiYTdkMmQwNmZlZTkwODc1YjJlNzc4YTM1Zjk0MDZkMWUzNzQ2MjJjOWJlNDg4ZDE4OGQ0NTZhZmQ5OGM3YTQ2YSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiYTdkMmQwNmZlZTkwODc1YjJlNzc4YTM1Zjk0MDZkMWUzNzQ2MjJjOWJlNDg4ZDE4OGQ0NTZhZmQ5OGM3YTQ2YSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiNmIxMTEzMWQ2NjUxNzQzZmU2NWIyY2FlMzM1OTY1ODVlOWFmNTJjN2I5ZTAwZWU4NzA4Yzg0NTgzNjU3ZmMxYiIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiMmEwOGQyYzBhOGZmMjQ0Y2ZiMDQ3YTg2MGI0NTk1ODFjYTI3MWJkNmJiNTYxNTk2ZGNkMDRjZjU0MWM0YzkwZCJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_54f29fca0783478e97045acd6f3534f2",
+      "statement": "Approving a review saves corrected service codes as synonyms, stores the corrected document as gold with the approved rows, and verifies the candidate spec when no charge was deleted, added, re-priced, re-kinded or re-counted.",
+      "evidence": [
+        {
+          "resource": "repo://billparse/review.py#L1-L10",
+          "version": "repo-lines-v1:sha256:5ba39d9cfe583e6c72aa9d265fb662ee5b02f237acee996d3963baa5e81de865:eyJzZWxlY3RlZExpbmVDb3VudCI6MTAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjZmNDI5Mzc4MGNhOTc5NWI3Yzg5NTg5YjdkYWY4MmE3MjU5NTk3NDUxNTg3MDI1MzA1ZmYwNTEzNWQ1YzFkZTQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjU2ZWJjYTdkNzI3ODMzOWY1OTBhYjljNzQwYzY0N2FlODViZjg0ODM5M2YyMTU2NjMxNzkyNmNmMTFmYWUxYjMifQ"
+        },
+        {
+          "resource": "repo://billparse/review.py#L165-L195",
+          "version": "repo-lines-v1:sha256:351977266feb692e14d80658ea3d48a8710175f04515852307a6b2015f850b3c:eyJzZWxlY3RlZExpbmVDb3VudCI6MzEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjM0MTE4YzJmMzc1YTIxZjQwNGQ4ZmQ5OTU1MDIxODFmYzI1ODE3ZDMxNzFjNTJlNjQwMDI2ODFmODA3MjgyZTciLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImY4ZWM5NWZhODdjNjcyZjYyYWJlN2VlYjkwOWY5MWZlYmVhNDc0YjAyZGZkMGI5NjE0NThhNTAxMDg3ODNmYWMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjViOTRiZWY5ZTdhNDhlMjljYzQ3YWI1N2MxNTMwYmU4YjRkMTkyMGU3MGVhYTcwOTVhM2UwNThkNDcxMzFiNjUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_7ed85c3b6acc4dec99f494b5c76dfce2",
+      "statement": "The review checklist covers totals, unclaimed amounts, repeated rows not counted, header fields and a three-line spot check.",
+      "evidence": [
+        {
+          "resource": "repo://billparse/review.py#L26-L32",
+          "version": "repo-lines-v1:sha256:e01d07237a68033db014f08d4e662d8d7f0471f1b0c707903adcfc46e3ec0c27:eyJzZWxlY3RlZExpbmVDb3VudCI6NywiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiMDFjMGE1NzAyMGRlOTNjYTE0YzNhYTNkNmI3YWY3M2Y2ZDlmZDhkMDVhNTllMDRiZDdjZjgwMTIyZDIxNTAwYiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiZjk0MTZlMDlmNzhiYTMxNmMwMzI1NjgyMTNiODU1ZWU3NTZlNDE1NjVkOTE4ZjA5NTE5YzgxZmQ2MjBmNDA2MCIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiZTA4ZjgyODBhY2IxMjZlNTAwMWM3NjllMzVkOGZhYWVjZjExOGU4NDgyNjI5MDY3NWU2OGJmNmI3NWI3OGZmOSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiODFhMTY1ZTAyMGZiZjY3MWZmMjc4Yzg3ZDg1Yzg0YjBkMWI3Y2MzZmM3OWZmMjk1ZGE5NjMzNjM0ZjY4ZmJjYiJ9"
+        }
+      ]
+    }
+  ],
+  "verification": {
+    "by": "openwiki/0.7.2",
+    "at": "2026-10-25T20:19:27.415Z"
+  }
+}

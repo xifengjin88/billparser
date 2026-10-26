@@ -31,6 +31,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Protocol
 
+from . import coverage
 from .attributes import extract as extract_attributes
 from .docmodel import Document, load_bytes
 from .llm import PRICES, SPEC_GUIDE, cost_of, redact  # noqa: F401  PRICES: the web API lists them
@@ -198,6 +199,7 @@ def check(spec: dict, doc: Document, catalog_dir: Path | None) -> tuple[dict, Ex
     clean_rows(ext)
     if len(ext.rows) <= 100_000:
         extract_attributes(ext.rows)
+    coverage.apply(ext.rows)
     kind = (spec.get("meta") or {}).get("kind", "cost_lines")
     verdict = validate(ext) if kind == "cost_lines" else {"status": "auxiliary", "confidence": 1.0, "checks": [],
                                                            "completeness": "consistent", "feedback": []}

@@ -1,0 +1,168 @@
+{
+  "schemaVersion": 1,
+  "pageVersion": "sha256:b2f3a60e63f821e18248dad897cee3d0ec211c9a4c048e4ab70644d17c70b2cb",
+  "claims": [
+    {
+      "id": "claim_3fbaa21cfb964fdfa98b0c36c45de1a5",
+      "statement": "The LLM has two jobs in llm.py: generate_spec writes a JSON spec from a redacted preview with examples and feedback, and extract_rows reads line items directly; it never sees whole files or writes code.",
+      "evidence": [
+        {
+          "resource": "repo://billparse/llm.py#L1-L9",
+          "version": "repo-lines-v1:sha256:7495077b7a010dc1d8116fda6a9a4b0696f5fa70c4fb039face23ec3b502fd9f:eyJzZWxlY3RlZExpbmVDb3VudCI6OSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiOTA2ZDg1YWI1YzE4ZWEyM2YxYmQ1ZDJkMjI2MWNjODdlNGFhMTY5MTE3MDE3ZTM1NWQwMmQzYjI1ZTYxMTEzYyIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiYTMwM2VjZGQ0YTRkMTBmMTljNzNmZDQyZmQxMjQzN2ZkMzM1NGE4MjY4MTYwNWRhNTI1NWE5N2EzOTA2OGRiYiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjAsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiZTNiMGM0NDI5OGZjMWMxNDlhZmJmNGM4OTk2ZmI5MjQyN2FlNDFlNDY0OWI5MzRjYTQ5NTk5MWI3ODUyYjg1NSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiNTViNmU4NzA2YjQzMDQ3ZjJhNmRiNjdmMTMyNjM4NTk1NjA0ZTY3ZjM2OTY2ODc2Y2UwMTU4ZjAwNTNlNmJkMSJ9"
+        },
+        {
+          "resource": "repo://billparse/llm.py#L171-L197",
+          "version": "repo-lines-v1:sha256:8fc6cf2e4bca669cfe57f388a305b4f69de3829ee2e4d70f7f5c0f68f672f4c4:eyJzZWxlY3RlZExpbmVDb3VudCI6MjcsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImFmZGRhMmY2ZGE5NjAwOGZjNjAxMGYyNmE3ZTdjNTIwZWMyNTRiZGI1ZTFlYTE5NTNjMTNiYzZjYjhhYWI0MGUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjI3ZTk4ZmI3ZjIxMDhjNTVlYTFhZTRkZDM3ZTMzMmJlZGM5YWU0NDZmZjBlODRjMjdkZjVlZTY1MGVhODNhNjQiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6Ijg2ZTVmMmU1MDJlOWUzMjFlYjRmMWJkYTRjYmYyZTk2ZTU4MjBlZGY1MDRhNjI3ZmViMTExNzI2OTE2YjBlYzciLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_854b6da9ad37464481e1265fb1122826",
+      "statement": "Previews are redacted: e-mail addresses, GUIDs, 12-digit account ids, GCP billing account ids, ARNs and Azure resource paths are replaced with tokens.",
+      "evidence": [
+        {
+          "resource": "repo://billparse/llm.py#L108-L123",
+          "version": "repo-lines-v1:sha256:097dd84c6d6e1df2800a2885dfe0e1165377b3675b2dc525d3d0ed25b7d817ab:eyJzZWxlY3RlZExpbmVDb3VudCI6MTYsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImRhYjhmNGY0MTM1OWY2YzBiZjdhYmMwNDdkNGM1Nzc0NTcyMjMzNGY1ZDJkNmU3MmUxNjZhNTViM2EwOTc0NzEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjFjYmRkMzRiYzRmMzljY2YzNzhhYzFhNzQwOWE4ODllMzU2NDM0NWQ4NWQwOGI2NTVhZTY2YjQ4OTM2MDFhNTAiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjBjNjYxNTQzZjlmNTA3Y2M0MWQwODEyZmJiMDQ3MGRmNGZjY2IzMzEwYWZkZDc3ZTM4MjU5YjQwZTI5NGQ2Y2EifQ"
+        },
+        {
+          "resource": "repo://billparse/llm.py#L126-L135",
+          "version": "repo-lines-v1:sha256:b5b5c4f1ea53e445612dcb6204fcc8c0291adb902dc56b9887218197891bc4fb:eyJzZWxlY3RlZExpbmVDb3VudCI6MTAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjZiMjE5Y2MyNjMyMTgzYmMwNzIyOTNhMjU5MjFmYzg3ZWE3Mzg3MGRhMmE0OTQ1NmJlYzE4ZTMyYzU2YjYxMDgiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjQyYjUyN2NkZTI1NTQ1ZWU5YTc3ODEwMDYzOWQ4ZWY2ZjI2NWNhZWQxYWYyYTMzNGUyY2IyMTIyMzI0M2VkNDciLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjdlMmU5NWY1NDRiYTY2ZWY1YTlkOTg5MGZjYjE1YTllNGY5YjI5YjVjYzIyMmEzZjhjZTJkZDBhZWFkMzNlMDkifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_493a6959be714966aff191c08f8f3ccc",
+      "statement": "The LLM spec route makes up to max_repairs (3) sequential calls; a spec that fails check_spec or validation becomes feedback for the next call, and the loop stops at the first accepted attempt.",
+      "evidence": [
+        {
+          "resource": "repo://billparse/pipeline.py#L239-L259",
+          "version": "repo-lines-v1:sha256:c4fcbf994ecb69e442b685424fa91b965022c8876d6da388676d238c41cd7e77:eyJzZWxlY3RlZExpbmVDb3VudCI6MjEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImM3ZmEwZTIzNmIyOTA3NmVkNDM3OGFiZTQ2ZWU3OWNmZTk5ZGMxMTUwMzRmODVkM2Q4MWE0OTA2NzJiMTg5MzkiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjE2ZTYyYTRiOThhNzQ0NzAyNTEwODMwMzdiMTk3YjY2NjdiNThiOGU4YzU1NDhjY2UyNDk2OWU5MjUxNGYwZmYiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjNjZjc4NTAzOWI3NjBmOTVkMjYxYmZmYzM2ZTcyZmVhZWI1NmVlMjI3NGI0N2VmNzBjMGYzOGFjYTRlYjcyMjciLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImIwMDk4NDliODAyM2UxZmE2ODZhODk1YWQ0MzBiNDRjNDhmM2VhM2E5Y2Y2OTk5MjQwZjFiODFlYTJkMTcxMWMifQ"
+        },
+        {
+          "resource": "repo://billparse/pipeline.py#L46-L56",
+          "version": "repo-lines-v1:sha256:0967de491238ee3af155100a8340eae56f7821f2e2431ef1725a48f39fa45a0d:eyJzZWxlY3RlZExpbmVDb3VudCI6MTEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjY5MTg1NjgyNTA5YjViNjEzOGMyMGYyMDY5N2ViZjlkMTU1ODdjY2I2ZjMxNGYxN2U4NWEwNTM5YWEwYjc4ZDMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImI0YWQxMTY5NDZhY2VjMWEyNjkxYTcyZGFkYTMyNGJmNzFlMGQ2MjhlYmRhOTcwOWNjMmQ3MGEzMTE1MDdjNzAiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjZjMWYwMmZkN2VjMWQ0NjJjMGNiODE4Yjk0OGZmZTRmNzE1YjJjMmM0MzI2MzBjMjMyZGZlMzRkNDI3NDNmYTkiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjZjMWYwMmZkN2VjMWQ0NjJjMGNiODE4Yjk0OGZmZTRmNzE1YjJjMmM0MzI2MzBjMjMyZGZlMzRkNDI3NDNmYTkifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_f190dfb9ef84418493b72389f8d99f11",
+      "statement": "LLM spec attempts are tested against the printed total that the tree of sums found, added as an extra stated total.",
+      "evidence": [
+        {
+          "resource": "repo://billparse/pipeline.py#L208-L212",
+          "version": "repo-lines-v1:sha256:76491f3c1efc463759309102a4f017f51fce008fb55d4e217203ec97ed24f613:eyJzZWxlY3RlZExpbmVDb3VudCI6NSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiMzc1ZjNlN2I5YzZkZjJlYmE4Y2JhZGJmYzhlZDEzYjEwYjdhNjZiOTc2ZjY4ZmEyOTBmMDUyZmJmNDVhYTMyOSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiZDIwOTFhODBiYWRjMTFkZDQ1YTQ4Mzg2NzNjM2YyOGQ1Y2I2MjA5NTBhMDVjN2VkNzQ1NmIxZDJiNGZhMmUyNSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiMmNjZTViMjY4ZWRkZmMxMGRlNjlkY2QyMzdlYjdjZTViNzMyMWYzZGU4MTkzMjBhOTljZGQzMDFmMzE2MTE5NiIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiM2Q2M2RlNDk2MDZjMmE5NjJhM2Y2MTdhYzE2YWFmMGNkZDJkOGY0YmU4ZDM5NTA3ZmI4ODgyMmEyMGRmMDQ0ZiJ9"
+        },
+        {
+          "resource": "repo://billparse/pipeline.py#L255-L256",
+          "version": "repo-lines-v1:sha256:8c55ee00c92691d15d81bfb923cc27d5f1a1de2858079b1fdc363df60d87efd0:eyJzZWxlY3RlZExpbmVDb3VudCI6MiwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiNTIyMmVlYzkwZDkzNzcwNDQ2YjZhNzJjNzZjZWVhNDBiOWY1MTdiNmMwMjE3NGIwOGViM2Q1ZTY0ZDc5MTk5MyIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiZWE0ODhmY2U2MTJlZmJhZTVkODkwZmZhZWE0NDUyNWMyM2EyYzc1ZjQ5NGE1MGYwNTFiNjA2Nzk3NjNlNzIxYSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiOTJiZWIwMzZmZDg5MjU4NDg4ZmI0MzMxYWIxOTgwYTQwZTc4NjFlZDg5MmE0M2ZjNjVhYTM3N2YzZGRiYWE1ZCIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiZDFkOTYxNTZiNzE1OWRlNmU3ZGI1YWExOTE5OTdiMThjZTFjZTYyZDYxYzkwMDAxMzJlYmFiN2M5MmViNWY0OCJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_c03f063adf69448fbd6a4d31264bb74b",
+      "statement": "JSON is extracted from the LLM text by stripping code fences and taking the first { to the last }.",
+      "evidence": [
+        {
+          "resource": "repo://billparse/llm.py#L163-L168",
+          "version": "repo-lines-v1:sha256:6ca9999fe59a2dda84f0b13e16f0104d568ee60614333d6cfee62f053d256c85:eyJzZWxlY3RlZExpbmVDb3VudCI6NiwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiODk1OWIxYWUzZDFmZTY2MDY3MjRjZTU1Y2M2NmY0MjVlYzRjOGFmYTQ2YTE4YjlmMjc2MmRhNTdiMmFkODlkZiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNGFlNDIyNWZlMDUyNGU1ZjU0MjQ3OTM0NmZmNjc1MjQzZjk3NDI2YzBjYzliMjcxMmEwOWYwMDg2ZGFiNjM1ZSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiMTA1NGY4ODAzYzFlZGE4NzQ3YzU4ZTBiMDJkMWZkMWI4ZWM1MzllYjg4Y2RlNGJjNmI3NjI4NTE5NWNmMWQ4MiIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiMTFjOGYyNjBmOWQ3ZjI1MzU3NzUxNDI4NTNkYTdiMDNkNTVjZWViODRiOWRiNTExOTUyN2NiYThjZTY5YWE3YiJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_7afa3936ed964a4f9c96007ce4071aed",
+      "statement": "derive_spec searches frames, grid tables and PDF line patterns for a deterministic spec and scores each candidate by the F1 of amounts rounded to cents against the LLM rows.",
+      "evidence": [
+        {
+          "resource": "repo://billparse/induce.py#L22-L81",
+          "version": "repo-lines-v1:sha256:c587eff74adcfb5967ece172c334d5ca3adf95957f61b58957a88db06a5269d5:eyJzZWxlY3RlZExpbmVDb3VudCI6NjAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjhhODJhMDk3ZTI0OTQxZjBmZTYwYTZhZmY4NjQxMDE5Y2FkMDJhNDNmOGFmNDI2YTE0N2EwZTFlOWI2MWRhOWIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjI2ZGQxODk1ZDRlZDMyZjA4ODlkNTA4OWNkNjg0ZDMxYmM4MGVjM2UwNjBiMzY4NzFlYWJlYzdmMmE3ZWMzNDAiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImY5N2Y0NmQ5ZDczY2M1NTM3NmQ3ODcwNjg4NjBhYWEyZGY2ZDk2ODdkNGEyODgzZTk0NjA4ODQwOGVmYTJiMjEiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImRlMzEzYjg2ZjIwMjVkMGFjZmEyZDVjMjMxMzRlMThhN2M5NmEyOTEyMTJlZWU2YWU2YmExYjg4MGU5N2U5YTYifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_b983041dcfd444f581953a8ff0671336",
+      "statement": "A derived spec with agreement of at least 0.9 is tried as llm_extract_derived; otherwise the LLM rows are used directly as llm_extract_direct and never saved as a spec.",
+      "evidence": [
+        {
+          "resource": "repo://billparse/pipeline.py#L261-L290",
+          "version": "repo-lines-v1:sha256:f39edaf1ba6898394e1527ea6151414b36c7614c83d18f8c1433a6de2673fcff:eyJzZWxlY3RlZExpbmVDb3VudCI6MzAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijk3NTkyZTAyZTZiOWEzODkyOWVhYWU1ZWYzNTY2MjE3NzZmY2E1NDkwNTAxY2U3OTg5MTQ5NmE2NDI1MTZjOWYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjU3MDE1OTM2YjY4NzBkMDBjZDdiYzI2ZDhjOGMwNDI1MDVlMDZhZDZiZmRmY2ExODkyOTA4YzY5ZGJmOTRjNDciLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjJkOGVkYjEwYmU0NjhlMWZmYThjYWJiMTIxYTAyMjczNzFlYmNjYzk0MWUwMmY2YmY3ZDdkZTBkNDI5NGZmNWYifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_d50416779999452189d42753921725bf",
+      "statement": "Direct LLM rows have confidence capped at 0.65 so they are never auto-accepted, the LLM's own total is only an llm_claim, and a consistent direct result is set to unchecked.",
+      "evidence": [
+        {
+          "resource": "repo://billparse/pipeline.py#L180-L182",
+          "version": "repo-lines-v1:sha256:6f8bf8a82d2fad715b72fd30fd8535e7dd2d6b9f42d055b53737c121561b0905:eyJzZWxlY3RlZExpbmVDb3VudCI6MywiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiYjk4ZmNiZDUwOTNlYTYxYmZkYzdiMTVhYTQwYjZhZDE4MzY4MzA1NDJmMzRiZWYyYjk1NGU0MTc2MGRjN2Y0OSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMDBjNTRiMGIwNjdkYTllMTNjZjk5OWFiZmZlOGRiZmNlOTIxMmJlZjBmOGE4ODY4NGRiMjM1NzA2NDZkYmUxYiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiMDMxMzRkNGYyM2U1MzljNzA3NjZiM2M1MWFiMDk3NDgwNzlmNGM1YmE2MjNiZTU5NDA2ZTM3NzRlNTFjMTFmMCIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiNDYxMTFmMGI4ZTkwOTQzNWY5OTE5OWU5Y2M2MDMzYjY3OTM0ZDg1NDg0YTlkZGE5YmVmMmUxOTU1MjFiMDRiZSJ9"
+        },
+        {
+          "resource": "repo://billparse/pipeline.py#L276-L290",
+          "version": "repo-lines-v1:sha256:c085f8271f0b6a8db9541e88ea655c697528ba9499189529a57127403083c8ae:eyJzZWxlY3RlZExpbmVDb3VudCI6MTUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjVlN2JjZDM2ZWY1M2I0NDUyM2U2NWU5OGQxOTQ0OTkzZTBmZjE3NDZmNTUzNmMxYTUxMTc0NmYzZTAxZTc1NmYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImY2NTliMDE0NWY0NDdhMWEwZTRiYTA2MDdlZTVmNGUwYWRhM2I1MzM0Njk3MzE2NGZhZTFhN2MyODcwNWZjZDQiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjJkOGVkYjEwYmU0NjhlMWZmYThjYWJiMTIxYTAyMjczNzFlYmNjYzk0MWUwMmY2YmY3ZDdkZTBkNDI5NGZmNWYifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_315824d6e90d4c13837de8da9a2b0863",
+      "statement": "Accepted mapper, llm_spec and llm_extract_derived specs are saved as candidates with the layout fingerprint and an example preview for later LLM calls.",
+      "evidence": [
+        {
+          "resource": "repo://billparse/pipeline.py#L362-L376",
+          "version": "repo-lines-v1:sha256:0f7927a54959307f257d4a34658948473c78cfaddd742cb2c2ad5a4e66c0ea80:eyJzZWxlY3RlZExpbmVDb3VudCI6MTUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjVkMDNmMWE4ZGIzZTZlMDA3Njc2YmU1ZDQ3MWNiNTc4ZGY1MWNhNTA4OTYyY2M4ODNjNzQyYjRmMTgxNGQ2N2EiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjNjN2I3YjQ0YjAzYmM2Njg2Yzg0ZDg5YzkwMjIxYmY3NTVmNzE1MWQyMDljYzk2ODI1NzczYWFiNjU2NTM5NGUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjY4MWYxNjU3ODkyZjAzMTA0NGIwZGMyZWQ0MDVhM2U2ZWNjNjlmMGFkZjExZjE1NjBiODdmMjdmN2MwNTk1M2QifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_51771c55581d4d5fa3c5ef59543ff61c",
+      "statement": "LLM examples are the saved specs most similar to the file's fingerprint, with a bonus for verified specs, padded with built-in specs shown as header lists.",
+      "evidence": [
+        {
+          "resource": "repo://billparse/pipeline.py#L341-L356",
+          "version": "repo-lines-v1:sha256:aedbe4b0deeac9f736763fd05f87e03c9ca28c341e6982aedeefa2d0510917ff:eyJzZWxlY3RlZExpbmVDb3VudCI6MTYsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImYxOGM3NDdiZjQxMTUzMTFiMzIwNzBhNTY4ZmZlODgyZmM0NDcyYjk3NDlmM2I5ZDVhYmU5NjNlYjg5ODllZGQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjJiYjU0MmE5MDcwY2FhNGM5OTg5ZmQxN2U0NGE5NmIwMmViNTBmY2JjZWQ2N2VhMGU0N2FjODgzZTg5NjgwZGUiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6Ijk2NGM2YmZmOWQyMTE5MGQzMGYyOGZjYWIzMzA2ZWQwYmNiNjlmYWVkMTBjOWUxMDczNzc4ZjdkMmVkYjlhOGEiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjZkNGY3YWMyM2FmZDI4ZWMwOGZlNDJiY2ZhZjkzNzRkODNlNjQ0ZTZmMzJkN2RhOGYxNjNhNjc3NDA1N2E4NmUifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_9d7b409007f04fd2a70086f2322a295d",
+      "statement": "AnthropicLLM sends one raw HTTP request with requests to the Messages API, with no retry, using BILLPARSE_MODEL (default claude-sonnet-5-5), BILLPARSE_EFFORT, BILLPARSE_MAX_TOKENS and BILLPARSE_LLM_TIMEOUT.",
+      "evidence": [
+        {
+          "resource": "repo://billparse/llm.py#L23-L24",
+          "version": "repo-lines-v1:sha256:96619089be4ce4205f5eefaa25528e1bee9a829618f8ca3cffc43ce1db97ce9d:eyJzZWxlY3RlZExpbmVDb3VudCI6MiwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiOGQ5YzliOWI3YjBlNmM0NDRlMjAzYTcxYTM4M2FkNDQ1OGFmZTkxY2QyY2ZmY2EzOGU3MzZhNzQ3ZjBiNDQxNSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMzhiYThhYzIxYjA0ZmY0NDk2NWYxYTY2MWRlOWM4MzQwNGRiNzdkYzc4ZDcxODViM2E0YzcwYWYyMzRhZGY1YiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiZjU2ZTJmOWZkMGU3ZmI4NTY0YzhiNzhmYzMyNTBkOTAxNjQ4MGIwY2Q4OTdkZTczNGUxMDVhMmE2ZWU1MDM4MyIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiNTgxMTljMzdhOGJhOTQzNTBmOWFhNWFmZTI1MmRhOTE5NGUxODk4ZWUxZjczYjc5Y2IyNjkwNDcyNTk3MmEzZSJ9"
+        },
+        {
+          "resource": "repo://billparse/llm.py#L70-L99",
+          "version": "repo-lines-v1:sha256:b67320757caed6eb8a422fa3756767aa9e1a3e9214cd3b12f4836c57ec7035e1:eyJzZWxlY3RlZExpbmVDb3VudCI6MzAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjU1NDRlZmZjYzhjZTAyNmRhNTYzMDc5ODRlMzJmMzZlMzY4MjkzMDFhNWZiZWRmMzRmYjcyYjkyMzA4NmI3ZTUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQ3MGRkYmY1MzVkMTBjNTQ5MDljMWE1YWM2Y2FiNTdiYmZmY2UyMTQ1YWQ3OGU2YzVlNWNjNDM4NzhlMGMxMTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImNjOWI2NjY2NzQxNzcyYTAwMzZmM2NkMDM2Mzg5ZmY1OWQ5NTZhYmFjMjljYzkzOWY1ODMyMDM3YjQ0NTY0ZGMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImM5ZjY3ZTA2ODg5MzVjYzM3NGRjZDlhMjk2ZmIyMWQwOGJmNWVjYmQ3Y2MyMGI2ZDgxM2YxMWE5YzRmMWM0NDcifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_e9b9c96d29b2441d96a8ac03c53b0483",
+      "statement": "LLM cost is estimated from usage with the PRICES table and counted per thread; parse_bytes stores the difference as claude_cost_usd.",
+      "evidence": [
+        {
+          "resource": "repo://billparse/llm.py#L30-L35",
+          "version": "repo-lines-v1:sha256:c00ab807acb7c32b8e833c2e63cbe8ac53a5cf760ff94a2618477db396726814:eyJzZWxlY3RlZExpbmVDb3VudCI6NiwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiYWQwY2QzNjc5ZTlmMzJhYWU2MzFlMzM2Y2JiYWFmZDFmMWQ3ZWE5ODc5YmRmYmEzZTFiZDBhMTkxYTFkOTQ1MiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNzZjNGQzNWZiMjhlNjM3Y2E1ZWIzNGI5YTBiNzc1MDk5YzczMGZiZjAyNzhmOTM3MDBlZmFiYzY4MTU4MDUwMSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiNTY4OTFlZjgxNjZhYzI5MmIwYzUzZmQyNzE2ZWIzNTgyMDU0ZWQ3ZjkzNzc3NzFlOGRjZWFlZTM1ZjIzNDE1MyIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiNmZhOGRkMTg1MmE3NTQ2OTBiYzljYWExODY3NDkzMmQ2OGExODZiOTVjYWU3NGFiYmFiZDZhMGI5MzAyZTlkMSJ9"
+        },
+        {
+          "resource": "repo://billparse/pipeline.py#L97-L102",
+          "version": "repo-lines-v1:sha256:c85677ee1e1f8a00795b43a96b9c1c38d94961a228da989c93222d04ff612189:eyJzZWxlY3RlZExpbmVDb3VudCI6NiwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiMTM2ZThhZDM3YmUzMDhhNzM4YmEzNDRmMmI2YjliYTVlNzU0MGE0NDM1YjZjOGE5NzdjYmYwMjNhNzJkOWNlZCIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiYWZlOGFkYmViOWNkYjFjMjIwZDhlM2NhMDJlMjMwN2Q0MzRmMjQ3NDE1MjM2YjdjY2M5OGRlN2I0YWI0YWRjZCIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiOTJiNDRkMGU5ODk2OTdhYzdmMzVmNTY4MTVjNjdiZDg4MDk3ODcxZDdjNTcxOGJiZjVhMWI3MDI3YjQ3MGQ5NiIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiMTAyZGE3MGMyZWRiZTI1ZWRlYjg0NTFkZWNjOTZiNmViNGFhMDU0MmVhNDg5ZTkyMjM2MWIxMDQ4MGE4ZjUyNyJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_51e712f9a9324bbfb12df8c467fa8c15",
+      "statement": "The web API uses the LLM only when BILLPARSE_USE_LLM is not 0 and ANTHROPIC_API_KEY is set.",
+      "evidence": [
+        {
+          "resource": "repo://billparse/webapi.py#L51-L52",
+          "version": "repo-lines-v1:sha256:477f79590afe5065e128f1dfab4525b9bd6712506052e9a4518c84ef15b66d3e:eyJzZWxlY3RlZExpbmVDb3VudCI6MiwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiZmM1MmJjNmMwMWY0ZDUzZWFlOTVhMDM0MmZiY2Y4Njc2NjdmNDcxMzkzMzhjOWU4N2ZkZTc3OWMyMjJmMTQ1MCIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNDg2MDI4YmNkMGJlOGYzMTIyNzM3NTBmMTlhOTM3NWY5ZDZjYjRiZjg1YjA0YmMyYzU4MzJjNGNlMmRmYjUxNiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiOWRiNGMwZDk4OTEzNjExMjJlMTFmNjk2NDJmNWNlOGQwMGNkMGU2ZDUxMmRkZjJiMTBjNTYwYjkwZjI3NTFhYiIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiY2JiNmEwOTgyMzg4M2FkYTE0ZDRmNDQ1M2NhMDdlNmZiZWEwMjJhYTBlYzg4NGQxOTI5NzNhOTJjNjU2OWU2MiJ9"
+        }
+      ]
+    }
+  ],
+  "verification": {
+    "by": "openwiki/0.7.2",
+    "at": "2026-10-25T20:19:27.415Z"
+  }
+}

@@ -1,0 +1,120 @@
+{
+  "schemaVersion": 1,
+  "pageVersion": "sha256:74bae38c4302016987c1a081fc940b6fca2bfbc378f1748b48de0290b9e10d4e",
+  "claims": [
+    {
+      "id": "claim_de35664acfab4e58aa82202ebf5b9252",
+      "statement": "clean_rows tags tax lines as Tax and negative credit-like lines as Credit when no charge type is set, and moves a provider-name service label into provider.",
+      "evidence": [
+        {
+          "resource": "repo://billparse/validate.py#L35-L59",
+          "version": "repo-lines-v1:sha256:c812c86dd8072fb704961461abc4e168bfa98b02b23c1fb2f46bd5068b8b7ae5:eyJzZWxlY3RlZExpbmVDb3VudCI6MjUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjA4N2Y5NWIxOTkxYmIyZTFmYWRjYmUzNWU3YmNmNGQ3NjNhMjRiMmM5NDMyNDFmNzk2ZDU3OWNkODlhMmM2NTgiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjFmYzY4MDNiMTlhMWQ5MmI4ZDhlNDA2MDQwZjc4NmVmZGU4ZDFmYmQyODY3ODQ1OWYzMTY4Y2YzYTM2YzgxNjIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjlkNzkyNDlmMThhMWJkYzFlNGZmODk0YjA5M2QxNmY5YTVlODY3MTQ1OWY5MGRmYTkwMjg2OTE1MTZiN2U2MjMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjY0MThiM2M4NjU3NTVlMGE4NTg1YjdmNDQ3NzM0MmM2MTg4MTg4YTQwZjQ5NjYyZmIxNjkyYWVmNDUwZGMxMGQifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_81cab75f6c0945e5b4d0803a7e47b703",
+      "statement": "For non-tree readings, total rows are moved out of the lines into stated totals, and when no row has a total label the single row equal to the sum of the others is treated as a total.",
+      "evidence": [
+        {
+          "resource": "repo://billparse/validate.py#L61-L81",
+          "version": "repo-lines-v1:sha256:b4c5a8490d765e6d65e1316f22bd34cd42eab6afb7d0a7297c2e823a017f778a:eyJzZWxlY3RlZExpbmVDb3VudCI6MjEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjIzYTc3NDAzN2IzNTUxZTdlNTllZmUwN2FiMjlhYmE1MjAwNWEyMjNiZTQ2YmIxZGE4ODg5OGRjZTk4ZWI4N2MiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjMxYzUyZDNhY2YyM2I4YmQzMjM1MzQyMDU1YWZlYmY3N2E1NTI0NDZjNTM5ZWRjZjJmODQzNDYwYWI4NTNkZDQiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImRiYTY0NmU1MGY0ZWNjYTExNmE5NWYwMzgxMmY5NTdhYTc5MjZhNTUxMjJjNTIyZTc4NDI5OTdhNDJjYWU0NjQiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjFlOWVjMjA5ODJiYWYyYzk4OTE2OWM2Mzg4YTE2N2I5YmY5ZTc2YTkxOTAwYmYzNjljYjc2YmNkN2UxNmYxODYifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_029c3420ef514685bfcf0711e0525f8c",
+      "statement": "Confidence starts at 0.55, adds each check's weight and is clipped to 0..1; with no cost rows the rows check fails with -1.0.",
+      "evidence": [
+        {
+          "resource": "repo://billparse/validate.py#L107-L138",
+          "version": "repo-lines-v1:sha256:51b3a373379bd5bf9655afddad683fad6ef0e503d473909534f9e039a9e1589f:eyJzZWxlY3RlZExpbmVDb3VudCI6MzIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjE4ZWE3MTQzYmQ3MThlMTljNzk4N2I0YmVkYjgyODFjNmVmMmYxNWIwZDFlZWM0MmQwMDI1MDA3ODhjYzczNDIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImY0N2NhYTBjNDkwOTU2YzIzZjYzMmVmOGQ4OWZlMDk3YWJlODFmNDQ1ODUyYzJiNDk3ODUxMjRlOGJhZmJiZDYiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjA2ZDFmMTJmNTZhY2IwN2U1ZjlmMWQyZTQxMTgwNTA4NGM4ZjI0MGI2ZmVhM2FmYTM5ZDFhMzI0MmY0OTFmZTIiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjYwOWY3Zjk2MTJmYmE5MTIwNDRkYzRjYjhkZTI0NDc5NzEyNjUxYmQ1ZTBlYTIzZjk0NmQ3YmYwYWJmOGNlZmEifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_59036b813692466ba2d719f077cee83c",
+      "statement": "Stated totals are compared with the sum of lines, the sum before tax and the sum plus stated tax, within max(0.05, 0.05%) but at most the rounding bound of the line count; LLM claims and subtotals are not candidates.",
+      "evidence": [
+        {
+          "resource": "repo://billparse/validate.py#L172-L201",
+          "version": "repo-lines-v1:sha256:7360f6cb1efab71253b6a494d9da58eedeed011ccacb2d2807c7ac8ed1a56700:eyJzZWxlY3RlZExpbmVDb3VudCI6MzAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImYzYzU4YjM2ZDk2NTJjNTU4ZTMzNDhkOWEyM2RkY2Y3ODhmYWVjMTc5MTlkNTlmNWRiNGRkZjFjZWZiODU3OTQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImFiYWU1ZjliOWE1YzgzYTM4MTdkYTQyOWM4ZTQxZWM4MjUyOTVjY2FiZWRiYjdlMTczMzM0NjQxNmFmYjQ2NWYiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUyZjE0YjZmN2IwZjQxYWRkNGE0ZjVmMGI0NTFkYmI0OTM2NDJiMzQ2ZGE1Y2I4MGY3ZDkwZjAzMGNiNGI2YzIiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjE2NmFhNjA2MjVkYmY1OTE4MzU2NjE2ZjdkMWVlYzg3MTA1Y2EwOWNkZTQ3ZjY0MDkyY2YzNzY1YzZmZWNkOTUifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_7cc57751c9c641ecb8f7f820e39f164e",
+      "statement": "A tree proof passes only when the printed total equals lines plus rounding to the cent and no printed total exceeds its rounding bound; duplicate lines fail the stated total check.",
+      "evidence": [
+        {
+          "resource": "repo://billparse/validate.py#L229-L256",
+          "version": "repo-lines-v1:sha256:5e9c09cb1a44fbd5a601bdad378b445cabb8f6ee6f847107c0b0f235828142e6:eyJzZWxlY3RlZExpbmVDb3VudCI6MjgsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImE1NDY5OGQ5YTA3YjZhYzhmNzNlYzY0NjdjYzc4NzcyNTNiNjdiNzY3Y2YxMGViYWE5OGI2ZjdlMWEyNjAwZDEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImM5MjNlN2RmNTEwNGM2NzMzOGU5OTAyYWY4NzdlMzNlNzAzNGEyNDY3ZjIwMWRkNWM0ZjVkZTc2NzVmOTQ5MWIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjJlOTE2YWQ5YjFiMDI2NjI5YTg2MTgxZWJjNTEwZjA0Mzc0Y2I5MTIyZWQ4NjNiNjMzMjQyMWJjY2U4YWI2YWMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjdiZjI4ODRlNDU2YjEzOTUzNjZlNzg3OGRlNDFiMWQ5MzRiZWY1MzU1ZDdhMDdhZjQwNGQyN2YxYTRmMjhmZTAifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_9e891818138641788e33bead603ba8e9",
+      "statement": "Tree subtotal and unexplained-amount checks fail when the amount is above 0.5% of the total and only warn below it.",
+      "evidence": [
+        {
+          "resource": "repo://billparse/validate.py#L284-L310",
+          "version": "repo-lines-v1:sha256:d7c0c31e7dd3d2c42004642fe495c84a72908ee11144aa96b21ce410befbdd28:eyJzZWxlY3RlZExpbmVDb3VudCI6MjcsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjhkMGE1MTEyYjJjYzA3Mzc3NWUxNzQ1OTE5ZWNmMmRmZThkZjQxYWNmZWFjMmU3ZDg4MGY2ZTNiNDJkYTYwZGQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjU0NTI2YWZkNzhlMmJiZGM0N2QwODZmNjliOTdhZjYwZTQ5MjAzZDNjNDlhMTAwMDNmNTQxNzEyODlmOTYxZTQiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImIwZjM5NTFiNzkyYzQwODBiYjg3MjA1M2IyNmU4MzlmY2ZkMDE5ZmUwYmEyNWY1NjQzNDM2MTM0MjY2YjI5ZmIiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjFlOTMzNTM0YTU3MzMxYzU1OGEzZjc5ZmQ1MTM2NDk0NGE0NGY4M2MxNDNlMTQ1NmQ3ZmRiMmViODIxZDMwODUifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_83131c0d80b54893b5c75a4f5672373a",
+      "statement": "Service resolution passes at 90% of cost resolved, warns at 60% and fails below.",
+      "evidence": [
+        {
+          "resource": "repo://billparse/validate.py#L132-L135",
+          "version": "repo-lines-v1:sha256:8551f0518e6a393da405aab62fec4abe677cf72876c6d9670b8534bf1ba2233f:eyJzZWxlY3RlZExpbmVDb3VudCI6NCwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiOTM5NDlkYzdiMTBjNTFhZTllMGE0YTFlYzY1MjZjNjJjMTc1Nzk1ZTU1NDU4ZDI0YzU4OTFiMmI2Mjc4ZWUxZiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiYTFiMzdiYWI1YzA2N2U2YTk4NGRhZDNmYzU0NTlhMTY2Zjk4ZTUwNDA1MDA0YmZlYThlNmIxNGY0OTlhMTUwNCIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiNTk4NzU3YWRkNGEwMWJlMDEzOTcyZDlkZGM5YmQ4MTZmMTI0NDJlNzUxNmQzN2E3NmNlZGIxMDMzZGU0MjdkMSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiZjk1MDQ3MDYyZmYyM2JlZWVhMzA2NzdmZGUyYTVhMjY4NGJkNWViYTM4YzE0MTJlNThlMzg3ZjQ5YTk2OGI1OSJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_777c7a69b3f34fa1a5ca73dcfe589d07",
+      "statement": "Status is reconciled with a matched total, confidence at least 0.7 and no critical failure; unreconciled with no critical failure and confidence at least 0.6; else needs_review.",
+      "evidence": [
+        {
+          "resource": "repo://billparse/validate.py#L332-L358",
+          "version": "repo-lines-v1:sha256:502bd8bf37381e8e90ea4e6ccbf3c9e090f73e31bbb4463f67557a1ac597644c:eyJzZWxlY3RlZExpbmVDb3VudCI6MjcsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImU4MzdlYzBlMTVhYzMyNTBlZDNhNmQwZDc5M2FmZWM3NDE1M2QzNDQ5MmNmN2E2Zjc2NWMyYjc3NDM0YzRjNTUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImE5ZWE2NGZhYWQ1Y2RkMzFmNjI3NWMwOWQzNTU2YmQ0MDZiNTQzNzIzMmUxM2YzY2QyYmY1YjlkNDg1YmRmNzEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjBiNDY4YWQwYWJkNWRmODYyMGJiOTRiZGZmZTg1ZjQyMTEwZWNkYThhZjc2NGE0ZDVjM2JhMDZiYWE1Zjc3M2YiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_682ddc768eca4afbb9141db58ce38cca",
+      "statement": "Completeness is contradicted when a critical check or line_math fails, reconciled when a total proves the lines, consistent when an internal check passes, else unchecked.",
+      "evidence": [
+        {
+          "resource": "repo://billparse/validate.py#L332-L345",
+          "version": "repo-lines-v1:sha256:02ad4ecbd7db08b789d7d14e730d15435008c385dac7909ee063726a70e3cbd3:eyJzZWxlY3RlZExpbmVDb3VudCI6MTQsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImU4MzdlYzBlMTVhYzMyNTBlZDNhNmQwZDc5M2FmZWM3NDE1M2QzNDQ5MmNmN2E2Zjc2NWMyYjc3NDM0YzRjNTUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjlhOGE5YzllMmQyNWNjYTM0ZDA1YjFjYTg2Yzg0ODJkOGU1NGQ4YjIwOGFhYmIwMGQxODU2MjIwMzY1NTVhMjQiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjBiNDY4YWQwYWJkNWRmODYyMGJiOTRiZGZmZTg1ZjQyMTEwZWNkYThhZjc2NGE0ZDVjM2JhMDZiYWE1Zjc3M2YiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImRhNWE0MThiYzFiM2EyY2I3NmM2ZWM3MzdhODM5YjhkZjU2MjM3Njg4M2YwN2Y1ZWY2YjE2MTU2NjgwNDQxNWUifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_f9bed559da654fc6bd8de884ef8ba640",
+      "statement": "Feedback lists every failed or warned check with its detail.",
+      "evidence": [
+        {
+          "resource": "repo://billparse/validate.py#L356-L358",
+          "version": "repo-lines-v1:sha256:27bc13d35c297bbba71eb2322d20b6449ea6b4ff5bf1eb7de6560249844fa35d:eyJzZWxlY3RlZExpbmVDb3VudCI6MywiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiODI1OGNlYTdhODVhMjgxY2JmZjIzM2M2ZWJlYTcyNzU5ZmE3NTI1YWQ0MWY5MjJhOTk3ZWYwOWMxOGFmZDU2MyIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiYTllYTY0ZmFhZDVjZGQzMWY2Mjc1YzA5ZDM1NTZiZDQwNmI1NDM3MjMyZTEzZjNjZDJiZjViOWQ0ODViZGY3MSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiNmNhMmY1OWM0N2JlNGVhNGQwMWFmMjdhNzBkYmZlZGY3MjNiMDhhZDM5ZjkwYjI0MDFlODUwNGQwOGYxZGQyMiIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjAsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiZTNiMGM0NDI5OGZjMWMxNDlhZmJmNGM4OTk2ZmI5MjQyN2FlNDFlNDY0OWI5MzRjYTQ5NTk5MWI3ODUyYjg1NSJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_a5c6e05541f242c784c863241b8889ee",
+      "statement": "The currency check tests that amounts printed in a second currency equal the amounts times the printed exchange rate to the cent.",
+      "evidence": [
+        {
+          "resource": "repo://billparse/validate.py#L207-L226",
+          "version": "repo-lines-v1:sha256:55a028737589d6acf0fdeb7fc2b341819cb27aa77bf71f05e23c69ecf7156c78:eyJzZWxlY3RlZExpbmVDb3VudCI6MjAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjdiZmQ0ZTNiNTQ5YjI5YzI3ZTMzOWJjZWQxNzJkNDg5NTVmOTcyNmJiMGE3MjAyMzFhMWE0M2U0MDNiMWQwMWYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjRjYjVmMzA5YWYxMzYyNDIyODlmOTZmMmE3ZmZiMGJhMGEwZWExNjZjMzQxNTEzNzRiNTI0NDhhOWVkN2I3ZjgiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjgxYzRmMzg5ZmQ0OGUzOGJmOThlYTg4YThlMjQxMjIwZTlhMjQ2ZTg2ZGM5YjQyNGUxYjM1ZmIzNTIzNGRiNTkiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjNhMmYyOTczZjIyOWNkYjg3MWYwY2EyZDdiN2FiY2NjYmYwNWVjM2IxYTc1Njg2OTg4NmU5OWJkZjBkNmRhMDYifQ"
+        }
+      ]
+    }
+  ],
+  "verification": {
+    "by": "openwiki/0.7.2",
+    "at": "2026-10-25T20:19:27.415Z"
+  }
+}

@@ -1,0 +1,156 @@
+{
+  "schemaVersion": 1,
+  "pageVersion": "sha256:a25ce16e45b068d9b491b1d594cf3346cf974314d838dfdb4f29ff1e11d0ebb3",
+  "claims": [
+    {
+      "id": "claim_b1b32d41616c4070a1a6640371ccc732",
+      "statement": "Grid table columns are located by header text and x position, never fixed indexes; PDF column ranges widen to midpoints and a cell can join the nearest column within 25 points.",
+      "evidence": [
+        {
+          "resource": "repo://billparse/layout.py#L1-L6",
+          "version": "repo-lines-v1:sha256:c17531e53c2e462f68777ea19a8705191d472c9ea2baae9b9fbf3c216257898c:eyJzZWxlY3RlZExpbmVDb3VudCI6NiwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiMmY3ZTFlNDg5ZTE0ZDQzYmM2ZDk0OTk1ZjU3MDAyODczNTk2YTg0ZDQ2Njg1MzZkNTE2NTg3ZmY1MGRkZDRhMCIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiYTMwM2VjZGQ0YTRkMTBmMTljNzNmZDQyZmQxMjQzN2ZkMzM1NGE4MjY4MTYwNWRhNTI1NWE5N2EzOTA2OGRiYiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjAsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiZTNiMGM0NDI5OGZjMWMxNDlhZmJmNGM4OTk2ZmI5MjQyN2FlNDFlNDY0OWI5MzRjYTQ5NTk5MWI3ODUyYjg1NSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiNTViNmU4NzA2YjQzMDQ3ZjJhNmRiNjdmMTMyNjM4NTk1NjA0ZTY3ZjM2OTY2ODc2Y2UwMTU4ZjAwNTNlNmJkMSJ9"
+        },
+        {
+          "resource": "repo://billparse/layout.py#L18-L18",
+          "version": "repo-lines-v1:sha256:20b424db6ac8a5068c029b674744e3a7cc2760980bd07431f3a60be28e0f8445:eyJzZWxlY3RlZExpbmVDb3VudCI6MSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiMjBiNDI0ZGI2YWM4YTUwNjhjMDI5YjY3NDc0NGUzYTdjYzI3NjA5ODBiZDA3NDMxZjNhNjBiZTI4ZTBmODQ0NSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMjBiNDI0ZGI2YWM4YTUwNjhjMDI5YjY3NDc0NGUzYTdjYzI3NjA5ODBiZDA3NDMxZjNhNjBiZTI4ZTBmODQ0NSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiYmRlMzVlYTNhMjA4MDkwZTFmMmIzNTc4YjA2M2VjOGUzMWU2ZWY3YWRmNDM0NDMyN2RhMWNlOTZlNTlkN2I4ZCIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiNmMxZjAyZmQ3ZWMxZDQ2MmMwY2I4MThiOTQ4ZmZlNGY3MTViMmMyYzQzMjYzMGMyMzJkZmUzNGQ0Mjc0M2ZhOSJ9"
+        },
+        {
+          "resource": "repo://billparse/layout.py#L67-L103",
+          "version": "repo-lines-v1:sha256:f2ff22b2b719b8c93f2fae84d3ef0385877e3bb5d68a8d1018287ccc262b4571:eyJzZWxlY3RlZExpbmVDb3VudCI6MzcsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjdhZGI0MDAxYzFlMzA5OTM0YWFiNmY2Mjk0ZmU5NDU2OWRiYzMzN2IwNjZmZGQ3YjdlNDJiOTYyNDVjNThlMGMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImY4M2U4ZTVmNzg5YTM5YTIyYzc5YjdhMDYwMjIwNjY3ZTc4Zjc5ODkzMTE4OWIwOTFkYjg0OWFkNmM2ZTBlN2YiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjVlNGJlM2RlNWZiYTQ1YzhhZDNmNzg5ZjkzNGEwMGVjMjQ0NmJhNTBkZjg5MGFhN2ExNzI1NjBmMWM1MTBhODQifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_b4c12fd971b84f81b4587c83f8e72f50",
+      "statement": "find_header uses an anchor regex when given, otherwise the most header-like row in the first 80 rows, adding 3 per expected header name.",
+      "evidence": [
+        {
+          "resource": "repo://billparse/layout.py#L43-L64",
+          "version": "repo-lines-v1:sha256:6d98acbcce3135ffe4a929f91d2e3bf5e3cf592a53435c9d38ed1f66f143fb48:eyJzZWxlY3RlZExpbmVDb3VudCI6MjIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjM3YTNlNDFmNjk0MWUxNDNhZGU0MzA0YjRkODczOTE1MzY1ZGEyMDNlNjdiMTllYzU1NTg1YThhMGQwN2YzYzIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjFiM2M0N2RhZDFhNzM4YmZhZjQ5NDQ1YTEzN2FlMzBjYWMzOWI0YzAzOTQxZjI5ZDQ5MDcwNDg3NDI0MWU3ZTQiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImJlNjllYmNhYjVjNGNhYzdmZGY4ZmE4YTEyOTFhZDA4YjA0NjAzYTQ2Yjk3NmY0YTk1N2ZlODVlMzVjYTgwMzUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjU4YmE0ZTY2MmEzMjBmODYzNDYzNGY5NTk4ZGU2ZGQ3MTNhZjUwODVhODBhZjc1NmQyZTJhM2QwZjM1MzliOGMifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_9392bfdea4314ee79d14fdca0164fd16",
+      "statement": "Row labels are rule-based: header repeats, subtotals by keyword or vertical SUM formula, totals by keyword unless a tax, items with amounts, group headers, continuations and notes.",
+      "evidence": [
+        {
+          "resource": "repo://billparse/rowclass.py#L57-L78",
+          "version": "repo-lines-v1:sha256:1c86f6ab665c407c547731d120508175ea102a198149418cf28e839e6a08a0db:eyJzZWxlY3RlZExpbmVDb3VudCI6MjIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImMxZjE2MTM5MmUzNTllMTNlNmIyY2Y2YzM3NmVkYjQ0MDFlZTEwZWRjMzg1YjgwZjc1YzYxNDM2ZTg5MGIzNmUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImM3OGI1YTE5NGEzZjkwZjQ1ZjA2M2Y5MDQ2MGE3MjgwZjUyNzQ3NzVlYmE3MmM3MjcyZGM3MzVlMTdkYWUwMjQiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImFiYjYyNTAzN2U3ZGQ1NDI0NmM1ZmEzNTkyYTc4ODBjZjM5Yzk0MDU4MmY2MWY5MzNlYzQ0ZjllMWRhYjc4OTgiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_1216208beec04faba3d7f90bb3458a0d",
+      "statement": "In extract_table, items become records with the carried group header, continuations merge into the previous label, subtotals and totals become stated totals, and the first total ends the table unless stop_at_total is false.",
+      "evidence": [
+        {
+          "resource": "repo://billparse/layout.py#L160-L192",
+          "version": "repo-lines-v1:sha256:955c77f59340f3517d88baac74fa73628dc8775aeccfcf2aa5152e3d2b42ac9d:eyJzZWxlY3RlZExpbmVDb3VudCI6MzMsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImM4NmFjMWFlYWFiNDhmMDNhMDhhMWZiYjdkMWI5MGM1MzE1OWJjNzMxMDczODc1ZmE1MjIxZDc2ZTgyODFlM2IiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImVhOGQxZjMwODRhOWRlZDA2ZDE1M2M5MGNhMTRlZGVlNzIyOTQ5Y2EwOWU4ZjQzMzBhNjc5MmJjNzhjODk0MjUiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImU0MGI0ZjFlNmUxOGNhZDhkMTVlM2RlNWIxMzIyNTMwODU1MTFiMGYxODBhY2JjZTdjOTkxMTYwMjQzZGFjMmMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjA2Y2RiYTRiMjIzZmVkYzg0MzM2NmMyMGI3MjIyOTYxNDA0OTliMjFiMDMzNjgyMGNmMTMxNTllMGI1MWEyN2EifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_f43bceb33dfa460cb9878ec5a7a6e04f",
+      "statement": "tree.py finds totals, subtotals and lines from the amounts rather than from words like Total, deterministically, with options from the spec's tree key.",
+      "evidence": [
+        {
+          "resource": "repo://billparse/tree.py#L1-L25",
+          "version": "repo-lines-v1:sha256:fe39577d2b4eb416f58e5e1603a5fb52d53460753a26d8ebef1eef41958568bd:eyJzZWxlY3RlZExpbmVDb3VudCI6MjUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjBhYTlhOWI5M2UzZjk3YmRjNzQwOTg4ZjNlMjZhNDNlZTliNTM3MjAwYmU3ZTA1Mzk3OGI0MDBhNzEyY2Q1ZTIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImMxY2RhNDIyNWUyNWU0YTc5ZjdkYjIwZDI1MWVkM2E3YTAyZTNjN2FiZmJjZDY5NTA3NjI1OGJjMTdjM2M0MTcifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_b403341b4bef42d5867db4aa6ca4bf1a",
+      "statement": "An amount is a number with exactly two decimals with optional currency, symbol, sign or brackets; a bare number between words is not an amount.",
+      "evidence": [
+        {
+          "resource": "repo://billparse/tree.py#L165-L177",
+          "version": "repo-lines-v1:sha256:80669b9876956cf8ecb0ccd11352f58e6ff0abf83ff1bdfa79b65584b9bad3a6:eyJzZWxlY3RlZExpbmVDb3VudCI6MTMsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjBlYTk2YmFmZjdhMjYzNzYzNzYwZTEzMThkZmM1ODRiYTc2ODNlM2MzNzRiZjBmMWIxNGY5MmJmMjg3ZmE5NjkiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjU0NTI2YWZkNzhlMmJiZGM0N2QwODZmNjliOTdhZjYwZTQ5MjAzZDNjNDlhMTAwMDNmNTQxNzEyODlmOTYxZTQiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjAwZDE0NGYwYjc5NjVhZmE3ODc5ZTQ2NWJmMjVjZDZhYWJiZTFkYjc3YWFmOTBhZjQyZGYxZjU0YmVlMGE3MjgiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjIwNjFmOGMxMTdkOTE2ZjE2N2NkOTQ4YjdiNTg3ZDZjNjE1Mjg1MTZmYWZhNzY3NjU2OTg4MWNkZTg4MWI2ZDUifQ"
+        },
+        {
+          "resource": "repo://billparse/tree.py#L38-L41",
+          "version": "repo-lines-v1:sha256:3e286310a1c5ad9d1f9c3e521ef72b87e221243527ec9ff9ea6244288072e1fd:eyJzZWxlY3RlZExpbmVDb3VudCI6NCwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiZDUxNTdhNzYxMjY1YWI1N2ExODNmY2UyMzM5YjRkZGM5ZDg2MzdiMzQ1NTkyNzA0MWZlZTQ0ZjkwZTQ1ODMyMyIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiY2ZhODc4MjA4Y2VmOWIyYWRiZDg2MjYzMmRkZWZhNTA0OGRjMmNmN2MwYjhlZTJiNWJlYzc3NTg2MGI0Y2U4OSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiYzE4YTk5ODg2NWEwZTQxZTIyYzZjNDViOTVjZmVhNjg1N2U5MTNkZDU0YTNiZDNmNjBkNmEwNzM1MTgyNjAwNCIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiOTA3MDllZjYwZmU1MzA0ODJlYjg2OTgxOGE0YjYyZmEzZDQyZjVhYjkzNTBjN2Q0ZTk1ODEwOTM1NWU4YTMyZiJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_da72c94a5b2343df94adb1caf3976ec9",
+      "statement": "Unknown tree options, wrong types and invalid regexes are rejected by check_options.",
+      "evidence": [
+        {
+          "resource": "repo://billparse/tree.py#L85-L106",
+          "version": "repo-lines-v1:sha256:04ed25cca440bae7f3b74abf184be3bc8bc443b4e236ecde6344d71952c137a4:eyJzZWxlY3RlZExpbmVDb3VudCI6MjIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImQ1YzkwZjllYWIzMTY5NDY1YzI5MTgyM2FiMjhjZTY3ZTA4MmViMzBiNjY3NGRjOWQ5YzY1ZmNmN2Y3NjdkNzkiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImQzMzQwMTQzYWViYjJjZjg3MTJiN2Y4ZmYyNmIwMGZjYzk1MDZjNjg2YzZmZGNmYTVmZWNkYWZhNTI5YzU3MGMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImU0MWUyN2JjYWQzYjZjMGMwZmFkNjE0Y2I5YTMzMjZiNDdlMDAwYjk2ZDU0YTVjZGU0ZTUzM2UwNjcxNTZiZDAifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_d1fa33ca32b64c95b3c8ae5e540dbce6",
+      "statement": "The rounding bound for n printed parts is 0.005 times (n + 1); a larger difference is not rounding.",
+      "evidence": [
+        {
+          "resource": "repo://billparse/tree.py#L190-L193",
+          "version": "repo-lines-v1:sha256:dfc93ab29c7dfbfa7e1613b06f29b76f6741481e48c54c2090bca3da52d9e572:eyJzZWxlY3RlZExpbmVDb3VudCI6NCwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiNzc5NDU0NmYwODA2ZjUxMDM3NGMxNDdhYTJjYWQ0YzkxMTc0ZTM5M2Y3YjFkOGU5ZDNmYWQ3OWM5YjM1OTY3MSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMDdlYmFjNmNhNDU2MDU3ZDQyZWE4ZDA5ZTgwM2NkMTBmYzRjMGI3NDU0ZjJlNDkxNTNlMmVhNTVkODJlYTU5NSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiYWE2NDAwZWI2NTk5MGE2MTA2YThmY2QwNzM1YTRjOTZjMWYxYzc4ZDhjZjMxOGZkYjRiMjUzMDJiNGYyODg4NiIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiYTE5ZjNjYzI2NGMzZjkwNjM0ODI0OGVlZjEzMWFiM2Y4OTE2YmY2YWNlYTFiY2UzNzU3MWJkNTNkY2RhNTgxNiJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_f231a7c7e7234788a0523cac4a2d0df4",
+      "statement": "The tree proof holds only when printed total minus lines minus rounding at each printed total is below half a cent, no total exceeds its bound, and the printed total has a source row.",
+      "evidence": [
+        {
+          "resource": "repo://billparse/tree.py#L1117-L1138",
+          "version": "repo-lines-v1:sha256:03c8373b09a24a49abe005b68e010bb67b7c192b22ed1f977a32fe1be6d2fc88:eyJzZWxlY3RlZExpbmVDb3VudCI6MjIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAyYTMyZmI1NDU4YjExYmUzNTdmZmRjYmY5MzhlZTJjM2JmMTZiNmZjOTI0ZTlhNGNiODhhYmU4NzZkMzc0NTciLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImMxYzc4ZjAwY2U4ZGQ0NWEzNDliOTA1YzY3YmU1YjU2NWU0NWFkZmQ3YmFiNTJiYWY5NjkxOWRkNzViMzM4MGUiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjI5NTgxNGU2NjExYzk4YzIxMDRhMTFlYjQ5ODAwZGM4MDM1ZmUxY2IyNWUzMzJhZWNjN2FhYTI2MzI3NjFiMDciLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjhiOGM3MTUxOWRmNGQ4NzFjMjRkZTI2NGQ0YjVhZTI3YjYxNmJmNTQ5MjQ3OGJmZGI4YzFlMDFiNDE0NjY1MTgifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_448af81b6a85437da89d4069aaf2b72e",
+      "statement": "The tree evidence reports failed subtotals, unexplained amounts, informational rows, converted currency rows and duplicate lines.",
+      "evidence": [
+        {
+          "resource": "repo://billparse/tree.py#L1083-L1114",
+          "version": "repo-lines-v1:sha256:05bd73ae1e8332ad02a35bd6127448237a4e5ff4c8d6961082984461b76efaf3:eyJzZWxlY3RlZExpbmVDb3VudCI6MzIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImEzN2ZjNGRlMzRmMGUzN2U1ODA1ZjIxYmViNzVkNThjODI0ZWE0YjRkOTMzMTBkOWE2ZmU5NDgzMTE4ZDE2MGIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImQzZDg0YjgxZGE4MjljNTQ5ODU4MDE1YmViMzgyYWE1ZmY5YWMyYjM2Nzc2MGY5NTQxMjQwNmNhN2EzYjkzNDEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImMzNzk0NDhjMWZhMmQyNDU1ODZjNjExZDk2MTM2YmJjMWMyNmVkOWRlMTQwNDMzMGQ5N2Q3ZDUzMDEwMzQ4ZTMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImMzY2Y4ODdkNTQxYjU0ZTIyNTNlZjAyMzlhMWVkZWJmOWFkNGMyMGFmYWZjMjA2ZjhkNDE4MjNkYzQyOGU5MDkifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_25dbc729f59942b0bd5c22d0e801c200",
+      "statement": "Default charge types from context: Tax when a tax is named (not pre-tax), Credit when the amount is negative and a credit, refund or discount is named, Purchase when a commitment fee is named; spec charge_types override the defaults.",
+      "evidence": [
+        {
+          "resource": "repo://billparse/context.py#L101-L123",
+          "version": "repo-lines-v1:sha256:979e13e55879285f43f94fe4d42cd46a215762fa6139bf40b7f16dfa91441fa8:eyJzZWxlY3RlZExpbmVDb3VudCI6MjMsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjE5MGUwZmJhYzM3ZjY2ZTViNjdjNGQ4ZjI5NTZlNjUxMGVjZmExOTI4MzIzMzIyMTQ0NjIxOTlmMmE3ZDQ2OTYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQyMDc4MzkyZmZlOTM1MTNhNGNlYzA2MjQ2ODZhOTcyM2Y4MzgxYjM4YTNjNjBmYWQ0NmYzYjEwYTc2NjVlN2UiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjRmYjEyOWM1MzM0OTVlNmZhMWRiM2FhZmY1MmZhNjViMzU2MzA0YWI0ODdjMWI3NGVlNTNkMzZmNjI5NDE1ZjgiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjgwODE1Y2U1MmI4NTNjNDE5MzkyYzcyOWRmZWU3Mzg1YjRlN2Y4ZmZjYWRkZDdmMjg4MmFiZDgwMGQ3OGNjM2IifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_1d817cb6dc264c2b968f28f07eec2e7f",
+      "statement": "A region label must be a whole known region name or code; the line keeps the region code.",
+      "evidence": [
+        {
+          "resource": "repo://billparse/context.py#L93-L99",
+          "version": "repo-lines-v1:sha256:36caf3bef202280d5299559951b59323b16ba0ec2f4b1aa2629d8c2352dd02c1:eyJzZWxlY3RlZExpbmVDb3VudCI6NywiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiZWFiYzI2MjE2NDU3ZDZkZmUwZWY3NGU1NzgyNDVhY2M3YTg5NmZlNmQ2YzEwZTg4NDE0MDZmNjdiZmU2OTE5MSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMGU2MDVlOTAzYjAzZjdlZTlkNmYzOGRlNmYwYjViYjlhZjU3NzFhZTlhMWJlNmUwN2JjZDFiZjkyNDEwZGViMyIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiNjdkZjAzZTNhNTMzNjRjZmQ2OGY1MzRkMGI0YWY0OGU4ZDIzNjQzMGNlOWJmNjMyMzBiN2UyNDgxN2EzYjIyYyIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiNWJkNmVmMzQ5NTdhZDI4NTA2MjdhNDU5ZmRhZjc3ZmU1ODVlY2M1NWM3YzFmZGYwMDlhM2U2Nzc4OWY1MDUxNCJ9"
+        },
+        {
+          "resource": "repo://svcres/regions.py#L1-L8",
+          "version": "repo-lines-v1:sha256:ccfdf1173ac6d8948e1070b0208e1ab346d8f4582a3fe3b218ab8b3fb65d0038:eyJzZWxlY3RlZExpbmVDb3VudCI6OCwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiNzVhZTQ2YmE4YmU2ZGQ1NzU1NGQwNjBiYTg2MDgzZDFhNTYxM2YyMDkwYWQwM2ZhODU2YzIwMzJkZTA4YzY1OSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMDFiYTQ3MTljODBiNmZlOTExYjA5MWE3YzA1MTI0YjY0ZWVlY2U5NjRlMDljMDU4ZWY4Zjk4MDVkYWNhNTQ2YiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjAsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiZTNiMGM0NDI5OGZjMWMxNDlhZmJmNGM4OTk2ZmI5MjQyN2FlNDFlNDY0OWI5MzRjYTQ5NTk5MWI3ODUyYjg1NSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiMGE2ZGJiMDllMjQ4NDFmNDdhNDZiMzlmMzc5MWYxNGFjMjViZTBmZGY4M2E5YzBmZmMzMjIxYjQ5YTg1OTgwOSJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_4ce60fd291164e53af5d7ee02539d3a1",
+      "statement": "The tree spec source reads the tree, builds rows with context.lines_frame, lets spec columns override fields, and adds the reconciled printed total as a tree_total stated total.",
+      "evidence": [
+        {
+          "resource": "repo://billparse/spec.py#L170-L196",
+          "version": "repo-lines-v1:sha256:7b64415e172f819504127f01a30172a3b2509c98f8565bd893af21f0ae909fea:eyJzZWxlY3RlZExpbmVDb3VudCI6MjcsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijg4MzJkNzUzNjVkNGI2MTIyMTZjMTJiODU5M2E0ZTA4YzU4ZmRiZTYzM2M3NGJjZWYxNjgyNjVlNGRkODM0NWIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjEwZjgwNjJmOWM0NzVkMDVkOTNhNTIyYjc1ZDI3ZjkwZWM3MDRhZjkxYmU5YTBhOTUwZjBhMGFiODdhMzVhODYiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6Ijc1YjJlM2QzNzI0ZjliMTFhZWNhZjFlZDM3YjIzMDZlNTIwODI3NWRlMTcyNjIwMjk2M2FlY2Q5M2VmZmY3ZjkiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6Ijc1OTg4YTc2OWVkN2ZkNDMzNmY5ZDc1ZGMxMTcxZDNkYTJjMTk4ZTM1YTE3NDU1ZDAyNGQ2NGVlOTc4NDQwYmYifQ"
+        }
+      ]
+    }
+  ],
+  "verification": {
+    "by": "openwiki/0.7.2",
+    "at": "2026-10-25T20:19:27.415Z"
+  }
+}

@@ -54,6 +54,150 @@ def _cur_row(d, code, name, ut, unit, rate, q, typ, cost=None):
             "pricing_public_on_demand_cost": round(cost if cost is not None else q * rate, 8)}
 
 
+CUR_RI = "arn:aws:ec2:us-east-1:111122223333:reserved-instances/1d3fbc13-f181-4c40-9dd6-12b345678de9"
+CUR_SP = "arn:aws:savingsplans::111122223333:savingsplan/7a2c1b9e-0d55-4f0e-9c1a-3b5e2f8d1c44"
+
+
+def _cur_commitment_rows() -> list[dict]:
+    """Three days of one account in us-east-1: on-demand, Spot, Reserved Instance and Savings Plan usage, the
+    negation of the covered usage, the commitment fees, a tax and a credit."""
+    ec2, rds = ("AmazonEC2", "Amazon Elastic Compute Cloud"), ("AmazonRDS", "Amazon Relational Database Service")
+    rows = []
+    for d in DAYS[:3]:
+        rows.append(_cur_row(d, *ec2, "USE1-BoxUsage:m5.xlarge", "Hrs", 0.192, 24, "Usage"))
+        rows.append(_cur_row(d, *ec2, "USE1-SpotUsage:m5.xlarge", "Hrs", 0.06, 24, "Usage"))
+        ri = _cur_row(d, *rds, "USE1-InstanceUsage:db.r6g.large", "Hrs", 0.0, 24, "DiscountedUsage")
+        ri.update(pricing_public_on_demand_cost=round(24 * 0.25, 8), reservation_reservation_a_r_n=CUR_RI,
+                  reservation_effective_cost=round(24 * 0.15, 8))
+        rows.append(ri)
+        sp = _cur_row(d, *ec2, "USE1-BoxUsage:c5.large", "Hrs", 0.085, 24, "SavingsPlanCoveredUsage")
+        sp.update(savings_plan_savings_plan_a_r_n=CUR_SP, savings_plan_savings_plan_effective_cost=round(24 * 0.06, 8))
+        rows.append(sp)
+        neg = _cur_row(d, *ec2, "USE1-BoxUsage:c5.large", "Hrs", 0.085, 24, "SavingsPlanNegation",
+                       cost=-round(24 * 0.085, 8))
+        neg.update(savings_plan_savings_plan_a_r_n=CUR_SP, pricing_public_on_demand_cost=None)
+        rows.append(neg)
+    last = DAYS[2]
+    fee = _cur_row(DAYS[0], "ComputeSavingsPlans", "Savings Plans for AWS Compute usage", "ComputeSP:1yrNoUpfront",
+                   "", 0, 0, "SavingsPlanRecurringFee", cost=round(3 * 24 * 0.06, 8))
+    fee.update(savings_plan_savings_plan_a_r_n=CUR_SP, pricing_public_on_demand_cost=None)
+    rifee = _cur_row(DAYS[0], *rds, "USE1-HeavyUsage:db.r6g.large", "Hrs", 0, 0, "RIFee", cost=round(3 * 24 * 0.15, 8))
+    rifee.update(reservation_reservation_a_r_n=CUR_RI, pricing_public_on_demand_cost=None)
+    rows += [fee, rifee,
+             _cur_row(last, *ec2, "Tax", "", 0, 0, "Tax", cost=2.50),
+             _cur_row(last, *ec2, "Credit", "", 0, 0, "Credit", cost=-1.00)]
+    return rows
+
+
+def _write_cur(rows: list[dict], name: str) -> float:
+    buf = io.StringIO()
+    pd.DataFrame(rows).to_csv(buf, index=False)
+    (OUT / name).write_bytes(gzip.compress(buf.getvalue().encode()))
+    return round(sum(r["line_item_unblended_cost"] for r in rows), 2)
+
+
+def aws_cur2_commitments() -> float:
+    """CUR 2.0 with commitments and the amortized (effective cost) columns. Returns the billed total."""
+    return _write_cur(_cur_commitment_rows(), "aws_cur2_commitments.csv.gz")
+
+
+def aws_cur2_no_amortized() -> float:
+    """The same rows without the reservation and Savings Plan effective-cost columns."""
+    rows = [{k: v for k, v in r.items() if k not in ("reservation_effective_cost",
+                                                     "savings_plan_savings_plan_effective_cost")}
+            for r in _cur_commitment_rows()]
+    return _write_cur(rows, "aws_cur2_no_amortized.csv.gz")
+
+
+def _azure_rows(amortized: bool) -> list[dict]:
+    """Azure cost details (EA) in one export style: on-demand, Spot and reservation-covered VM usage, and the
+    reservation's purchase (actual) or its unused part (both styles; it costs 0 in the actual export)."""
+    rid = "11111111-2222-3333-4444-555555555555"
+    rows = []
+
+    def row(d, model, charge, meter, q, payg, unit, eff, **extra):
+        return {"SubscriptionId": "aaaaaaaa-1111-2222-3333-444444444444", "SubscriptionName": "Prod",
+                "Date": d.strftime("%m/%d/%Y"), "MeterCategory": "Virtual Machines", "MeterName": meter,
+                "ProductId": "DZH318Z0BQ4L", "Quantity": q, "PayGPrice": payg, "UnitPrice": unit,
+                "EffectivePrice": eff, "CostInBillingCurrency": round(q * eff, 6), "UnitOfMeasure": "1 Hour",
+                "ChargeType": charge, "PricingModel": model, "ResourceLocation": "eastus",
+                "BillingCurrencyCode": "USD", **extra}
+    for d in DAYS[:3]:
+        rows.append(row(d, "OnDemand", "Usage", "D4s v5", 24, 0.20, 0.18, 0.18))
+        rows.append(row(d, "Spot", "Usage", "D4s v5 Spot", 24, 0.20, 0.05, 0.05))
+        rows.append(row(d, "Reservation", "Usage", "D8s v5", 24, 0.40, 0.36, 0.22 if amortized else 0.0,
+                        ReservationId=rid))
+    rows.append(row(DAYS[2], "Reservation", "UnusedReservation", "D8s v5", 2, 0.40, 0.36, 0.22 if amortized else 0.0,
+                    ReservationId=rid))
+    if not amortized:
+        rows.append(row(DAYS[0], "Reservation", "Purchase", "Reserved VM Instance, D8s v5, 1 Year", 1, 160.6, 160.6, 160.6,
+                        ReservationId=rid))
+    return rows
+
+
+def azure_amortized() -> float:
+    rows = _azure_rows(amortized=True)
+    pd.DataFrame(rows).to_csv(OUT / "azure_amortized.csv", index=False)
+    return round(sum(r["CostInBillingCurrency"] for r in rows), 2)
+
+
+def azure_actual() -> float:
+    rows = _azure_rows(amortized=False)
+    pd.DataFrame(rows).to_csv(OUT / "azure_actual.csv", index=False)
+    return round(sum(r["CostInBillingCurrency"] for r in rows), 2)
+
+
+def focus_commitments() -> float:
+    """FOCUS with every cost type and the commitment discount columns: on-demand, Savings Plan, Reserved Instance,
+    unused commitment, Spot, a commitment purchase and a tax."""
+    rows = []
+
+    def row(d, cat, pricing, billed, listed, contracted, effective, ctype=None, status=None, svc="Amazon EC2"):
+        return {"BilledCost": billed, "ListCost": listed, "ContractedCost": contracted, "EffectiveCost": effective,
+                "BillingCurrency": "USD", "ChargePeriodStart": f"{d}T00:00:00Z",
+                "ChargePeriodEnd": f"{d + timedelta(days=1)}T00:00:00Z", "ChargeCategory": cat,
+                "PricingCategory": pricing, "CommitmentDiscountId": f"arn:{ctype}" if ctype else None,
+                "CommitmentDiscountType": ctype, "CommitmentDiscountStatus": status,
+                "ProviderName": "AWS", "ServiceName": svc, "SubAccountId": "111122223333", "RegionId": "us-east-1",
+                "ConsumedQuantity": 24.0, "ConsumedUnit": "Hours"}
+    for d in DAYS[:3]:
+        rows.append(row(d, "Usage", "Standard", 4.32, 4.80, 4.32, 4.32))
+        rows.append(row(d, "Usage", "Committed", 0.0, 2.04, 1.94, 1.44, "Savings Plan", "Used"))
+        rows.append(row(d, "Usage", "Committed", 0.0, 6.00, 5.70, 3.60, "Reserved Instance", "Used", "Amazon RDS"))
+        rows.append(row(d, "Usage", "Dynamic", 1.44, 4.61, 1.44, 1.44))
+    rows.append(row(DAYS[2], "Usage", "Committed", 0.0, 0.0, 0.0, 0.30, "Savings Plan", "Unused"))
+    rows.append(row(DAYS[0], "Purchase", None, 4.32, 4.32, 4.32, 0.0, "Savings Plan"))
+    rows.append(row(DAYS[2], "Tax", None, 1.25, 1.25, 1.25, 1.25, svc="Tax"))
+    pd.DataFrame(rows).to_parquet(OUT / "focus_commitments.parquet", index=False)
+    return round(sum(r["BilledCost"] for r in rows), 2)
+
+
+def gcp_commitments() -> float:
+    """GCP billing export with a committed use discount credit on some usage, and cost_at_list."""
+    recs = []
+    for d in DAYS[:3]:
+        for sku, cost, credits in [
+                ("N2 Instance Core running in Americas", 50.0,
+                 [{"name": "Committed use discount: N2 Core", "amount": -20.0, "type": "COMMITTED_USAGE_DISCOUNT"}]),
+                ("Spot Preemptible N2 Instance Core running in Americas", 8.0, []),
+                ("E2 Instance Core running in Americas", 12.0,
+                 [{"name": "Sustained use discount", "amount": -2.4, "type": "SUSTAINED_USAGE_DISCOUNT"}])]:
+            recs.append({"billing_account_id": "01ABCD-234567-89EFGH",
+                         "service": {"id": "6F81-5844-456A", "description": "Compute Engine"},
+                         "sku": {"id": "AAAA-BBBB", "description": sku},
+                         "usage_start_time": f"{d}T00:00:00Z", "usage_end_time": f"{d}T23:59:59Z",
+                         "project": {"id": "shop-prod", "name": "shop-prod"}, "location": {"region": "us-east1"},
+                         "cost": cost, "cost_at_list": round(cost * 1.1, 2), "currency": "USD",
+                         "usage": {"amount_in_pricing_units": 24, "pricing_unit": "hour"},
+                         "credits": credits, "cost_type": "regular"})
+    recs.append({"billing_account_id": "01ABCD-234567-89EFGH", "service": {"id": "", "description": "Tax"},
+                 "sku": {"id": "", "description": "Tax"}, "usage_start_time": f"{DAYS[2]}T00:00:00Z",
+                 "usage_end_time": f"{DAYS[2]}T23:59:59Z", "project": {"id": "shop-prod", "name": "shop-prod"},
+                 "location": {"region": ""}, "cost": 3.0, "currency": "USD", "credits": [], "cost_type": "tax"})
+    (OUT / "gcp_commitments.json").write_text(json.dumps(recs))
+    return round(sum(r["cost"] for r in recs), 2)
+
+
 def azure_ea() -> None:
     meters = [("Virtual Machines", "D4s v5", "DZH318Z0BQ4L", "1 Hour", 0.192),
               ("Storage", "P10 Disks", "DZH318Z0BQ8K", "1/Month", 19.71 / 30),
@@ -354,5 +498,8 @@ if __name__ == "__main__":
                custom_workbook, pivot_workbook, reseller_pdf, list_pdf, custom_json):
         fn()
         print("ok", fn.__name__)
+    for fn in (aws_cur2_commitments, aws_cur2_no_amortized, azure_amortized, azure_actual, focus_commitments,
+               gcp_commitments):
+        print("ok", fn.__name__, "total", fn())
     german_xlsx(OUT / "german_invoice.xlsx")
     print("ok german_xlsx")

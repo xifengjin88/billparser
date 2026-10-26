@@ -25,7 +25,10 @@
   "kind": "cost_lines",
   "cost_basis": "billed",
   "format": "Azure portal cost analysis download (grouped by service)",
-  "notes": "Unverified: columns depend on the view the user chose. Confirm with real samples."
+  "notes": "Unverified: columns depend on the view the user chose. Confirm with real samples.",
+  "post": [
+   "azure_amortization"
+  ]
  },
  "columns": {
   "service_raw": {
@@ -61,6 +64,36 @@
   "currency": {
    "from": [
     "Currency"
+   ]
+  },
+  "charge_type": {
+   "from": [
+    "ChargeType"
+   ]
+  },
+  "line_type_raw": {
+   "from": [
+    "ChargeType"
+   ],
+   "t": [
+    "strip"
+   ]
+  },
+  "pricing_model": {
+   "from": [
+    "PricingModel"
+   ],
+   "t": [
+    "strip"
+   ]
+  },
+  "coverage": {
+   "from": [
+    "PricingModel"
+   ],
+   "t": [
+    "strip",
+    "coverage"
    ]
   }
  }

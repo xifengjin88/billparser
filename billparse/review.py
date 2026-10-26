@@ -33,7 +33,7 @@ CHECKLIST = [
 NUMBER = re.compile(r"[-(]?[$€£¥]?\s?\d[\d,.' ]*\)?")
 CHARGE_TYPE_OF_KIND = {"usage": "Usage", "commitment_fee": "Purchase", "discount_or_credit": "Credit", "tax": "Tax",
                        "support_fee": "Support", "marketplace_usage": "Usage", "marketplace_fee": "Purchase",
-                       "other": "Fee"}
+                       "commitment_negation": "Negation", "other": "Fee"}
 
 
 def charge_rows(doc: Document, charges=None) -> list[dict]:
@@ -157,6 +157,9 @@ def rows_of(doc: Document) -> pd.DataFrame:
             "account_id": str(c.context.account_id.value) if c.context.account_id else None,
             "charge_type": CHARGE_TYPE_OF_KIND.get(str(c.kind.value), "Usage"),
             "currency": str(c.currency.value) if c.currency else None,
+            **{f: float(getattr(c, f).value) if getattr(c, f) else None
+               for f in ("list_cost", "contracted_cost", "effective_cost")},
+            "coverage": str(c.coverage.value) if c.coverage else None,
             "_src": c.cite.label(),
         })
     return pd.DataFrame(out)

@@ -1,0 +1,160 @@
+{
+  "schemaVersion": 1,
+  "pageVersion": "sha256:ad1d80db2044e487c27c0a87aac2d7cc6127e457f1d2ad44f9ce510a15bff158",
+  "claims": [
+    {
+      "id": "claim_12860faaef8e4c73992ef60d947a167b",
+      "statement": "The service catalog is four dicts (services, codes, names, products) saved as msgpack and loaded once per process.",
+      "evidence": [
+        {
+          "resource": "repo://billparse/analyze.py#L33-L47",
+          "version": "repo-lines-v1:sha256:83c9a6ea2d09cf79809c1f51be1ad08f1ab3eb42e3a7a3ef42dafbd5e8e018e4:eyJzZWxlY3RlZExpbmVDb3VudCI6MTUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImQxNGQ5YWM2ZGZjYzY0NmRjMDZjODhmNTY4YzVmZWY2YjE5YTE1NGNiMjRiYWNiZDBmMjk5M2EyYzIyOTA4MmIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjYzNTRhMDJkOTgzODYyNjhmZTczN2RjY2RjYTdiOTdmN2ExMmZiNTA5YzcxNjQzNzhhZmM5ZDNhNWE3MzkzODciLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjlhYWE1NDNlZTYxYThmZTJhYjIzMjMxYjQzZTM4NjU0NDU0ZTIxZDZlODAxYjZlNWZjNGFjZjUxMTQ2Y2Q1MDEiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjY1NjhjNTkxMzVmNmIwYWIwZWQ0MzQ2NGJjNjJkZGM2OWNlZWVhMjViNzYxYmYzYTQxZDBlZmExNGUzYTJhZDgifQ"
+        },
+        {
+          "resource": "repo://svcres/catalog.py#L1-L13",
+          "version": "repo-lines-v1:sha256:abaa042f1258b9da022a1542730d48a5eddea356de877cfa9808e6e61ea5437c:eyJzZWxlY3RlZExpbmVDb3VudCI6MTMsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjFlYTM5ZWM2ZmY1MmExNjQ4NjBmODViM2QzYWVlNGEzNTJkMDA1NTVhOTE4YmM3YjIyYjMyZjE2MTBmOTMxN2MiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImEzMDNlY2RkNGE0ZDEwZjE5YzczZmQ0MmZkMTI0MzdmZDMzNTRhODI2ODE2MDVkYTUyNTVhOTdhMzkwNjhkYmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjU1YjZlODcwNmI0MzA0N2YyYTZkYjY3ZjEzMjYzODU5NTYwNGU2N2YzNjk2Njg3NmNlMDE1OGYwMDUzZTZiZDEifQ"
+        },
+        {
+          "resource": "repo://svcres/catalog.py#L60-L70",
+          "version": "repo-lines-v1:sha256:27d53e14f88e08b3ab10ec10b386c0035f6f9a2582bba4505c119aa6fc5dadbe:eyJzZWxlY3RlZExpbmVDb3VudCI6MTEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjliM2JhMmQ0YTY3MWZjMjg5NmFmM2ExMDRjYmIwMWU1Zjc3OTk2ZjVmYzRjMTI3MTJiMGNjNGNmNTA4YTljYTkiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjYzMjk3NjNmYWM4MjQyZmI5MzEyMGYyNjllYWEzM2JmZGExODQ5NzI4YmNmN2VmNDk3NzcyOWU3YTBjMzRhNjMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjNkNTc4YTgxZTgyZGQwZTk0YmQ4MTQ2Zjk5OWE3NDFhNDg4MDcwY2UzM2E0NGRmMjk2YWNiZmYxMjE1ZmQzN2QifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_635a5a3a2e4a4095b6f85af3280532ce",
+      "statement": "catalog.build reads Azure products, AWS services and GCP services from the raw directory, adds seed aliases and categories, and adds one Marketplace service per cloud; missing raw files are skipped.",
+      "evidence": [
+        {
+          "resource": "repo://svcres/catalog.py#L78-L95",
+          "version": "repo-lines-v1:sha256:874fc393d9eedecd52d3f037c9107133d3ff0c86e1d8c54016e794f3ed7188f5:eyJzZWxlY3RlZExpbmVDb3VudCI6MTgsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImYwMTU5NTAzODE2MGRlMmNiOTI2YTMyNGMzM2YxZjAzMTRiZjQ4NTI2Yzg4YzBiYTQ2NzhiMDg2ZDYxOWRmY2UiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjFkMWZhOWU3MDZjMGZkZmM2YjhiNTk2ZmY0ZWY2ZDc2OWQxZGQyYjU4NzI2MjYyZGM1MGJjOTEzYzQwMzk0NjIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImZlMDI3M2RjZWY1NzgwNDE4OGNiM2EzMzAxNTA2MjUzMDlhNmJhNzM2MWYzZTk0ZjNjMjI0ZjM3NGU2NzFmZDIiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImE5YTM3OTBkZDJkZDhiYTJiZjMyZWZhYzQ1ZjEyZDViZjQzMDE2MTAyMTc5YmUyNTAxMWI3ZjVkMTA2ZmIyMDQifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_bfdd8197475b4a15a34c52b1781f7446",
+      "statement": "If no catalog file exists, get_resolver builds one from data/raw on first use.",
+      "evidence": [
+        {
+          "resource": "repo://billparse/analyze.py#L42-L47",
+          "version": "repo-lines-v1:sha256:f08a2178759678b979d7a01cf5ea60e819939bfd6853263a511184755a95bcda:eyJzZWxlY3RlZExpbmVDb3VudCI6NiwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiNjk0NDRmMDgxZTQ1NDhiZTQ2OWM4OGI2NWEzYjRmMjljZmE5NGE5NTZmMDhkNTBiZWRkNmRiZGQxYWIzOWQzZSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNjM1NGEwMmQ5ODM4NjI2OGZlNzM3ZGNjZGNhN2I5N2Y3YTEyZmI1MDljNzE2NDM3OGFmYzlkM2E1YTczOTM4NyIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiNTkxZDQwY2YxMjI2YWUyMDFiNmM1MjQ3N2ZhNzg5MmU5NTI2NjI0MjIzOWExZjE2NzVlYjNhZjgyOTkxNmRjYiIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiNjU2OGM1OTEzNWY2YjBhYjBlZDQzNDY0YmM2MmRkYzY5Y2VlZWEyNWI3NjFiZjNhNDFkMGVmYTE0ZTNhMmFkOCJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_d8584b986b09454297527ec40a4d32e8",
+      "statement": "refresh_catalog.sh builds a new catalog and refuses it when its code count drops below 90% of the old one.",
+      "evidence": [
+        {
+          "resource": "repo://scripts/refresh_catalog.sh",
+          "version": "repo-file-v1:sha256:9c2b5322ff238860f7844970e48dda798b5e729fb37fb612e82decda01c37f02"
+        }
+      ]
+    },
+    {
+      "id": "claim_1e01470d651e4ca984001e46872f26e3",
+      "statement": "The resolver cascade is cache, code, synonym, exact then loose name, synonym prefix, name prefix, Azure abbreviation, fuzzy match, and an optional fallback limited to fuzzy candidates.",
+      "evidence": [
+        {
+          "resource": "repo://svcres/resolver.py#L104-L187",
+          "version": "repo-lines-v1:sha256:4fd917153033dbe49779d71175b734d74ccb0120e614e83cc438a166ba08ed94:eyJzZWxlY3RlZExpbmVDb3VudCI6ODQsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjcxZDJiNWIyYzQyZTdiZDYzNzQwODBhMmVlZDJlMjdiMDY2MDVmMDBmOTQ3ZGFiMDEyYjE3YTM3NWE3YzM0MDUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjRjZjI1ZDY5MWMwZGJhNDRjOTFiZmQyZmFkMWI5ODhmOWFmMTQ1NWQ5MDAwMWVmMzg3N2EyMDI1NThhMWEyMWIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImY2ZjEzMDViNzlhNjY5ZWY0ZmUyYzE3NGFiYTc3MzY1MWQ1ODdmOTFlOWI2OTRlN2JkMWVjMGM5MDFlYWU3NWEiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImQyNmI2ZGUwNTEyZWJmOWQ1ZTU2OWNlODQyOWM4ZGJmZDFmMzYyM2U5OTY3MWZiMGM2NjBmNTAwODA5MTJkMmQifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_50e8a6856e024c41b667fc99dda5088f",
+      "statement": "A name that matches services of more than one provider is returned as ambiguous with candidates instead of a guess.",
+      "evidence": [
+        {
+          "resource": "repo://svcres/resolver.py#L123-L133",
+          "version": "repo-lines-v1:sha256:c86789995cb1542206ac4aae6a3606afe36fc01860b59a1c33d02030783912e1:eyJzZWxlY3RlZExpbmVDb3VudCI6MTEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjdmMGMzOThiMDdiMzllNjI3NGY4ZDZiMDIwZGM4ZTM5ZDUzMTMwOWEwMzY2ZWZhOGI0MGJhYzJhZjE1YjVhMTMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijc5NjNhMjY4OGEzMDEzMTE4N2MzMzY2NTEwMTRmMjZjMTI5ZDM1MTk2N2Q1OTU2M2QwYTBlMmIyZmQzYmE2ZGYiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjU4ZDNjNjA5ZWE4ZmU5OGE5YTRiODNmY2ViNDhkYjY1OWFjYWMxZjc5MGNjM2NlNjkxYjZjZjZjYmIwOTJjY2MiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImVjYjZlZWI5ZTg1MGQwYTcyZTBmMmNkMDZkZGIyY2VkZmEyNWUyZGRlNGYyZjA0M2ViMzcyZWY5NzIxNTI5MjMifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_899f7d7cee534678ad0296d82872f27e",
+      "statement": "Fuzzy matches are accepted at a WRatio score of 92 or more, and candidates are kept from 70.",
+      "evidence": [
+        {
+          "resource": "repo://svcres/resolver.py#L177-L180",
+          "version": "repo-lines-v1:sha256:9420375767da98cd3ba44cb7a8a4ba4f54d20c467775e3c6ac50f41066324411:eyJzZWxlY3RlZExpbmVDb3VudCI6NCwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiYmM5M2M5ODQ1ZmVjOTJiMDdkMzU5ZWYyOTliYzlkZjY0YmQ2YWQyZGNmZGMyNjZhYmY2YTZkMjIxOTMyYTgwNyIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNjk3MmVlNTY5YzM2ZjIwMDJkZmYxNTk0NDQ4MThhZmQ5ZDAzOWIxYjc5MDhiM2FiMjZjMDRlN2QxZTBiYTdlMCIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiOGRhNTE0OTk0ODMxMTA0MjBhMzJlZDU0YmIyMjc1YWZhOTJkMzQ0NjM1ZGZhYzEwZGE2Zjk3ZmZhYjA3OGRmNCIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiZGFiYjEzM2JkODc0ZjNkODI3MmJlYTMyODk3OTZkM2ZkNmFjNzU4ZTM4ZWJjMGQxOWJjZDIzYmVkYmFmM2YyNSJ9"
+        },
+        {
+          "resource": "repo://svcres/resolver.py#L48-L50",
+          "version": "repo-lines-v1:sha256:9e54c8f4f78c72ce9fe109cbc0649ffab9ceffb826f9c01156c602b927832d85:eyJzZWxlY3RlZExpbmVDb3VudCI6MywiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiMGI0OWRjYjg1MmZkMjA0NjE5YTRkNzc1MDQ3ZjUxYWNhZmYwYzZlZTYwNWQ1MmJmMDIyNjllMGZkMmNmZTA3NiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiYzQwMDU4MzU5ZjQ3NzQ5NmY3N2JhM2ZjNTlkZTQyMDg4YTA2ZTUzNWM5NjEwMTM0NDY4NzU1NmNjNjNkYTkyZiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiMTc4Y2JjZDhhMjRhN2U3MjY0ZDkxNDg0MzViNDc1NTExMzMzZWIxMzIzMTIyMmZjYzY1YzE1ZjA2NzA5ZDNlNyIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiYzhmM2M2MmNmNWFmOTljNWFlYzdlNTk1YmQyYzhkNWJlZWE4YWMxMzdmNGNiYzExMzM5MTZkZWUzYWNlN2I0MSJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_1c0f1765654241e280d2912cd9b90f45",
+      "statement": "The resolution cache is reset when the catalog's build time changes.",
+      "evidence": [
+        {
+          "resource": "repo://svcres/resolver.py#L58-L62",
+          "version": "repo-lines-v1:sha256:4fe87e15717ce97da3618b76ea4d0ac1cb5bed1853b4a609884e0a6c58533ebd:eyJzZWxlY3RlZExpbmVDb3VudCI6NSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiZTIwM2FhMWJjODM5MmE0OWVkMjNkMjhiZjA2NjY2NmZiNTNhY2YwYmI3MTQzZGM3ODUwOTA1MjQ2ZDU0ZTQ5MCIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMzFkZmEwZGU3YWIzMTcyNDUzNzczZGE4Y2EwMWFjZTZhM2E3NmY4NzIzMWU5YTcxYzUxNGQ4M2U2ZTZmZTYwNiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiN2NiM2Q4OGViNzE4NGJkYzMxZjE2ZjY0MGYxOTVlZjI5MGE5NWYzY2NiZDhlZjY4NjViNzFmZTBjNDA2OTQ1NyIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiYmI4Y2FmYTE3MTJlMjk3NTg2ZmU4MzExZDlhZTFkM2Q4ODRhMWY1Y2ZiMzBjMTM1NjNlMWM3ZDgwOTY2ZjVjNCJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_eb4ea421888c4a8d95287aeeec7b4d40",
+      "statement": "resolve_services tries product_code, service_raw and description in turn, guards the shared resolver with RESOLVER_LOCK, and returns the resolved share of usage cost.",
+      "evidence": [
+        {
+          "resource": "repo://billparse/analyze.py#L50-L102",
+          "version": "repo-lines-v1:sha256:02c116a5edcc50ec476df629d053ea88fcb2b6d2f39ed360a35f97ce9eec7ca8:eyJzZWxlY3RlZExpbmVDb3VudCI6NTMsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImVlZmI2NTY3OGIxZjg4YzUyMjJjNDc2YWE0MzI5NWU5Y2JhNDY0Nzc5MDE0N2FjYmRiZjQyMTlmZTUwZGQ5ZGIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImJkMDcyMWM4MTUxNmExNjM3MTMzZGU5ZTU3MDk2ZTlmOWE4YjRmZDIwZTBkZjkxNDc4MjYzM2Q0ZjI3ZWJhMWIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjkzNDU5ZDRkMDYxZDFmNTJlNzgxNTA3NDU3Nzc2N2I5NDk0YmNlNzhmYTk2Mjk0NTU2NGM4ZjQ0YzExODUwZGMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjY3NjFkZDJkOGQ2YzVkZTc2NjNhMTdlZmYzZTY5ZTk4NjBhZGMwN2FlMjg3ODUxMWQ3NDc1YzM3ZTA1YzgyNmUifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_70e4954ce47e43e1b0abe90a2351e91d",
+      "statement": "Support-category lines become Support charges, program fees become Fee, Marketplace-sold lines get the Marketplace category, and unresolved commitment purchases get an area from their name.",
+      "evidence": [
+        {
+          "resource": "repo://billparse/analyze.py#L105-L129",
+          "version": "repo-lines-v1:sha256:df7dd790afbd953516247256a19fd33dbc7003f79ab0607e4d8d9bc89aec2d36:eyJzZWxlY3RlZExpbmVDb3VudCI6MjUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjVmN2E2YzBiODBjZTBkY2U2NWFmMzdmZTg1NjcyMGM4ZjYxNGEwOGNmYWFjM2UxMmQ1NDU3YjNjMWFkMzQ4YmYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjZkNTQ4MTllMjA0MjY0ZmI5YjY1Yzk0NWE4NjJiYWFlZTY3MWJhYzMwYjdkMDM1NmQ2ZjQyNjZkYzQxYzkxNzIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjNiYTIzNTBmY2M3YzczZjVhMGZiOGJjOTY3MzFiYmU3ZDQ1NzM5NTczOTE5YzM4MTA2ODA5ODc2ZTQyZGRkNjYiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjEzZGZlMGYwODY0MzE2ZmIxYWZjZmRiNzJjOGYwZDQ2OGVkN2IzMjBhMWMzMGMwNmI0YTk5ZTk2NzViNzkyMzQifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_4bffe70612194df69c79960a5f196745",
+      "statement": "The analysis separates usage spend from non-usage charge types (Tax, Credit, Refund, Purchase, Fee, Support, Adjustment) and reports each service's and area's money by kind.",
+      "evidence": [
+        {
+          "resource": "repo://billparse/analyze.py#L197-L235",
+          "version": "repo-lines-v1:sha256:f2649d1eb946d8bdcc7d2a0f155c03a304fdc8ee7b52241a2006b3f8c5a9262f:eyJzZWxlY3RlZExpbmVDb3VudCI6MzksImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImIwNzgyNTk0M2VmMWE5OTk5ZjI4MWRjZjk5MGZkZDcwZjVlNTc5N2E5ZDVhMjJiYWE3YzVjNTcxMDgyYjU5OGEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQ4OTNmNDBlMzc4MWViODk2YzgyZDA0NmEwODA2N2ExMWUzNWNkZjJmMWRmYWYyNmZlYTkwYjhkYjY2NzY0MTMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjY2N2E1YmFmOGU2YzdmMTYwZjNjYTE2MzZjYzk4MTYyNGU3YzAxYWVhY2JmYjRlZmZiMGUzYWJjNWUzZmM4OTQiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImQwOGMyYTdjYzhhMDNlMjUwYWRjYTI0ZWVlZGEzMGMzMWE1MjZmOTBmOWY1NTkwMzQ3ZjVkOGVhZTEwN2M3NWQifQ"
+        },
+        {
+          "resource": "repo://billparse/analyze.py#L24-L24",
+          "version": "repo-lines-v1:sha256:6b47b585c5e91d4af5b3a0d80c8f1c283f1956f5c3302cd87e22c25971a1821b:eyJzZWxlY3RlZExpbmVDb3VudCI6MSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiNmI0N2I1ODVjNWU5MWQ0YWY1YjNhMGQ4MGM4ZjFjMjgzZjE5NTZmNWMzMzAyY2Q4N2UyMmMyNTk3MWExODIxYiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNmI0N2I1ODVjNWU5MWQ0YWY1YjNhMGQ4MGM4ZjFjMjgzZjE5NTZmNWMzMzAyY2Q4N2UyMmMyNTk3MWExODIxYiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiZWJhYjFiYjVlODYxMjBmOGM2NTA1YjM3ZjNiMTZhOTc0MGVhNjMwOWQzMjE0YWJiZWU4NWM3Mzk0ZWJlOGI1MiIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiOWRhM2U1NjIwYjgzM2VkZWJhMjA1MTVkYzdiZmQ2ZDFmZGJjN2EwNzI3ZjA4ODA3NWNmYjg0M2E4OWQ0ZjMwYSJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_4c7d8c86aeec4629bdb4da9b94ebe747",
+      "statement": "The forecast uses a damped median growth trend with two or more months, a run rate for fewer than 27 days, and a range that widens with lower confidence, an unreconciled status and short history.",
+      "evidence": [
+        {
+          "resource": "repo://billparse/analyze.py#L270-L287",
+          "version": "repo-lines-v1:sha256:534f108a6a7809429a35c968f59fb7995c7e9bc182b8d4fb66636e2dd89f4be2:eyJzZWxlY3RlZExpbmVDb3VudCI6MTgsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjhmMmJhMDM4NjVhY2E1OTZjNTQxOTkzOTM1OTExMzQ1OWJjNjQxMzZjMDc4MGRmYjNiM2YwNjUyNTM5ZGMyODAiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImRiOTExZWUwZjUwMDE3NGE2Y2M2ZGMxMDVkOTI3NmNmOTEwMjU3MjA2ZmNkNDVjMTA4OWMxYzExYjZlYjYwNmUiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjE5MTg2ZTM4NjhkMTVkZDQwMGEwOTA4MGFlY2RjZWI0MTEwNGRjZGU1YzVmMTBkNjI5ZGIzZTk1Y2RiMGVlOWYiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjIzYTBhOWQ0MTE2YTM2NGNjZDc2YmE3Y2Y5MWEzNWJhM2JiZjE1NWM1MzYzZjMyMzZlY2NiM2ZlYzdhMzQ1NzcifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_4c67665ace834bd895e09d6d35c7c01c",
+      "statement": "The commitment opportunity counts Compute, Databases, Containers and Analytics usage as eligible and reports indicative monthly savings from an assumed 20 to 40 percent discount.",
+      "evidence": [
+        {
+          "resource": "repo://billparse/analyze.py#L23-L23",
+          "version": "repo-lines-v1:sha256:742e9840bb8991e1cbf86ce0787f68eda9ec3cbb7619c926645d1cc349556403:eyJzZWxlY3RlZExpbmVDb3VudCI6MSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiNzQyZTk4NDBiYjg5OTFlMWNiZjg2Y2UwNzg3ZjY4ZWRhOWVjM2NiYjc2MTljOTI2NjQ1ZDFjYzM0OTU1NjQwMyIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNzQyZTk4NDBiYjg5OTFlMWNiZjg2Y2UwNzg3ZjY4ZWRhOWVjM2NiYjc2MTljOTI2NjQ1ZDFjYzM0OTU1NjQwMyIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiZDRmYmIxMDYxMGM5MDMzMWRhOTBmZjg1M2Q2NDZmOGRiNDY2NGVhN2YyZjhhOWQzOTAwMGYyNThkMTBjNWNmZiIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiYzQyNTBmMDE3OWNkNDhlNjQ5NjE3Y2ZiMjFkYjdhYWU1NTAwNTUxMjM4YTM5OTA3YWYyNDlkYzFhYzNiOGUxMyJ9"
+        },
+        {
+          "resource": "repo://billparse/analyze.py#L294-L310",
+          "version": "repo-lines-v1:sha256:8f5c13ac5e53a3776ba640f889ad454051b6405e3c4efebe9947e5d1d6d2c6eb:eyJzZWxlY3RlZExpbmVDb3VudCI6MTcsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjJmMmY3NzRiYTBiY2VjY2IwZWFkZTRkN2ZmOTMwMTFiYWZhNWQzZWI4NGQ1ZTEwMTVkYjFlNGVjZmM1MTUzYTQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQ4OTNmNDBlMzc4MWViODk2YzgyZDA0NmEwODA2N2ExMWUzNWNkZjJmMWRmYWYyNmZlYTkwYjhkYjY2NzY0MTMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImQ4MGFjYTQ0NGQxY2MzZWY4NmY0NjA5YTBiMjE4YTM3NzgwOTkwOWIzZmRiYmJjOGJkZjEwNzgzOGU0NGMzMzYiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
+        }
+      ]
+    }
+  ],
+  "verification": {
+    "by": "openwiki/0.7.2",
+    "at": "2026-10-25T20:19:27.415Z"
+  }
+}

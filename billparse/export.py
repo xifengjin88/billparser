@@ -64,7 +64,13 @@ class Charge(_Strict):
     currency: Optional[CitedValue[str]] = None
     counted: bool
     kind: Literal["usage", "commitment_fee", "discount_or_credit", "tax", "support_fee", "marketplace_usage",
-                  "marketplace_fee", "other"]
+                  "marketplace_fee", "commitment_negation", "other"]
+    list_cost: Optional[CitedValue[Decimal]] = None
+    contracted_cost: Optional[CitedValue[Decimal]] = None
+    effective_cost: Optional[CitedValue[Decimal]] = None
+    coverage: Optional[CitedValue[Literal["on_demand", "reserved", "savings_plan", "committed_use", "spot",
+                                          "unknown"]]] = None
+    line_type_raw: Optional[CitedValue[str]] = None
     context: Context
     service_code: Optional[CitedValue[str]] = None
     pricing_model: Optional[CitedValue[str]] = None
@@ -144,6 +150,8 @@ class Document(_Strict):
     completeness: Literal["reconciled", "consistent", "unchecked", "contradicted"]
     gaps: list[Gap] = Field(default_factory=list)
     confidence: Optional[Confidence] = None
+    cost_types: list[Literal["billed", "list", "contracted", "effective"]] = Field(default_factory=list)
+    cost_basis: Optional[Literal["actual", "amortized", "unknown"]] = None
 
 
 # ---------------------------------------------------------------- projection
@@ -185,7 +193,8 @@ def to_schema(doc: internal.Document) -> Document:
             **{k: _cv(getattr(c, k)) for k in (
                 "service_code", "pricing_model", "commitment_id", "commitment_type", "commitment_status",
                 "marketplace_seller", "period_start", "period_end", "instance_type", "operating_system", "database_engine", "deployment_option", "usage_type",
-                "operation", "quantity", "unit", "unit_price", "sku_id", "catalog_sku_id", "sku_price_id", "meter_id")},
+                "operation", "quantity", "unit", "unit_price", "sku_id", "catalog_sku_id", "sku_price_id", "meter_id",
+                "list_cost", "contracted_cost", "effective_cost", "coverage", "line_type_raw")},
             attributes=_jsonable(c.attributes),
         ))
     out = dict(
@@ -206,6 +215,7 @@ def to_schema(doc: internal.Document) -> Document:
         gaps=[dict(kind=g.kind, message=g.message, cite=_cite(g.cite), amount=g.amount, field=g.field, currency=g.currency)
               for g in doc.gaps],
         confidence=doc.confidence.model_dump() if doc.confidence else None,
+        cost_types=doc.cost_types, cost_basis=doc.cost_basis,
     )
     return Document.model_validate(out)
 

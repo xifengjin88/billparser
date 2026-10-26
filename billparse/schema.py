@@ -6,15 +6,20 @@ from typing import Any, Generic, Literal, Optional, TypeVar, cast
 
 from pydantic import BaseModel, Field
 
-SCHEMA_VERSION = "1.3"            # 1.2: database_engine, deployment_option on charges; 1.3: confidence
+SCHEMA_VERSION = "1.4"            # 1.2: database_engine, deployment_option on charges; 1.3: confidence;
+                                  # 1.4: typed list/contracted/effective cost, coverage, line_type_raw on charges,
+                                  #      kind commitment_negation, cost_types and cost_basis on documents
 
 T = TypeVar("T")
 
 DocType = Literal["invoice", "statement", "cost_report", "estimate", "inventory", "memo", "other"]
 # marketplace_usage: pay-as-you-go spend on an AWS/Azure/GCP Marketplace product
 # marketplace_fee:   a Marketplace subscription, contract, renewal or upfront fee
+# commitment_negation: a line that cancels the on-demand cost of usage a commitment covers (AWS SavingsPlanNegation);
+#                      not a credit or a discount, and not usage
 Kind = Literal["usage", "commitment_fee", "discount_or_credit", "tax", "support_fee", "marketplace_usage",
-               "marketplace_fee", "other"]
+               "marketplace_fee", "commitment_negation", "other"]
+Coverage = Literal["on_demand", "reserved", "savings_plan", "committed_use", "spot", "unknown"]
 Basis = Literal["billed", "estimated", "priced"]
 Origin = Literal["printed", "inferred"]
 Completeness = Literal["reconciled", "consistent", "unchecked", "contradicted"]
@@ -87,8 +92,13 @@ class Charge(BaseModel):
     cite: Cite
     description: CitedValue[str]
 
-    cost: Optional[CitedValue[Decimal]] = None
+    cost: Optional[CitedValue[Decimal]] = None          # the billed cost
     basis: Optional[Basis] = None
+    list_cost: Optional[CitedValue[Decimal]] = None     # public on-demand price x quantity, no discounts
+    contracted_cost: Optional[CitedValue[Decimal]] = None  # after negotiated discounts, before commitments
+    effective_cost: Optional[CitedValue[Decimal]] = None   # after all discounts, commitments amortized
+    coverage: Optional[CitedValue[str]] = None          # a Coverage value; None on lines that are not usage
+    line_type_raw: Optional[CitedValue[str]] = None     # the provider's own line type
     currency: Optional[CitedValue[str]] = None
     counted: bool = True
 
@@ -180,6 +190,9 @@ class Document(BaseModel):
 
     completeness: Completeness = "unchecked"
     gaps: list[Gap] = Field(default_factory=list)
+    cost_types: list[str] = Field(default_factory=list)   # billed, list, contracted, effective: what the file gives
+    #                                                       for every usage line
+    cost_basis: Optional[str] = None                     # actual | amortized | unknown (Azure exports); else None
     confidence: Optional[Confidence] = None
 
     def counted_total(self) -> Decimal:

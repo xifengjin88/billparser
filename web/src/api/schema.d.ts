@@ -969,6 +969,14 @@ export interface components {
             cost_exact?: string | null;
             /** Basis */
             basis?: string | null;
+            /** List Cost */
+            list_cost?: number | null;
+            /** Contracted Cost */
+            contracted_cost?: number | null;
+            /** Effective Cost */
+            effective_cost?: number | null;
+            /** Coverage */
+            coverage?: string | null;
             /** Counted */
             counted: boolean;
             /** Kind */
@@ -1159,6 +1167,13 @@ export interface components {
             /** Completeness */
             completeness: string;
             confidence?: components["schemas"]["ConfidenceOut"] | null;
+            /**
+             * Cost Types
+             * @default []
+             */
+            cost_types: string[];
+            /** Cost Basis */
+            cost_basis?: string | null;
             /** Counted Total */
             counted_total: string;
             /** Money At Risk */

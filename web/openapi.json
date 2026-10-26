@@ -2267,6 +2267,50 @@
       ],
       "title": "Basis"
      },
+     "list_cost": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "List Cost"
+     },
+     "contracted_cost": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Contracted Cost"
+     },
+     "effective_cost": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Effective Cost"
+     },
+     "coverage": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Coverage"
+     },
      "counted": {
       "type": "boolean",
       "title": "Counted"
@@ -3000,6 +3044,25 @@
         "type": "null"
        }
       ]
+     },
+     "cost_types": {
+      "items": {
+       "type": "string"
+      },
+      "type": "array",
+      "title": "Cost Types",
+      "default": []
+     },
+     "cost_basis": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Cost Basis"
      },
      "counted_total": {
       "type": "string",

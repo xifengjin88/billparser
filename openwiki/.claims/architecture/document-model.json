@@ -1,0 +1,134 @@
+{
+  "schemaVersion": 1,
+  "pageVersion": "sha256:5ae27c6d5febc905041406f8f71dde7feab0d41e37668b72bd82b600c1200c76",
+  "claims": [
+    {
+      "id": "claim_d12dcfbd34af47cc8e8dd263c3c32290",
+      "statement": "A Document's sha256 is the SHA-256 of the uploaded bytes, computed in load_bytes.",
+      "evidence": [
+        {
+          "resource": "repo://billparse/docmodel.py#L121-L125",
+          "version": "repo-lines-v1:sha256:3323da79fb2e05d91553e648c9f651a6fc0ed4f2227e43a8a1eef259253ad024:eyJzZWxlY3RlZExpbmVDb3VudCI6NSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiNjJjNjQwMDcwZGNmNDk3MDZhYjFiNDJkNjNiZWQ1Y2ZkZjI5NGQ4YjlhNzcxMGU5NGNmOTBkYmM3Zjk1OWIzNyIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiN2RkYTNlMjRmYzc0NGNmOTBhZWQ1NGJiYzViMGNiZjdlOWU5Mzk5N2U5MmYyNTk0YzQ4NWMzZmZmN2ZkY2Q1OSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiZjc1OTdiZTY1YTE4MTZkZTU4ZjBkMzgzYzJjMTZlNTI4ODBmMTYyZDhhN2YwNjkwNjY5MzBlNzJkMDA5ZDAzMyIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiZDMyZjRhNzFmY2FiNzU2YjMxMzRjODMyNGM3NDk2ZDc0NjNhMWE3MzE1ODgzYzJmYTZlNjhmY2NjMGMzYTk0YyJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_f264310486c448ff90be83374bf26179",
+      "statement": "Regions are either grids (rows of cells with position, bold, indent, formula) or frames (a pandas DataFrame); Region.is_frame is true when df is set.",
+      "evidence": [
+        {
+          "resource": "repo://billparse/docmodel.py#L44-L102",
+          "version": "repo-lines-v1:sha256:39a04872cabfa46f8b28466cb6b4d1a807442ed4d21ae03957435862cfde7adf:eyJzZWxlY3RlZExpbmVDb3VudCI6NTksImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjNmYTliOTdmNWVhNmQ1MWU1MzRjMjRiZmViYjRlZDI4Y2ExNTI4MTcwY2VmYmI1MzM0MjVhNTBlZWFjNTk1ODciLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjJkNzc0MDE0MmNmZjIwOTZiZDIxYTYwZThlNzdhYWE5Y2UzZDNhZDNiMDRkYmY5YTY4ZTk4ODYxN2RmMTMwNGEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImNkOTVhNmY3YWYwMTgzN2QzNmI1N2NkZDBkNDBhOTY5MDFlMDkyZjQzZmRhMjJhZjQ4MDliNTM0ZmIyMjMzZjMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjZjMWYwMmZkN2VjMWQ0NjJjMGNiODE4Yjk0OGZmZTRmNzE1YjJjMmM0MzI2MzBjMjMyZGZlMzRkNDI3NDNmYTkifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_f5013a0037104203b1a03547c6e8587e",
+      "statement": "The file type is chosen from the first bytes before the name: gzip, docx/pptx, other zip archives read member by member, PDF, xlsx, parquet, JSON, plain text, and CSV as the fallback.",
+      "evidence": [
+        {
+          "resource": "repo://billparse/docmodel.py#L128-L171",
+          "version": "repo-lines-v1:sha256:17b57d9ab1355235de43690d37922a4d4c57da768951424243899eda4638a822:eyJzZWxlY3RlZExpbmVDb3VudCI6NDQsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImY2OTBiNzkzOGRhYzliMDM2M2IzYWVkODZiM2EwNDRjNGU2NWZiZDEwZmMwM2JkOGY1ZjA0Njg0ZWFjYzgxZWEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjJhZmZmYjJhNWQ1ZDZiMTdlMzJkMDNmZmEzZWM2ZTVlNDEzMGEyZTNiM2Y5MzE2YmVlNDFkZDdiZTJlZTYwZWQiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImI3YjczZWU2NGQ4YWE5OWJiZDllOTc0Njc5YWE2YTFkMzk1NTNhYzA0ZDM4Zjg0MzA4ZmZiMWYyNmZkYTVjOTYiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImY1MjFlYzE1NTM4MzlmN2M5MzIyNTAzMmVlOTViMTgwMjI3ZWY2NDliYjEwZDBjMDA3YWZiZjM2MzZhZDc5MmEifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_e0a084161d5e421486dd8165a7ebed85",
+      "statement": "CSV files are decoded whole, the delimiter is sniffed from the first 20,000 characters, the header row is detected among the first 40 rows, and all values are read as strings.",
+      "evidence": [
+        {
+          "resource": "repo://billparse/docmodel.py#L244-L260",
+          "version": "repo-lines-v1:sha256:3dfff82c39c5555147134388f7e8945edc93b9e655a2cb62158813bffcafc759:eyJzZWxlY3RlZExpbmVDb3VudCI6MTcsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjM2ODY5MWI1NGZlZDUxYmRmMDRhYzVjZDZjZDE4MDExNjY1MDEzNTM3MWJhYTJhMGM3OGI0NjFkODFmNGZkZTYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjRkNTlmYmYzZDE2MjE3N2QwZWVhYTY5ZTcxMjMxNDRhN2RjMWZjMjUwYTg2MDExZjMzMjZiMWViOWRhMjgxYjUiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjRhMDNjYzg0YzcwYTJiNGM3MjczYjMyZTIwOWYxMTE4MWM4MWE5ZDRjY2EzOTQ5MmY0NzkxZGYzODI2OGM5MWEiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjYyYzlhY2FjY2QzZTNhNTNmMTUyYTQyNTMyYzg0ODM4NDdjZjAyNzRjMjU0MWRkOGJhMjJiMzM1NGY2ZjU0MGIifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_3b3148b17d98496b99c39c4c2ac55bac",
+      "statement": "Excel sheets with more than 20,000 rows are read as frames without formatting; smaller sheets become grids with merged ranges filled and bold, indent and formula kept.",
+      "evidence": [
+        {
+          "resource": "repo://billparse/docmodel.py#L350-L398",
+          "version": "repo-lines-v1:sha256:6306ac8ed47d2d74ba9f80a67dd9826d25ec311eb7db1400bf50453dd6a3f572:eyJzZWxlY3RlZExpbmVDb3VudCI6NDksImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImIyYjZlZjNiZmQxMWQxMjY3N2VlNTBmZmJhZWZkNTQ5ZmIyNGFiMzRjMTJjOTE4ODk4NDlhNzRjNWVjMjNjZDQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjliNGViNGY3MmQ1YmQ5ZDRiZTkwOWRhNzE5ZjgyZWJkMDJkYzM4NjAxNDhhNDY3YjNiOTVmNDZmMjBiNDdmMTkiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjUwNjliODVkNTg2OGQ2Y2NkYzYyMDE5NGMyNTQzM2I3Mzg0M2Q4MjMyYzM4ZmQ1MzY3NjMyN2MzOWNkZjUxMWMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImViZTVlNjhmMmM4YWI2YmJmODA5NDgwZDEwZmI3MjY5NzQ4YjkzMWRiZDk2Zjc2MjRkMmU5OTA4OGY2ZGJjMDEifQ"
+        },
+        {
+          "resource": "repo://billparse/docmodel.py#L37-L37",
+          "version": "repo-lines-v1:sha256:33d458335534efbbd4e169a561b8df58ce2bf37782d6c925178480250a4e252a:eyJzZWxlY3RlZExpbmVDb3VudCI6MSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiMzNkNDU4MzM1NTM0ZWZiYmQ0ZTE2OWE1NjFiOGRmNThjZTJiZjM3NzgyZDZjOTI1MTc4NDgwMjUwYTRlMjUyYSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMzNkNDU4MzM1NTM0ZWZiYmQ0ZTE2OWE1NjFiOGRmNThjZTJiZjM3NzgyZDZjOTI1MTc4NDgwMjUwYTRlMjUyYSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiZDA0NGMyN2ZhMWU5ZTNkYWRmOWJhMDU1YTE3YTQxYWE3MzBkYWUzZmY5ZGZmNDFmYTczOGE0ODgzODNhOWNhOSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiMDU2YjVhYTJmMDkyN2IwZDg4ZWQwMjU1Mjk3YWMzMzcyZDdiYjM3Njg1N2Y3NjhjMmQwOWU4NmI5ZDU5MzgzYSJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_0dcb9c1c2e634f0da7ad4c8970781e99",
+      "statement": "Formulas saved without a cached result are computed from references, ranges, SUM and + - * / through Python's syntax tree, never eval; other formulas stay empty.",
+      "evidence": [
+        {
+          "resource": "repo://billparse/docmodel.py#L412-L467",
+          "version": "repo-lines-v1:sha256:4fe0086097ff9bcbf78f6913376dc1e92d0f1594565bd174ca6c18bf92f7d579:eyJzZWxlY3RlZExpbmVDb3VudCI6NTYsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImM4ODg2NjczY2FhNzkyYTZhNGYwMDNlNjdmNjcxZDliYTMyYjg2ODIyMjhhMTEzNWJmZWM2YWYxNWU1NGRkYWIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImI0YzJkYjRmYTE0NTVjMDY3YzUyNTYyYWVhMzFjMTA5ZTg2ZTBiYTY2ZTkzNjVhYmM5NjY1Y2MwY2E5MzU2MTAiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImMwMDViZDc3NjdmMjg0MjkyMjBkOGJiYzkzMGNkMTI2OWY0MmM0MGEzNTJmNjMyMDJkMDdkYjBiZDdjZmY5ZGUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImRmZGE3NjNjNWQwNTI2ZTVlZWI0N2YyYTc2ZWUyYjFhMDU0NjEzNDJmNTRhZjhhMTFkZWEwZmJhY2M0MTliZjQifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_e5de2c41e9264a97ad91df8881659775",
+      "statement": "PDF pages are read with pdfplumber in a spawn-based process pool when there are at least 4 pages and more than one worker, with a fallback to the current process when the pool fails.",
+      "evidence": [
+        {
+          "resource": "repo://billparse/docmodel.py#L478-L533",
+          "version": "repo-lines-v1:sha256:0ee2df77ba9422b92ed4d99dc5ea9f6a7c8166eab71aaae8640a10a14fdd1222:eyJzZWxlY3RlZExpbmVDb3VudCI6NTYsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImFhM2M3ZjVkOWE3NWE2MDc0Y2Y5NjMxZGRkZTcyNDE4YmVhNDZjMTIwMjZjNzgwMGFiNGU0MGNmYjUzODBiMTciLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjliNGViNGY3MmQ1YmQ5ZDRiZTkwOWRhNzE5ZjgyZWJkMDJkYzM4NjAxNDhhNDY3YjNiOTVmNDZmMjBiNDdmMTkiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjllNzQxODQ0NDdlNDQ1NzBhMzdlOWNiN2U2M2MzMjZkODQ0NmVmNWU3NzEzM2ZjMWQ4ZTMzZTZiZjIwODRhZjIiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImE2MmI1NzUxZTU3ZjBlNmZkMzc1NTUwMzNhZDI3NDc4OTVmNjU4N2YyZTcwNjc2NjFmYWI5OTJkMWUyMjI2M2EifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_6e52e53a89214c6abdcd4b3584439f0f",
+      "statement": "A PDF page with no words but with images is marked scanned; there is no OCR.",
+      "evidence": [
+        {
+          "resource": "repo://billparse/docmodel.py#L526-L532",
+          "version": "repo-lines-v1:sha256:e85d13a3c19c25de51a3026a0be555ae344cac4669ac9bc948a849d15e33dca5:eyJzZWxlY3RlZExpbmVDb3VudCI6NywiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiZmUwOGQ2OTIzOThiODU2MWE1ZWRiM2Q1OTVmYjViOWM0MTNlY2YyZWI0M2RjOWY5MzQ4ZTFkYjM3NzUyNDY3MSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMzUxZGIyMjU2ZGU0MzQwMzkxZjU3NDY1NTY1MDUzNTI2MWU5NDIxMTE1OTY1ODk1NDg0ZWNlYmFjNTUwZTVlMCIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiZDg0YTRjMDU0OTdlOTBkOWMzMzI1NzU3MWM5YTAwYjhlNmQ2MGUxMGYwNDhkOWM5NDNmMWZiMTY0NmNkNDNhNSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiZDdkNDNhZDZkNmY2YTM3ZTc5OTE3NTFlOGQ2ZGY5MTI0ODg1ZTNkOWQ5ZGI5ZjA1MmVhNmNmZmRlMmJhMGZlMyJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_2c55ddce5be842579f9f78cb2982837f",
+      "statement": "In JSON, the largest list of objects is the record table, nested objects are flattened to dotted columns, lists stay JSON text, and scalars outside the records become a json-meta key/value grid.",
+      "evidence": [
+        {
+          "resource": "repo://billparse/docmodel.py#L273-L340",
+          "version": "repo-lines-v1:sha256:613a5504aafe27986dd0500591f055fb827ff2ebef9a097dff8ddf58535ce6c3:eyJzZWxlY3RlZExpbmVDb3VudCI6NjgsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQwZTdkNDZiOTZiZmU2M2Q4MDAwNzcyNWY4MjZiODRkMWFlODk5MDA4OTBhOGZjYzNiYjhhZTE1NDU5Yzk5ZmMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjU0NTI2YWZkNzhlMmJiZGM0N2QwODZmNjliOTdhZjYwZTQ5MjAzZDNjNDlhMTAwMDNmNTQxNzEyODlmOTYxZTQiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjkxNWYzNzA4YzI1YWE3ODMyYzI4NzY4OTcwNmJlYzZjZGY1NDFiNTNjNzM4YjEwOTZhMzRlNmQ2ODZhOWM2YjEiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjQ5YzlkYzM2ZTdkMzgwNTVhYjQ2MDVjMmUxOWZkZTE4ODViOTQyMDgzOGI4NzBiNjAwYTIxM2JmNGEwZmJiYTkifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_c16ff7a43b81426e8c37e08f4b104775",
+      "statement": "detect_header_row picks the most header-like row by text share, short cells, filled cells and header vocabulary, skips sparse rows, and prefers earlier rows on near ties.",
+      "evidence": [
+        {
+          "resource": "repo://billparse/docmodel.py#L578-L601",
+          "version": "repo-lines-v1:sha256:68ae3cf62b7b2693a9e6e2c82e8f0dca4c538a1dbfb6f8e6a380f5a3befb5495:eyJzZWxlY3RlZExpbmVDb3VudCI6MjQsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjM0MjE1NmMxMjNkY2ZmOWZlNDVkYjExOGNlNWRiNDE3ZGU3Zjk0ZjIyYjRjNDJhZDlkNmQ3YThjOTA0YTcyYzAiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImQzYzIzZTYyYjE4MDkwODU0NzdlMzdkMjExMDQyNjI3YzJiN2JlMWU3ZTdmZDg1YTc1ZTUyNTBiNzY0MDMzZTYiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjQyYTQwMWRkZDJlYjBjNGFiNTM4YjNjMjRmZDAxYjliYjA3NDc4OWYyZGNhM2E5ODk5NTY1ZmZiYmY5NDZmYTQiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImEwODNhY2U0MzI2MzhjYWQzYjE0OTEzOGZkOTYwNWVjYjA4ZjMwZTM4Y2E5MGJmN2I2M2QxZmI0NmJkZTllMTEifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_5c775f46a9db45138b77c94b46aad6d6",
+      "statement": "parse_number reads currency symbols, parentheses and trailing minus as negatives, and both dot and comma decimal styles.",
+      "evidence": [
+        {
+          "resource": "repo://billparse/transforms.py#L64-L89",
+          "version": "repo-lines-v1:sha256:cb6da7457f6a8c5f1ad4efa76ba42558b3ff6c635f8e753203caf0efe9683b75:eyJzZWxlY3RlZExpbmVDb3VudCI6MjYsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImExZjA2YzMxMWE0ZTk5YzhhZTZiMDMwMDEzYmFiMmZmYzdhZjRmZmY4MjQ2OTg0ZTY3ZDQ4NTY3MWVjNzU4YmEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImJhODBjMzJhZTUyNDUxNTljZDQ3Y2I0ODc0ZTk2YzliYzI1ZGI4OWY0NmJmNDgyZGY3YWVmMWQwMTFkNTNlZTAiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImJlZjU4OTIyNDZmNGZhNmZmN2I5NDU0ZGNjYmI1YzkyODdiYWQwYTAyNGJjNDVkMDg1M2Y1ZWVjZGEyZGM1MTQiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImY2YTc0Zjg0OTExZTM1MDIyMzM2YWFhYWM1OTY2NDZjOTZjZmUwMDI1YzU5N2JjN2Y2NDI5NWU2ZjU2MTA1MDQifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_2aa3322735af40c38b7c204478b727c2",
+      "statement": "CloudFormation and Terraform files are read again by iac.py when a spec has source iac.",
+      "evidence": [
+        {
+          "resource": "repo://billparse/spec.py#L128-L131",
+          "version": "repo-lines-v1:sha256:c1c10501cbc4e48f395ecbcdb4cee8257e68715f51bea2241ac2ad02d8ea8128:eyJzZWxlY3RlZExpbmVDb3VudCI6NCwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiYjMwOWM3YmMyNjAzZDU5MDliNDRiNWRjZDUxY2M0ZTEyZTQwY2UxNzMzZGEwMzVkYzk1OTVmYTk0NzdmY2ZlZCIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNTliN2I5Y2M4Yzk2YTIyNDVkZTZkYjg4MjZkNzg5ZmE3ZWZmMGMwN2UyMjY5YWUxMTAzNmE4YTc2MjY4ZTAxZCIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiOWM4ZjExMDc1NjUwNWVjYzUzY2JmMmM1YzViMzE4MjU1MTU5ZWM3MjgwN2ExZTcyYmIyY2ZkODc5NTY2ZmJjYiIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiNzAwYzAxOWRiMzMzNmU2ZTYwNzhiYzkzZjgwNWY4M2NkZDMzNmE0ZDc1OGMxMTI0MWZkOWJlZjU5YTM1NTY0MSJ9"
+        }
+      ]
+    }
+  ],
+  "verification": {
+    "by": "openwiki/0.7.2",
+    "at": "2026-10-25T20:19:27.415Z"
+  }
+}

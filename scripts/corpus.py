@@ -68,7 +68,8 @@ def run_file(pipe: Pipeline, path: Path) -> dict:
             "coverage": coverage, "seconds": round(time.perf_counter() - t0, 2)}
 
 
-KIND = {"Tax": "tax", "Credit": "credit", "Refund": "credit", "Purchase": "commitment_fee"}
+KIND = {"Tax": "tax", "Credit": "credit", "Refund": "credit", "Purchase": "commitment_fee",
+        "Negation": "commitment_negation"}
 MAX_KEYS = 300                                                   # a huge export keeps its largest keys and the rest
 
 

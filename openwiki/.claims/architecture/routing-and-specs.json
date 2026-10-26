@@ -1,0 +1,154 @@
+{
+  "schemaVersion": 1,
+  "pageVersion": "sha256:5c2cc8fd47777a5f702785630bca17b3a0c47c00ca0f633d5c89fd800f87919d",
+  "claims": [
+    {
+      "id": "claim_044134d821504aa48c0a203d112a6de6",
+      "statement": "The built-in route tries only the single best built-in spec by detect score, and only when that score is above 0.",
+      "evidence": [
+        {
+          "resource": "repo://billparse/pipeline.py#L187-L192",
+          "version": "repo-lines-v1:sha256:fbb2f887a537d850bd3534faddc8c8f1c1dc934cf56b7c80d7049dd917935a51:eyJzZWxlY3RlZExpbmVDb3VudCI6NiwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiNTQ0NDllOTgzNTZiNjZjNDM5ZDNjZmJhNGMxMTkxNDc0MTFhNTA0M2FjNGNjNzM1NzJmYjk3MjhkZGY3YzI2NCIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiYWEyODg1MGNmZWZjNDQ5MDU0ZDY0ZGRhM2FlMzYwMjM5ZmVlZWJjOThkM2FkZTIyMGFiNDY0N2I2YTc0MjVhOSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiN2Y3ODZlYTczYThjMjMwMDIzZDc0YWNhNTc2OWM5NjM1ZDNjZTY5ZmYxZmUyOTM4ZmVmYmI3MjliMzBlNDBkMiIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiMmI1OWYwMTE4MWYzZDFmMDgxNjFkNDcxZDRkZTYyM2JkY2U4MGI0YWE2MGQwZDljYTAzNzMxMTRhMDc2NTAwOCJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_7eb8ea24aac742b483ea576f0b73850d",
+      "statement": "The learned route tries up to 3 learned specs found by detect match, exact fingerprint hash or fingerprint similarity at or above reuse_similarity, and never uses builtin or disabled specs there.",
+      "evidence": [
+        {
+          "resource": "repo://billparse/pipeline.py#L194-L211",
+          "version": "repo-lines-v1:sha256:8a34a534da3aa1ab241413bf57fe0b1d3559a7889ed986f61fbd8eaccbe02ca4:eyJzZWxlY3RlZExpbmVDb3VudCI6MTgsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjllOWFkZGNhMTRiYTljNWY1OTIyNTVjMzc3ZTJjNTNjNWY5NTZjNjA0ZjMyOGU3NDIxZDNiNGUyYTY0ZGQ2ZDQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxYWJjZDBjYzY5MTNkNGY1MWViMjFlNGY1YWZjMmU5MGY4NmQzNmE0NTBiYjQyY2IwNWM2ZjNlMGQ3MDZmOGMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImI4Yjc5MDc5OWVlZjEyOGE5MWEwYjZkZjBmNzk0ZTkzZDBmZjYzN2I4N2FhZmU2YzU0ZTYwOTA1Nzk0N2UzYjIiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImQ4ZWM4ZTkwZjE1ZTY3YTc3NjhiMzA4NGVkMGJkY2QxMzE1MDY4YTg4NWRmM2I5ZjBhY2ZlNTc2NzY3YjBjNmEifQ"
+        },
+        {
+          "resource": "repo://billparse/pipeline.py#L46-L53",
+          "version": "repo-lines-v1:sha256:84064b773880f4dfaa022c1473fe1cb5791bb2d1ad3e1343b58d92b825ee4d5f:eyJzZWxlY3RlZExpbmVDb3VudCI6OCwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiNjkxODU2ODI1MDliNWI2MTM4YzIwZjIwNjk3ZWJmOWQxNTU4N2NjYjZmMzE0ZjE3ZTg1YTA1MzlhYTBiNzhkMyIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiYjkwNzVlNjI1ZjQ5ZmI0ODgzYjYxZTNjMGVlODBiZTkzODA5Yzk4ZTJiNTY5MWQ2ZWRlOGRjMzIzMDMyY2IwMCIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiNmMxZjAyZmQ3ZWMxZDQ2MmMwY2I4MThiOTQ4ZmZlNGY3MTViMmMyYzQzMjYzMGMyMzJkZmUzNGQ0Mjc0M2ZhOSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiOTRlOWIyNDRmMDBhYzNhNGNlNmQ0MjMzYzY1YzI1YjQwOWQ1NjQzMzQ3NzNmOTgwYjBiMTliNWEzZDcyYjRkMyJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_cc604152f12a4e41a2755ff727581738",
+      "statement": "An attempt is accepted when it has rows, its status is not error or needs_review, and its confidence reaches 0.5 for built-ins or 0.7 for other routes; auxiliary attempts need only rows.",
+      "evidence": [
+        {
+          "resource": "repo://billparse/pipeline.py#L314-L323",
+          "version": "repo-lines-v1:sha256:bba2975db4c32b9a51775069dfab732e14cbf490e4b014781ddd915533003fe2:eyJzZWxlY3RlZExpbmVDb3VudCI6MTAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImQ4N2I2Zjk0OGY3YjdmOTQ1OGJmNjAwZTUzZjRmMzFkMjUxMTVmODQzZDcyY2Q4ZjdhMTQzMTcwYzEwZTE1OTgiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjRjN2ViM2JjZjg5YmRhODE1MGE0ZjBhNGExY2M1MDUzZGJiNjBhZjllNTU4OGRmNWJmYzk0ZDg1YmVhZDkxODMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjljMzNjYjYyMjY2NWQ1ZmEyODk5MGFmZjMyY2Y1MjgwMWQyNTQ0Nzg4ODg0YjhmMTE5ZGI1MGFkMTc0MzRlZTEifQ"
+        },
+        {
+          "resource": "repo://billparse/pipeline.py#L46-L53",
+          "version": "repo-lines-v1:sha256:84064b773880f4dfaa022c1473fe1cb5791bb2d1ad3e1343b58d92b825ee4d5f:eyJzZWxlY3RlZExpbmVDb3VudCI6OCwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiNjkxODU2ODI1MDliNWI2MTM4YzIwZjIwNjk3ZWJmOWQxNTU4N2NjYjZmMzE0ZjE3ZTg1YTA1MzlhYTBiNzhkMyIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiYjkwNzVlNjI1ZjQ5ZmI0ODgzYjYxZTNjMGVlODBiZTkzODA5Yzk4ZTJiNTY5MWQ2ZWRlOGRjMzIzMDMyY2IwMCIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiNmMxZjAyZmQ3ZWMxZDQ2MmMwY2I4MThiOTQ4ZmZlNGY3MTViMmMyYzQzMjYzMGMyMzJkZmUzNGQ0Mjc0M2ZhOSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiOTRlOWIyNDRmMDBhYzNhNGNlNmQ0MjMzYzY1YzI1YjQwOWQ1NjQzMzQ3NzNmOTgwYjBiMTliNWEzZDcyYjRkMyJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_e713e1c630f64dcf9204a3e5a8ab0ce1",
+      "statement": "_try runs the spec, adds totals from earlier routes for non-tree specs, cleans rows, normalizes regions, extracts attributes for up to 100,000 rows, and validates cost lines; other kinds are auxiliary; exceptions become error attempts.",
+      "evidence": [
+        {
+          "resource": "repo://billparse/pipeline.py#L292-L312",
+          "version": "repo-lines-v1:sha256:ca2f7a6f219f182abe7356362e4b06da9171191e037ca865bcd939786fb32707:eyJzZWxlY3RlZExpbmVDb3VudCI6MjEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjMyYjMxZDFiNDllZTgxOWRlN2VjYmEwZTA0NDQ0MDM2NjY3YTZmM2E1ZmNkNzVmNTg2NjVjMjhlMjBiOWRjMDAiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImMzZmNmNDk4OTMxYTBiZjkwYzg0ZjRlNTg0NzQ4MTMyYWZkZWJiNTBlMmZkODQ3OGFkYTJlNGRiMGJhMTk4OGYiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjI2YjFhM2JiMGVlY2UyYjVjNTU2MDQ1ZDg3MjU2OWM5ODc2OTViOGFjOWZkOGUwMzRmOWIzNDg0YjhjMTgyYTYiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImExZDNiNjY5YTMyYTZjMWQwMmQ2MTZkMmJjM2ZlMzgwNzkzMTZkMjE4MTM5YTViNjYxY2I2ODJhNzg0ZTJkYTYifQ"
+        },
+        {
+          "resource": "repo://billparse/pipeline.py#L42-L42",
+          "version": "repo-lines-v1:sha256:cf3055d19f82a9c3a9e988f730d20348e82725bd8ec91c1f8f971b9d44d2fc4c:eyJzZWxlY3RlZExpbmVDb3VudCI6MSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiY2YzMDU1ZDE5ZjgyYTljM2E5ZTk4OGY3MzBkMjAzNDhlODI3MjViZDhlYzkxYzFmOGY5NzFiOWQ0NGQyZmM0YyIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiY2YzMDU1ZDE5ZjgyYTljM2E5ZTk4OGY3MzBkMjAzNDhlODI3MjViZDhlYzkxYzFmOGY5NzFiOWQ0NGQyZmM0YyIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiOGNiZjQwM2U3ZjBjNTM0NDY2NjUyN2RiMzg5YjZiMGVmMDBkOWEyNGE4MzUyYTYwODg4ZjRhZTFiNjgwZWViZCIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiNmMxZjAyZmQ3ZWMxZDQ2MmMwY2I4MThiOTQ4ZmZlNGY3MTViMmMyYzQzMjYzMGMyMzJkZmUzNGQ0Mjc0M2ZhOSJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_3de821b469cf4162bad333d7c4d97410",
+      "statement": "detect_score returns 0 when required headers are missing, an any_of group is unmatched, a forbidden header is present, or the text regex fails; more required headers score higher.",
+      "evidence": [
+        {
+          "resource": "repo://billparse/spec.py#L92-L119",
+          "version": "repo-lines-v1:sha256:647895cfbb7fe1f7109f5c51dd6d420d53703ef14c61b6354847ed7933c16c84:eyJzZWxlY3RlZExpbmVDb3VudCI6MjgsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjA5YTFkNjg1OWFiM2EyY2E3MTFjNTgxZTViNzVhY2RjOTM5NDA3MWQ1YmNmMDZhZTQ3ODQ5NGNmY2FjYmFkZjMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImYwYzI2ZGM4MzI3MWU2YjFhMjQ4MDgyM2Y2MmVjZGFiY2QyZDk1YWIwYzNiOWY4Zjk0ZmVmYjc2MDFhYzNlYWEiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImIzMDRjYjY4YTQ1MDNjMjU2YTAyYWViMTg4NjI2ZWI0ODRhNjQ4YWZiMGQ5YTQ1M2I0NzU1ODM3NWUzMTMxMTkifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_c6865969f3074e0982b39d62ffae6b81",
+      "statement": "spec.run dispatches on source: tree, iac, lines, grid or frame, then reshapes, maps columns, derives, filters, applies meta provider and currency, and reads totals from fields or automatic total labels.",
+      "evidence": [
+        {
+          "resource": "repo://billparse/spec.py#L122-L167",
+          "version": "repo-lines-v1:sha256:38770893d5276a616b21fc4d40f5296462117b9f8006daf5190dce6d556bf353:eyJzZWxlY3RlZExpbmVDb3VudCI6NDYsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijc4OWVmOGM3NWQ1NWMwNTg4YzBiMmI2ZDA0YjQ4ZDU0MWM2OTUwYTA5MDVhOGJjNWNmYjMwNGViN2EyMWIzYTQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjEwZjgwNjJmOWM0NzVkMDVkOTNhNTIyYjc1ZDI3ZjkwZWM3MDRhZjkxYmU5YTBhOTUwZjBhMGFiODdhMzVhODYiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjQ3NzQ1NTFhYmI0NTg3ZjFlYTdlMDkzMGU0NTcxMzNmZmU4MTkyOGU0MjMzODQ5ODI4NDA3NzFkOGRlYjBmZDgiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6Ijg5ZmFjN2M5ZjVjMTIzNjVmZDZiNjE1NTllYzBhOTk4YWYxNTc3ZWIyMWRjYzhmYjU0MzA2OGNmNzFmNGM4YWUifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_a5bed0fcca334f85adcdcbf4e344714d",
+      "statement": "Columns the spec did not map are kept: known headers fill empty non-money fields and the rest go into _extra as Header: value text; billed_cost, tax and unit_price are never added this way.",
+      "evidence": [
+        {
+          "resource": "repo://billparse/spec.py#L322-L344",
+          "version": "repo-lines-v1:sha256:91e9c714b99b9011bbcce62bb8ed425beaf6f23c0339c8d08fa2a6fde1d078fe:eyJzZWxlY3RlZExpbmVDb3VudCI6MjMsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjFkMDJhYmM3MDk3MDIwODJkZDQyOWYwMWQ3NTYxYjJlZDg1NjI2N2YzMmNmZGY2NWZhMDkxMmYzZDczNTBkZDAiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImJjMDFlNTE4MGVkZWIyYmU4ZmQ5NDBjMTkwNTEyOWIwMDU2MDA4NDRjMmI5OGMzYWFkYmRhYzBhMGQwNWI5ZDciLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjBiNDY4YWQwYWJkNWRmODYyMGJiOTRiZGZmZTg1ZjQyMTEwZWNkYThhZjc2NGE0ZDVjM2JhMDZiYWE1Zjc3M2YiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImFkYmQ2MTQ3Y2ZkNzU4ZmNiNzhhYjZiMDBhYTJiNGU0MjdhZGY2NTkzYTcxNDA3NmMwNjNhOGI0MTFhZDFjOGYifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_aa73025c443f4ac4a1f350b5af198869",
+      "statement": "Derive expressions are parsed with ast and walked by hand with only coalesce, abs, round, fillna and neg functions, never eval.",
+      "evidence": [
+        {
+          "resource": "repo://billparse/expr.py#L1-L35",
+          "version": "repo-lines-v1:sha256:74fd8185bb181256fc0746d2b7ec2b533e4e28bf282f319afd72b7f5691088e8:eyJzZWxlY3RlZExpbmVDb3VudCI6MzUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImE1YmFiNzNiZmQzYWVmNTJkNTRlMGM2ZDAwZTAwNjMzNmI1MGVkY2VjNWM0NmNmOWMwNDI2MmYwMGVmY2FmYjMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjgzYThmMGU1OWU4NmJlNzNmNmMzZTdmYjBhMjhlYmE4M2MxMjRiMTc4OTA3MjdlMzM4NDYzOWYxZDljZmZhZjEifQ"
+        },
+        {
+          "resource": "repo://billparse/expr.py#L40-L70",
+          "version": "repo-lines-v1:sha256:103a9aff2490f5a50b85c64c33c0087121f0f2442268e6f43efda0ef0b7e7f02:eyJzZWxlY3RlZExpbmVDb3VudCI6MzEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImQxMGZmZGFmODI4ZmY0MWQ4MmRhZGVkNWZmMzI0MjhmNWZmZjdiMTIwN2VkMjRlOGU5YzJhMDBiZDE1MWQxNDMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6Ijg1NDEyNzMwOWZkZTJiZWUxOWQzODY1MWRkOWU5ZmJiZmQzM2E5MGM2Yjc1ODk4NjY4MzM3N2U1YmNjNzUyOWUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjdjMWMyNDY0YTVlYTk1NWU3ZGMyZjJkYmI3YTFlNTc4MzllOTI5Y2FjMDg4ZjY4YmM1ZTk4ZmIxM2FmOTA4NmIifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_03377c5564e0432b80fc7bbe82d129e6",
+      "statement": "check_spec rejects unknown top-level keys, non-canonical fields, unregistered transforms, invalid expressions and regexes, bad tree or context options, and specs that map no columns.",
+      "evidence": [
+        {
+          "resource": "repo://billparse/spec.py#L21-L23",
+          "version": "repo-lines-v1:sha256:eee6c400767a26a329450fc0ca5103be83e1b6de9aa5440bb24bb8b395df5023:eyJzZWxlY3RlZExpbmVDb3VudCI6MywiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiZjdkNjU1ODVhNGNkNTAxM2MxM2ZlODY3ZjZmZTY0ZTIxOWE1ODAzODVkMGM0MTkwNjFkZjFmYTFmZjlkNzBkZCIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiZDZmMWUyYTQ2NDMyZThmNTRlYjI5ZWUyNmUwZjUyMzgwZDNkZjk5MWE3ZmNjYzRjYmQ3NmI5YTg5ZTE3ZTY0NyIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiYTk0NDg4MmE1ODdiNjYyNGIxZWQ5NDJmYmVmZTlmNDcxN2M3ZjY0OGExZWNjMGUyMGNhNzA2MmIyOGFlMmMyZSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiMjgxMjQyMjI0ZjMyNGQ5ZTZhZWQ5YTZkNzRiMzBiODliNjAyZmExMWY1NTQyNzIxMDNkYzg3ZTdiN2RiMmVmOCJ9"
+        },
+        {
+          "resource": "repo://billparse/spec.py#L44-L78",
+          "version": "repo-lines-v1:sha256:9b8519fdc76cd41a2d4b76f11557c2f0b8022908e1157cdfc92a3cef213bf592:eyJzZWxlY3RlZExpbmVDb3VudCI6MzUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjVkMTQ2MjI2OGY1NzU3MzNlMTI5MmNkNzQ2ZWZhMDExMmRhYTRlNTE5NjkzODlmYTVhNzRhNGYwMTlmZDI3YjUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImU4YTQ5N2MzYjRmMTE4MTUyZjBmMWUzOWViMmU3YjhjNTIwMTgxYjc5ZDIyMzM5ZmRiMzM2ZjdjNzQ4ZDJkN2IiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImRkODBiZTZhZDFmODA0Y2QxOWY1YmU4OWNjNDA4ZGQyZDMwYjE0YjAyYWQwZWJlMmM3MDNkODkzZmJjM2VhMmUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjBhN2E0NmNmYjJlMjJjMDFlMjdmMWFlODVmYjcyYjlhMjNmZjYyYTk2YzllZWFlNGU2OTI3ZjczODlkNmI3M2QifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_c7ae5a40069846019622c29c88541715",
+      "statement": "Built-in specs are loaded from specs/builtin/*.json when a Store is created; a person can disable a built-in through spec_status.json in the data directory.",
+      "evidence": [
+        {
+          "resource": "repo://billparse/store.py#L60-L88",
+          "version": "repo-lines-v1:sha256:dfdc02587ac8b1e50ab3ffb4f6cd300dc853772ebc7dc22a1b1d9a2d52d36875:eyJzZWxlY3RlZExpbmVDb3VudCI6MjksImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjYyM2E2MDEyNWI2ZGJlMWQzMDBlYjIwNjgzMzUzNjRmM2U5ODFkOWI2OGJhNzRhMjc2MDIyYzA5ZTQxODYzOWYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijc1MDQ0Yjk5NDlmZmRiMWYzYTVkZDMzMjgwM2VlNzI5MjI2YTYwYjhhZDZlYzQ3MWQ2NTcwZGI1NDBiMzI0YTIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjI5NTRjZDA2YTIyZjhmODU4MTVhZjNmM2MyZDkxZDFkODZiYTIwMmIyMTc3MDY0YzQ5NGU3ZDk1MTFlNWNhZjgiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjBiNTQ5NTFlYmU5Y2RmMTdhZWJjZTE1MDcxMzMwZTA3MGUzNDhkZmUyYWNkYmIyMWEzN2I2YWJjZmMwZjhkZjMifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_4bec4ce9fc2b4e6481ecc12a03e9aae4",
+      "statement": "Specs can only reference transforms registered in TRANSFORMS; hand-written ones go in CUSTOM_TRANSFORMS and the LLM cannot create them.",
+      "evidence": [
+        {
+          "resource": "repo://billparse/transforms.py#L1-L5",
+          "version": "repo-lines-v1:sha256:eb68b73742010d02e9db82d8faab46eb99c2685b7e200c5c25a5d5bfdc6fa3ae:eyJzZWxlY3RlZExpbmVDb3VudCI6NSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiYTgxZTViZWQ2NTZmMDVjYmM3ZDQxNGQ3NDkwMzdmODY2NmViOWZmZWEwMGM3MTNlMDBkYTEwMjliMDEzNDU2YiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiYTMwM2VjZGQ0YTRkMTBmMTljNzNmZDQyZmQxMjQzN2ZkMzM1NGE4MjY4MTYwNWRhNTI1NWE5N2EzOTA2OGRiYiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjAsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiZTNiMGM0NDI5OGZjMWMxNDlhZmJmNGM4OTk2ZmI5MjQyN2FlNDFlNDY0OWI5MzRjYTQ5NTk5MWI3ODUyYjg1NSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiNTViNmU4NzA2YjQzMDQ3ZjJhNmRiNjdmMTMyNjM4NTk1NjA0ZTY3ZjM2OTY2ODc2Y2UwMTU4ZjAwNTNlNmJkMSJ9"
+        },
+        {
+          "resource": "repo://billparse/transforms.py#L190-L197",
+          "version": "repo-lines-v1:sha256:09cf4637dd0c522b37ef557ce35ac95d715b80d2b3db3965f4abdc48fa08f031:eyJzZWxlY3RlZExpbmVDb3VudCI6OCwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiYjE4MzYxNjY4YWFkNjBiMDFjZmU1NWQ2ODVhODMwMTdhMjBmNjExNDdmYjYwYmNjYWEwZTdjMTE5Y2Y3YWM1NCIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMGQxYzY4ODA4Nzk1NmNiZTI5MjFjNDc5MTBjMjdkNTZmZDlmNmI4OGRjMDBhMzNkNmUzOTEyZmQ3MDI2NWNhZiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiZGQyMWRmM2RmNWVkMjlkZGI5ZmYzZjE3MzQ4ODMzZGNlMDU4YjE1ZTBlZGMwZmExZjMxNTFlNDhiMzcxOGVjOSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiNWQ2MGI2ZWYzZWFhNDQ3NWRiOGE2NjljZjhlODUzYmJmNDNmZjUwNTJjOTYyOGFjZTNmYWM1ZjZjOWY3YmQzZiJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_026ca5f994ce4f18b482138238831da8",
+      "statement": "Without explicit transforms, numeric fields use number, date fields use date, charge_type uses strip and charge_type, and other fields use strip.",
+      "evidence": [
+        {
+          "resource": "repo://billparse/transforms.py#L219-L226",
+          "version": "repo-lines-v1:sha256:61c666c5d48113b2686029cdf4c0db62514ca1f72a28795b1a4abe7b5ae09e15:eyJzZWxlY3RlZExpbmVDb3VudCI6OCwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiNmEzOGQ4YTNiNGQ0M2I5ZWRmYjRjNWQ0NDdhZjA3OWI5YWFmY2ZlMDMxMWM5YTVlNmE1YjZmZDk1MTU3ODFkMyIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiOTUxOTUwNGQ3NzAzMzY5ZjcxOGI1ODUwNWFmOGNhM2U0Yzk4OWVmMTE5YTAwYTVjNTM0ZjY0YzUyZTg3MzQ0YiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiMjUyNTliNjU5MDc1OGY4OWUzNTAzNGRmY2Q2N2JiNDAyMjBkMzFjZjVmNDM5NjM3YmNlOGMwYjkwOTQ0MzVlMSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiMmIyOTVkMjYwNWE4NTMwMTRjMjQ3NzgzYjQ0YjAwMzE1NDhhNmUyN2M0OTgzNjFmYWNkYzJhNTY4NDBlODYzYiJ9"
+        }
+      ]
+    }
+  ],
+  "verification": {
+    "by": "openwiki/0.7.2",
+    "at": "2026-10-25T20:19:27.415Z"
+  }
+}

@@ -119,6 +119,44 @@
    "from": [
     "InvoiceId"
    ]
+  },
+  "contracted_cost": {
+   "from": [
+    "ContractedCost"
+   ]
+  },
+  "line_type_raw": {
+   "from": [
+    "ChargeCategory"
+   ],
+   "t": [
+    "strip"
+   ]
+  },
+  "coverage": {
+   "from": [
+    "PricingCategory"
+   ],
+   "t": [
+    "strip",
+    "coverage"
+   ]
+  },
+  "commitment_type": {
+   "from": [
+    "CommitmentDiscountType"
+   ],
+   "t": [
+    "strip"
+   ]
+  },
+  "commitment_status": {
+   "from": [
+    "CommitmentDiscountStatus"
+   ],
+   "t": [
+    "strip"
+   ]
   }
  }
 }

@@ -27,7 +27,10 @@
   "provider": "azure",
   "kind": "cost_lines",
   "cost_basis": "billed",
-  "format": "Azure cost and usage details: EA, MCA, MPA, CSP, pay-as-you-go (actual or amortized)"
+  "format": "Azure cost and usage details: EA, MCA, MPA, CSP, pay-as-you-go (actual or amortized)",
+  "post": [
+   "azure_amortization"
+  ]
  },
  "columns": {
   "service_raw": {
@@ -112,6 +115,40 @@
    "from": [
     "InvoiceId"
    ]
+  },
+  "pricing_model": {
+   "from": [
+    "PricingModel"
+   ],
+   "t": [
+    "strip"
+   ]
+  },
+  "coverage": {
+   "from": [
+    "PricingModel"
+   ],
+   "t": [
+    "strip",
+    "coverage"
+   ]
+  },
+  "line_type_raw": {
+   "from": [
+    "ChargeType"
+   ],
+   "t": [
+    "strip"
+   ]
+  },
+  "list_cost": {
+   "from": [
+    "paygCostInBillingCurrency"
+   ]
   }
+ },
+ "derive": {
+  "list_cost": "coalesce(list_cost, col(\"PayGPrice\") * quantity * fillna(col(\"ExchangeRatePricingToBilling\"), 1))",
+  "contracted_cost": "col(\"UnitPrice\") * quantity * fillna(col(\"ExchangeRatePricingToBilling\"), 1)"
  }
 }
