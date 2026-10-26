@@ -77,7 +77,7 @@ EXPECTED = {
     "aws_cur_legacy.csv.gz": ("builtin", 26.24), "aws_cur2_product_map.csv.gz": ("builtin", 26.24),
     # task 03: every attribute, ID and commitment column filled
     "aws_cur_legacy_full.csv.gz": ("builtin", 26.24), "aws_cur2_flat.csv.gz": ("builtin", 26.24),
-    "aws_cur2_map.csv.gz": ("builtin", 26.24), "azure_usage_full.csv": ("builtin", 44.46),
+    "aws_cur2_map.csv.gz": ("builtin", 26.24), "azure_usage_full.csv": ("builtin", 55.98),
     "focus_full.parquet": ("builtin", 18.14), "gcp_export_full.json": ("builtin", 186.00),
 }
 

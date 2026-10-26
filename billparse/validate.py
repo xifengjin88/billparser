@@ -119,6 +119,7 @@ class RowStats:
     total: float = 0.0
     non_tax: float = 0.0
     label_cost: float = 0.0         # |cost| of lines with a service or description
+    label_rows: int = 0             # lines with a cost and a service or description
     abs_cost: float = 0.0
     line_math: bool = False         # the rows have quantity, unit price and cost
     lm_n: int = 0                   # lines line math tests
@@ -149,6 +150,7 @@ class RowStats:
         lab = (_label_series(df).str.len().fillna(0) > 0).astype(bool)
         cabs = df["billed_cost"].abs().fillna(0)
         self.label_cost += float(cabs[lab].sum())
+        self.label_rows += int((lab & df["billed_cost"].notna()).sum())
         self.abs_cost += float(cabs.sum())
         need = {"quantity", "unit_price", "billed_cost"}
         if need <= set(df.columns):
@@ -179,7 +181,7 @@ class RowStats:
                 ["Credit", "Refund", "Adjustment", "Negation"])).sum())
 
     def merge(self, o: RowStats) -> None:
-        for f in ("rows", "cost_rows", "total", "non_tax", "label_cost", "abs_cost", "lm_n", "lm_ok", "ratio_n",
+        for f in ("rows", "cost_rows", "total", "non_tax", "label_cost", "label_rows", "abs_cost", "lm_n", "lm_ok", "ratio_n",
                   "ratio_sum", "ratio_sq", "bad_dates", "negatives"):
             setattr(self, f, getattr(self, f) + getattr(o, f))
         self.line_math |= o.line_math
@@ -243,7 +245,15 @@ def _resolution(resolved_share: float | None) -> list[Check]:
 
 
 def _labels(s: RowStats) -> Check:
-    """Spend we can't attribute to anything is not useful: require a label on most of the cost."""
+    """Spend we can't attribute to anything is not useful: require a label on most of the cost. When every line costs
+    0 (free Marketplace usage, a month with no charge), on most of the lines."""
+    if not s.abs_cost and s.cost_rows:
+        share = s.label_rows / s.cost_rows
+        if share >= 0.9:
+            return Check("labels", "pass", f"Every line costs 0; {share:.0%} of the lines have a service or "
+                         "description", 0.0)
+        return Check("labels", "fail", f"Every line costs 0, and only {share:.0%} of the lines have a service or "
+                     "description label", -0.35)
     share = s.label_cost / s.abs_cost if s.abs_cost else 0.0
     if share >= 0.9:
         return Check("labels", "pass", f"{share:.0%} of cost has a service or description", 0.0)

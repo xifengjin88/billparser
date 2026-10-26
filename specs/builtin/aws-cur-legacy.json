@@ -141,11 +141,6 @@
     "product/deploymentOption"
    ]
   },
-  "pricing_model": {
-   "from": [
-    "pricing/term"
-   ]
-  },
   "commitment_id": {
    "from": [
     "reservation/ReservationARN",

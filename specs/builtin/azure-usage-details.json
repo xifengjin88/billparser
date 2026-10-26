@@ -184,6 +184,26 @@
      "json_get": "ServiceType"
     }
    ]
+  },
+  "_meter_subcategory": {
+   "from": [
+    "MeterSubCategory"
+   ]
+  },
+  "_product_name": {
+   "from": [
+    "ProductName"
+   ]
+  },
+  "_image_type": {
+   "from": [
+    "AdditionalInfo"
+   ],
+   "t": [
+    {
+     "json_get": "ImageType"
+    }
+   ]
   }
  },
  "derive": {

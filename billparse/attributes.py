@@ -164,6 +164,53 @@ def azure_sizes(rows: pd.DataFrame) -> int:
     return len(idx)
 
 
+AZURE_OS_COLUMNS = ("_meter_subcategory", "_product_name", "_image_type")     # internal: azure-usage-details.json
+BYOL = re.compile(r"windows[\s_]*(server|client)[\s_]*byol", re.I)
+
+
+def _azure_os(key: str) -> tuple[str | None, str | None]:
+    """(operating system, license model) of an Azure VM line from its meter sub-category, product name and image type
+    (Microsoft, "Understanding Azure virtual machine usage"): a compute meter is Windows or non-Windows; an image type
+    Windows_Server BYOL or Windows_Client BYOL is Azure Hybrid Benefit (Windows, billed at the non-Windows rate)."""
+    sub, product, image = key.split(SEP)
+    meter = f"{sub} {product}".strip()
+    if BYOL.search(image):
+        return "Windows", "Bring your own license"
+    if re.search(r"\bwindows\b", meter, re.I):
+        return "Windows", "License included"
+    if re.search(r"red\s*hat|\brhel\b", f"{image} {meter}", re.I):
+        return "RHEL", None
+    if re.search(r"\bsuse\b|\bsles\b", f"{image} {meter}", re.I):
+        return "SUSE", None
+    return ("Linux", None) if meter or image else (None, None)
+
+
+def azure_os(rows: pd.DataFrame) -> int:
+    """The operating system and license model of Azure VM lines, when no column gave them. Once per distinct
+    (sub-category, product, image type). The internal columns are removed. Returns the rows filled."""
+    cols = [c for c in AZURE_OS_COLUMNS if c in rows]
+    if not cols:
+        return 0
+    parts = [map_unique(rows[c], lambda v: v if isinstance(v, str) else "") if c in rows
+             else pd.Series("", index=rows.index) for c in AZURE_OS_COLUMNS]
+    for c in cols:                                   # the caller's frame is changed in place
+        del rows[c]
+    if "service_raw" not in rows:
+        return 0
+    vm = map_unique(rows["service_raw"], lambda v: bool(AZURE_VM.search(v)) if isinstance(v, str) else False)
+    key = parts[0] + SEP + parts[1] + SEP + parts[2]
+    found = map_unique(key[vm.astype(bool)], _azure_os)
+    n = 0
+    for i, col in enumerate(("operating_system", "license_model")):
+        vals = found.map(lambda f, i=i: f[i])
+        if col not in rows:
+            rows[col] = None
+        todo = vals.notna() & rows.loc[vals.index, col].isna()
+        rows.loc[todo[todo].index, col] = vals[todo]
+        n = max(n, int(todo.sum()))
+    return n
+
+
 def extract(rows: pd.DataFrame, warnings: list[str] | None = None) -> list[str]:
     """Fill empty attribute columns from each line's text (description, service label, context path). Returns the
     fields it filled. More than MAX_UNIQUE_TEXTS distinct texts (a resource ID used as the description): the step is
@@ -171,6 +218,7 @@ def extract(rows: pd.DataFrame, warnings: list[str] | None = None) -> list[str]:
     if rows.empty:
         return []
     azure_sizes(rows)
+    azure_os(rows)
 
     def text_of(c: str) -> pd.Series:
         if c not in rows:
@@ -201,6 +249,8 @@ def extract(rows: pd.DataFrame, warnings: list[str] | None = None) -> list[str]:
             if f not in rows:
                 rows[f] = None
             empty = rows[f].isna()
+            if f == "pricing_model" and "coverage" in rows:    # a printed coverage says how the line was priced:
+                empty &= rows["coverage"].isna()             # the words of the line never contradict it
             if empty.any():
                 rows.loc[empty, f] = vals[empty]
                 filled.append(f)

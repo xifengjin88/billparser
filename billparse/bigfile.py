@@ -40,6 +40,7 @@ from . import contract, coverage
 from .analyze import resolve_service_sums
 from .attributes import extract as extract_attributes
 from .attributes import normalize_regions
+from .contract import shared_value
 from .docmodel import HEADER_SCAN_ROWS, TEXT_EXT, Document, Region, _frame, _tabular, _unique_headers, detect_header_row
 from .spec import HOW, needed_columns, run
 from .transforms import CANONICAL, DATES, NUMERIC
@@ -629,8 +630,7 @@ def roll(df: pd.DataFrame) -> pd.DataFrame:
         return pd.DataFrame()
     df = df.copy()
     if "_month" not in df:
-        d = pd.to_datetime(df["charge_start"], errors="coerce") if "charge_start" in df else None
-        df["_month"] = (d.dt.year * 100 + d.dt.month).astype("Int64").astype("string") if d is not None else None
+        df["_month"] = contract.month_of(df["charge_start"]) if "charge_start" in df else ""
     if "_lines" not in df:
         df["_lines"] = 1
     keys = [k for k in ROLL_KEYS if k in df]
@@ -656,6 +656,9 @@ def roll(df: pd.DataFrame) -> pd.DataFrame:
         parts.append(g[[last]].max().rename(columns={last: "_last_start"}))
     if "charge_end" in df:
         parts.append(g[["charge_end"]].max())
+    prices = [c for c in contract.UNIT_PRICES if c in df]
+    if prices:
+        parts.append(pd.DataFrame({c: shared_value(df, [df[k] for k in keys], c) for c in prices}))
     hows = [c for c in df.columns if str(c).startswith(HOW)]
     if hows:
         rank = pd.DataFrame({c: df[c].map(HOW_RANK) for c in hows}, index=df.index)

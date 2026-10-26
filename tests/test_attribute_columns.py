@@ -195,3 +195,90 @@ def test_the_web_app_shows_the_new_fields(client):
     shown = {f["field"] for f in detail["fields"]}
     assert {"sku_id", "sku_price_id", "resource_id", "tenancy", "license_model", "pricing_term", "operation",
             "list_unit_price"} <= shown, shown
+
+
+# ---------------------------------------------------------------- task 03 review fixes
+ROLLED = ("operation", "tenancy", "license_model", "pricing_term", "list_unit_price")
+
+
+def _rolled_doc(tmp_path, monkeypatch, name: str, large: bool) -> Document:
+    import billparse.contract as contract_mod
+    if large:
+        monkeypatch.setenv("LARGE_FILE_MB", "0.000001")
+        monkeypatch.setenv("CHUNK_ROWS", "4")
+    else:
+        monkeypatch.setattr(contract_mod, "MAX_CHARGES", 3)             # the normal path rolls up too
+    p = _pipe(tmp_path, "large" if large else "rolled")
+    r = p.parse_file(FILES / name)
+    return Document.model_validate_json(p.store.part(r["sha256"], "doc"))
+
+
+@pytest.mark.parametrize("large", [True, False])
+def test_rolled_up_charges_keep_the_new_fields(tmp_path, monkeypatch, large):
+    doc = _rolled_doc(tmp_path, monkeypatch, "aws_cur_legacy_full.csv.gz", large)
+    assert any(c.attributes.get("lines", 1) > 1 for c in doc.charges)          # lines were rolled up
+    ec2 = next(c for c in doc.charges if v(c.usage_type) == "USE1-BoxUsage:m5.xlarge")
+    for f in ROLLED:
+        assert getattr(ec2, f) is not None, f
+    assert v(ec2.list_unit_price) == Decimal("0.192")                          # all its lines agree
+    fee = next(c for c in doc.charges if v(c.line_type_raw) == "RIFee")
+    assert v(fee.purchase_option) == "No Upfront"
+    assert ec2.resource_id is None or not large                                # resource_id is no roll-up key
+
+
+def test_a_unit_price_the_lines_disagree_on_is_left_empty():
+    import billparse.contract as contract_mod
+    rows = pd.DataFrame({"billed_cost": [1.0, 2.0, 3.0], "service_raw": ["A", "A", "B"],
+                         "list_unit_price": [0.1, 0.2, 0.3], "charge_start": pd.to_datetime(["2026-09-01"] * 3)})
+    out = contract_mod._rollup(rows).set_index("service_raw")
+    assert pd.isna(out.loc["A", "list_unit_price"]) and out.loc["B", "list_unit_price"] == 0.3
+
+
+def test_the_normal_roll_up_keeps_months_apart():
+    import billparse.contract as contract_mod
+    rows = pd.DataFrame({"billed_cost": [1.0, 2.0], "service_raw": ["A", "A"],
+                         "charge_start": pd.to_datetime(["2026-08-31", "2026-09-01"])})
+    assert len(contract_mod._rollup(rows)) == 2
+
+
+@pytest.mark.parametrize("name", [*AWS, "focus_full.parquet"])
+def test_pricing_model_never_contradicts_a_printed_coverage(pipe, name):
+    _, doc = parse(pipe, name)
+    covered = [c for c in doc.charges if v(c.coverage) in ("reserved", "savings_plan")]
+    assert covered
+    assert not any(str(v(c.pricing_model) or "").lower().replace(" ", "") in ("ondemand", "on-demand")
+                   for c in covered), [(v(c.description), v(c.pricing_model)) for c in covered]
+    if name in AWS:
+        assert all(c.pricing_model is None for c in doc.charges)              # the term is pricing_term
+        assert {v(c.pricing_term) for c in doc.charges if c.pricing_term} <= {"OnDemand", "Reserved"}
+
+
+def test_azure_operating_system_and_license(pipe):
+    _, doc = parse(pipe, "azure_usage_full.csv")
+    by = {}
+    for c in doc.charges:
+        by.setdefault(str(v(c.description)), c)
+    assert (v(by["D4s v5"].operating_system), v(by["D4s v5"].license_model)) == ("Windows", "License included")
+    assert (v(by["E8ds v5"].operating_system), v(by["E8ds v5"].license_model)) == ("Windows", "Bring your own license")
+    assert v(by["B2ms"].operating_system) == "Linux" and v(by["D4s v5 Spot"].operating_system) == "Linux"
+    assert by["P10 Disks"].operating_system is None                            # not a VM
+    assert not any(k.startswith("_") for c in doc.charges for k in c.attributes)
+
+
+@pytest.mark.parametrize("name", ["aws_cur_legacy_full.csv.gz", "azure_usage_full.csv"])
+def test_commitment_types_from_coverage(pipe, name):
+    _, doc = parse(pipe, name)
+    assert sorted(str(v(k.commitment_type)) for k in doc.commitments) == ["reserved_instance", "savings_plan"]
+
+
+def test_a_file_whose_lines_all_cost_zero_is_not_contradicted(pipe, tmp_path):
+    # free AWS Marketplace usage: every line has a label and costs 0; the labels check counts lines, not cost
+    f = tmp_path / "free.csv"
+    head = "lineItem/UsageAccountId,lineItem/LineItemType,lineItem/UsageStartDate,lineItem/ProductCode,lineItem/UsageType," \
+           "lineItem/UsageAmount,lineItem/UnblendedRate,lineItem/UnblendedCost,lineItem/LineItemDescription,product/ProductName"
+    rows = [f"111122223333,Usage,2026-09-0{d}T00:00:00Z,6zyxg3qnm2sosgh886dzx3gn8,SoftwareUsage:vcpu,24,0.0,0.0,"
+            f"AWS Marketplace software usage,Expert" for d in range(1, 6)]
+    f.write_text("\n".join([head, *rows]) + "\n")
+    r = pipe.parse_file(f)
+    labels = next(c for c in r["checks"] if c["name"] == "labels")
+    assert labels["status"] == "pass" and r["completeness"] != "contradicted", r["checks"]

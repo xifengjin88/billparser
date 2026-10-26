@@ -46,7 +46,26 @@ HOW = "_how:"                   # per row: how a value was made ("printed", "der
 # the dimensions a roll-up keeps: lines that differ in none of them are one charge
 ROLLUP_KEYS = ["service_code", "service_name", "service_raw", "region", "account_id", "charge_type", "pricing_model",
                "instance_type", "operating_system", "database_engine", "deployment_option", "usage_type", "unit",
-               "commitment_id", "currency", "provider", "coverage", "line_type_raw", "sku_id", "sku_price_id", "meter_id"]
+               "commitment_id", "currency", "provider", "coverage", "line_type_raw", "sku_id", "sku_price_id", "meter_id",
+               "operation", "tenancy", "license_model", "pricing_term", "purchase_option"]   # never resource_id: one per line
+UNIT_PRICES = ("list_unit_price", "contracted_unit_price")    # kept on a rolled line when all its lines agree
+
+
+def month_of(dates: pd.Series) -> pd.Series:
+    """The month of each date as text ("202609"), "" when there is none: lines of different months are never one
+    charge (a roll-up keeps the months apart, on both paths)."""
+    d = pd.to_datetime(dates, errors="coerce")
+    return (d.dt.year * 100 + d.dt.month).astype("Int64").astype("string").fillna("")
+
+
+def shared_value(df: pd.DataFrame, by, col: str) -> pd.Series:
+    """Per group: the value when every line of the group has it and they all agree, else empty. Works on lines and on
+    lines rolled up before (their _lines count; a rolled value that is empty means the lines did not agree)."""
+    v = pd.to_numeric(df[col], errors="coerce")
+    lines = df["_lines"] if "_lines" in df else pd.Series(1, index=df.index)
+    g = pd.DataFrame({"v": v, "n": lines.where(v.notna(), 0), "all": lines}).groupby(by, sort=False, dropna=False)
+    lo, hi, n, total = g["v"].min(), g["v"].max(), g["n"].sum(), g["all"].sum()
+    return lo.where((lo == hi) & (n == total))
 
 
 # ---------------------------------------------------------------- cites
@@ -199,9 +218,12 @@ def _feedback(summary: dict) -> list[str]:
 
 
 def _rollup(rows: pd.DataFrame) -> pd.DataFrame:
-    """Lines alike in every dimension (ROLLUP_KEYS) as one line: their cost and quantity added, how many counted."""
-    keys = [k for k in ROLLUP_KEYS if k in rows]
+    """Lines alike in every dimension (ROLLUP_KEYS) and month as one line: their cost and quantity added, how many
+    counted, a unit price only when all the lines agree on it."""
     df = rows.copy()
+    if "charge_start" in df:
+        df["_month"] = month_of(df["charge_start"])
+    keys = [k for k in [*ROLLUP_KEYS, "_month"] if k in df]
     for k in keys:
         df[k] = df[k].astype("string").fillna("")
     df["billed_cost"] = pd.to_numeric(df["billed_cost"], errors="coerce").fillna(0.0)
@@ -225,10 +247,12 @@ def _rollup(rows: pd.DataFrame) -> pd.DataFrame:
     if "description" in df:
         agg["description"] = "first"
     out = df.groupby(keys, dropna=False, sort=False).agg(agg)
+    for c in [c for c in UNIT_PRICES if c in df]:
+        out[c] = shared_value(df, [df[k] for k in keys], c)
     if "_lines" not in df:
         out["_lines"] = df.groupby(keys, dropna=False, sort=False).size()
-    out = out.reset_index()
-    for k in keys:
+    out = out.reset_index().drop(columns=["_month"], errors="ignore")
+    for k in [k for k in keys if k != "_month"]:
         out[k] = out[k].replace("", None)
     return out.sort_values("billed_cost", key=lambda s: -s.abs()).reset_index(drop=True)
 
@@ -377,6 +401,24 @@ def _region(r: dict, loc: Locator, cite: Cite):
     return cv(code, at)
 
 
+COMMITMENT_OF_COVERAGE = {"savings_plan": "savings_plan", "reserved": "reserved_instance"}
+
+
+def _commitment_kind(cid: str, charges: list[Charge]) -> str:
+    """savings_plan | reserved_instance | commitment: from the lines' coverage, else the ID (an AWS ARN names it),
+    else the lines' words."""
+    covered = {str(c.coverage.value) for c in charges if c.coverage} & set(COMMITMENT_OF_COVERAGE)
+    if len(covered) == 1:
+        return COMMITMENT_OF_COVERAGE[covered.pop()]
+    low = cid.lower()
+    if "savingsplan" in low:
+        return "savings_plan"
+    if "reserved-instances" in low or ":ri:" in low or "reservation" in low:
+        return "reserved_instance"
+    text = " ".join(str(c.pricing_model.value) if c.pricing_model else str(c.description.value) for c in charges).lower()
+    return "savings_plan" if "saving" in text else "reserved_instance" if "reserv" in text else "commitment"
+
+
 def _commitments(charges: list[Charge]) -> list[Commitment]:
     groups: dict[str, list[Charge]] = {}
     for c in charges:
@@ -384,8 +426,7 @@ def _commitments(charges: list[Charge]) -> list[Commitment]:
             groups.setdefault(str(c.commitment_id.value), []).append(c)
     out = []
     for i, (cid, cs) in enumerate(groups.items(), 1):
-        text = " ".join(str(c.pricing_model.value) if c.pricing_model else str(c.description.value) for c in cs).lower()
-        kind = "savings_plan" if "saving" in text else "reserved_instance" if "reserv" in text else "commitment"
+        kind = _commitment_kind(cid, cs)
         amount = sum((c.cost.value for c in cs if c.cost and c.kind.value == "commitment_fee"), Decimal(0))
         out.append(Commitment(id=f"k{i}", commitment_type=cv(kind, cs[0].cite, "inferred", None, "rule"),
                               commitment_id=cv(cid, cs[0].cite), amount=cv(amount, cs[0].cite, "inferred") if amount else None,

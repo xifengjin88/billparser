@@ -50,7 +50,7 @@ def check_spec(spec: dict) -> None:
     if extra:
         raise SpecError(f"Unknown spec keys: {sorted(extra)}")
     for fld, c in (spec.get("columns") or {}).items():
-        if fld not in CANONICAL:
+        if fld not in CANONICAL and not fld.startswith("_"):      # "_name": an internal field a step reads
             raise SpecError(f"Unknown canonical field: {fld}")
         for step in c.get("t", []) or []:
             name = step if isinstance(step, str) else next(iter(step))

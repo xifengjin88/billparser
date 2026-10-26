@@ -315,24 +315,30 @@ def azure_usage_full() -> float:
     vm = "/subscriptions/aaaaaaaa-1111-2222-3333-444444444444/resourceGroups/web/providers/Microsoft.Compute/virtualMachines/"
     rows = []
 
-    def row(d, cat, meter, model, q, payg, unit, eff, meter_id, info=None, **extra):
+    def row(d, cat, meter, model, q, payg, unit, eff, meter_id, info=None, sub="", **extra):
         return {"SubscriptionId": "aaaaaaaa-1111-2222-3333-444444444444", "SubscriptionName": "Prod",
-                "Date": d.strftime("%m/%d/%Y"), "MeterCategory": cat, "MeterSubCategory": "", "MeterName": meter,
+                "Date": d.strftime("%m/%d/%Y"), "MeterCategory": cat, "MeterSubCategory": sub, "MeterName": meter,
+                "ProductName": f"{cat} {sub} - {meter} - US East".replace("  ", " "),
                 "MeterId": meter_id, "ProductId": "DZH318Z0BQ4L", "Quantity": q, "PayGPrice": payg, "UnitPrice": unit,
                 "EffectivePrice": eff, "CostInBillingCurrency": round(q * eff, 6), "UnitOfMeasure": "1 Hour",
                 "ChargeType": "Usage", "PricingModel": model, "ResourceLocation": "eastus", "BillingCurrencyCode": "USD",
                 "AdditionalInfo": json.dumps(info) if info else "", **extra}
     for d in DAYS[:3]:
-        rows.append(row(d, "Virtual Machines", "D4s v5", "OnDemand", 24, 0.20, 0.18, 0.18,
-                        "0f1e2d3c-0000-1111-2222-333344445555", {"ServiceType": "Standard_D4s_v5", "VCPUs": 4},
-                        ResourceId=vm + "web-1"))
+        # a Windows meter (license included), a Linux Spot meter, a Linux meter running Windows with Azure Hybrid
+        # Benefit (image type Windows_Server BYOL), and an Ubuntu image
+        rows.append(row(d, "Virtual Machines", "D4s v5", "OnDemand", 24, 0.38, 0.34, 0.34,
+                        "0f1e2d3c-0000-1111-2222-333344445555",
+                        {"ImageType": "", "ServiceType": "Standard_D4s_v5", "UsageType": "ComputeHR"},
+                        sub="Dsv5 Series Windows", ResourceId=vm + "web-1"))
         rows.append(row(d, "Virtual Machines", "D4s v5 Spot", "Spot", 24, 0.20, 0.05, 0.05,
-                        "0f1e2d3c-0000-1111-2222-333344445556", ResourceId=vm + "batch-1"))
+                        "0f1e2d3c-0000-1111-2222-333344445556", sub="Dsv5 Series", ResourceId=vm + "batch-1"))
         rows.append(row(d, "Virtual Machines", "E8ds v5", "Reservation", 24, 0.50, 0.45, 0.30,
-                        "0f1e2d3c-0000-1111-2222-333344445557", {"ServiceType": "Standard_E8ds_v5"}, ReservationId=rid,
-                        ResourceId=vm + "db-1"))
+                        "0f1e2d3c-0000-1111-2222-333344445557",
+                        {"ImageType": "Windows_Server BYOL", "ServiceType": "Standard_E8ds_v5", "UsageType": "ComputeHR"},
+                        sub="Edsv5 Series", ReservationId=rid, ResourceId=vm + "db-1"))
         rows.append(row(d, "Virtual Machines", "B2ms", "SavingsPlan", 24, 0.08, 0.08, 0.06,
-                        "0f1e2d3c-0000-1111-2222-333344445558", BenefitId=sp, ResourceId=vm + "tools-1"))
+                        "0f1e2d3c-0000-1111-2222-333344445558", {"ImageType": "Canonical", "UsageType": "ComputeHR"},
+                        sub="BS Series", BenefitId=sp, ResourceId=vm + "tools-1"))
         rows.append(row(d, "Storage", "P10 Disks", "OnDemand", 1, 0.66, 0.66, 0.66,
                         "0f1e2d3c-0000-1111-2222-333344445559",
                         ResourceId="/subscriptions/aaaaaaaa-1111-2222-3333-444444444444/resourceGroups/web/providers/"
