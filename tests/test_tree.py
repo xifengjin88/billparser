@@ -280,3 +280,32 @@ def test_microsoft_short_product_names_find_their_service():
     assert azure_head("Az DDOS Prot-NW Prot Plan-1 Hr") == "azure ddos protection"
     assert azure_head("Az SQL DB Sgl/El Pool Gen Pur-Comp") == "azure sql database single elastic pool general purpose"
     assert azure_head("Az P/L-Std") == "azure private link" and azure_head("VM Dadsv5 Series-D4ads") == "virtual machines dadsv5 series"
+
+
+def test_a_service_whose_lines_net_to_zero_keeps_its_name():
+    """An AWS invoice prints a service total of $0.00 when an EDP discount or credits cancel its charges
+    ("Amazon Bedrock USD 0.00" over "Charges 0.01", "Discount -0.01", "Tax 0.00"): its lines are still its lines."""
+    def r(i: int, x: float, text: str, amount: str) -> Row:
+        return Row([Cell(text, x, x + 200), Cell(amount, 400, 460)], i, page=1)
+    rows = [r(0, 36.0, "Amazon Web Services, Inc. charges", "USD 300.23"),
+            r(1, 49.5, "Amazon Route 53", "USD 300.23"),
+            r(2, 59.5, "Charges", "USD 315.40"),
+            r(3, 59.5, "Discount (Enterprise Discount Program)", "-USD 58.60"),
+            r(4, 59.5, "Tax", "USD 43.43"),
+            r(5, 49.5, "Amazon Bedrock", "USD 0.00"),
+            r(6, 59.5, "Charges", "USD 0.01"),
+            r(7, 59.5, "Discount (Enterprise Discount Program)", "-USD 0.01"),
+            r(8, 59.5, "Tax", "USD 0.00"),
+            r(9, 49.5, "Amazon GuardDuty", "USD 0.00"),
+            r(10, 59.5, "Charges", "USD 0.53"),
+            r(11, 59.5, "Discount (Enterprise Discount Program)", "-USD 0.13"),
+            r(12, 59.5, "Credits", "-USD 0.40")]
+    t = tree.read([Region("page", "page1", rows)], {})
+    under = {(line["label"], line["amount"]): line["path"] for line in t.lines}
+    assert under[("Charges", 0.01)][-1] == "Amazon Bedrock"
+    assert under[("Discount (Enterprise Discount Program)", -0.01)][-1] == "Amazon Bedrock"
+    assert under[("Charges", 0.53)][-1] == "Amazon GuardDuty"
+    assert under[("Credits", -0.4)][-1] == "Amazon GuardDuty"
+    assert under[("Charges", 315.4)][-1] == "Amazon Route 53"
+    assert not any(line["label"].startswith("Amazon") for line in t.lines)   # a service total is not a line
+    assert t.evidence["reconcile"]["proved"] and t.evidence["unexplained_count"] == 0
