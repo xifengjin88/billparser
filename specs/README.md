@@ -7,11 +7,12 @@ Built-in specs live here in `builtin/`. Learned specs are written to `store/spec
 |---|---|
 | `id`, `version`, `trust` | `builtin`, `verified` or `candidate`. Built-ins never change automatically. |
 | `detect` | `required` headers, `any_of` groups, `forbid`, `any_regex` `{pattern, min}`. Header matching ignores case and punctuation. |
-| `meta` | `provider`, `kind` (`cost_lines`, `price_sheet`, `recommendations`), `cost_basis`, `format`, `notes`, `post` (steps run after the columns and derives: `azure_amortization`, see `billparse/costs.py`). |
+| `meta` | `provider`, `kind` (`cost_lines`, `price_sheet`, `recommendations`), `cost_basis`, `format`, `notes`, `post` (steps run after the columns and derives: `azure_amortization`, see `billparse/costs.py`), `exact_columns` (true for a fixed provider format such as CUR: a column the spec does not name is kept as the line's extra text and never guessed into a field from its values). |
 | `source` | `frame` (CSV/JSON/Parquet), `grid` (Excel/PDF tables), `lines` (regex per text line), or `auto`. |
 | `table` | Grid only: `sheet`, `start` / `end` regex anchors, `header_rows`, `multi_page`, `group_header.carry_to`, `continuation` (`merge`/`drop`), `stop_at_total`. |
-| `columns` | `canonical_field: {"from": [headers], "t": [transforms], "coalesce": bool, "const": value, "header_regex": r}`. Special sources: `_group`, `_id`, `_var`, `_value`. |
-| `derive` | `field: "expression"` with `+ - * /`, `coalesce`, `abs`, `round`, `fillna`, `neg`, `col("Header")` (a column of the file itself, for headers that are not names, e.g. `col("reservation/EffectiveCost")`), and `cur_effective(line_type_raw, billed_cost, ri_effective, sp_effective)` (AWS CUR effective cost by line type). A derived value is recorded as computed (`inferred`, source `derived`) unless the expression left a printed value as it was or selected a printed column. |
+| `columns` | `canonical_field: {"from": [headers], "t": [transforms], "coalesce": bool, "const": value, "header_regex": r}`. Without `coalesce` the first header the file has is used for every row; with it, the first non-blank value on each row. Special sources: `_group`, `_id`, `_var`, `_value`. |
+| `maps` | `{"column": "prefix"}`: a column of key/value pairs (CUR 2.0 `product`: JSON text, `{k=v}` text or a Parquet map) gives the headers the spec names with the prefix, when the file has no column of that name (`"maps": {"product": "product_"}` makes `product_operating_system` from the key `operating_system`). |
+| `derive` | `field: "expression"` with `+ - * /`, `coalesce`, `abs`, `round`, `fillna`, `neg`, `col("Header")` (a column of the file itself, for headers that are not names, e.g. `col("reservation/EffectiveCost")`), and `cur_effective(line_type_raw, billed_cost, ri_effective, sp_effective[, ri_unused_upfront, ri_unused_recurring, sp_total_commitment, sp_used_commitment])` (AWS CUR effective cost by line type; with the four unused-commitment columns, an RIFee line is its unused upfront + recurring fee and a SavingsPlanRecurringFee line its total commitment − used commitment, else 0). A derived value is recorded as computed (`inferred`, source `derived`) unless the expression left a printed value as it was or selected a printed column. |
 | `reshape` | `{"unpivot": {"id": header or "first", "exclude": regex, "total_row": regex}}` for month or service pivots. |
 | `filters` | `drop_if_blank`, `drop_if_match {field, regex}`, `keep_if_in {field, values}`. |
 | `fields` | Header values by anchor: `{"anchor": regex, "take": "right_of" or "below", "regex": capture}`. |
@@ -26,7 +27,8 @@ Transforms: `number`, `currency`, `date` (optional format), `strip`, `regex`, `m
 
 Canonical fields: see `CANONICAL` in `billparse/transforms.py`. Cost types: `billed_cost`, `list_cost`,
 `contracted_cost`, `effective_cost`. Commitments: `coverage`, `line_type_raw` (the provider's line type, unchanged),
-`commitment_type`, `commitment_status`, `commitment_id`. One source column can feed several fields (the CUR line type
+`commitment_type`, `commitment_status`, `commitment_id`. Price identifiers: `sku_id` (AWS `product/sku`), `sku_price_id`
+(AWS `pricing/RateCode`: the SKU's exact price), `meter_id` (Azure). One source column can feed several fields (the CUR line type
 feeds `charge_type`, `line_type_raw` and `coverage`).
 
 To add a provider format: drop a JSON file in `builtin/`, add a sample to `samples/`, add it to

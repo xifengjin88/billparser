@@ -12,7 +12,8 @@
   "provider": "aws",
   "kind": "cost_lines",
   "cost_basis": "billed",
-  "format": "AWS legacy CUR (CSV column style)"
+  "format": "AWS legacy CUR (CSV column style)",
+  "exact_columns": true
  },
  "columns": {
   "product_code": {
@@ -25,13 +26,15 @@
    "from": [
     "product/ProductName",
     "lineItem/ProductCode"
-   ]
+   ],
+   "coalesce": true
   },
   "description": {
    "from": [
     "lineItem/LineItemDescription",
     "lineItem/UsageType"
-   ]
+   ],
+   "coalesce": true
   },
   "billed_cost": {
    "from": [
@@ -73,7 +76,8 @@
     "product/regionCode",
     "product/region",
     "product/location"
-   ]
+   ],
+   "coalesce": true
   },
   "account_id": {
    "from": [
@@ -116,9 +120,51 @@
     "strip",
     "coverage"
    ]
+  },
+  "instance_type": {
+   "from": [
+    "product/instanceType"
+   ]
+  },
+  "operating_system": {
+   "from": [
+    "product/operatingSystem"
+   ]
+  },
+  "database_engine": {
+   "from": [
+    "product/databaseEngine"
+   ]
+  },
+  "deployment_option": {
+   "from": [
+    "product/deploymentOption"
+   ]
+  },
+  "pricing_model": {
+   "from": [
+    "pricing/term"
+   ]
+  },
+  "commitment_id": {
+   "from": [
+    "reservation/ReservationARN",
+    "savingsPlan/SavingsPlanARN"
+   ],
+   "coalesce": true
+  },
+  "sku_id": {
+   "from": [
+    "product/sku"
+   ]
+  },
+  "sku_price_id": {
+   "from": [
+    "pricing/RateCode"
+   ]
   }
  },
  "derive": {
-  "effective_cost": "cur_effective(line_type_raw, billed_cost, col(\"reservation/EffectiveCost\"), col(\"savingsPlan/SavingsPlanEffectiveCost\"))"
+  "effective_cost": "cur_effective(line_type_raw, billed_cost, col(\"reservation/EffectiveCost\"), col(\"savingsPlan/SavingsPlanEffectiveCost\"), col(\"reservation/UnusedAmortizedUpfrontFeeForBillingPeriod\"), col(\"reservation/UnusedRecurringFee\"), col(\"savingsPlan/TotalCommitmentToDate\"), col(\"savingsPlan/UsedCommitment\"))"
  }
 }

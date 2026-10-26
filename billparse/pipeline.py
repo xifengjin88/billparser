@@ -89,13 +89,14 @@ class Pipeline:
 
     def parse_path(self, path: str | Path, name: str | None = None, force: bool = False, on_step=None,
                    agent: bool = True, user: str | None = None, run: bool = True, move: bool = False,
-                   sha: str | None = None) -> dict:
+                   sha: str | None = None, info: bigfile.FileInfo | None = None) -> dict:
         """Parse a file on disk. A small file is read into memory (parse_bytes); a large one (more than LARGE_FILE_MB
         uncompressed) is read in chunks (bigfile.py), and its agent job, when it needs one, is queued, never run here.
-        move: the file is a temporary upload, moved into the store when kept."""
+        move: the file is a temporary upload, moved into the store when kept. info: the file's classify() result, when
+        the caller has it."""
         p = Path(path)
         name = name or p.name
-        info = bigfile.classify(p, name)
+        info = info or bigfile.classify(p, name)
         if not info.large:
             return self.parse_bytes(p.read_bytes(), name, force=force, on_step=on_step, agent=agent, user=user,
                                     run=run)
@@ -229,7 +230,8 @@ class Pipeline:
             on_step("reading")
         out_path = self.store.temp_path(".parquet")
         try:
-            scan = bigfile.scan(best.spec, info, sample, self.s.catalog_dir, out_path, on_progress=on_step)
+            scan = bigfile.scan(best.spec, info, sample, self.s.catalog_dir, out_path, on_progress=on_step,
+                                unmapped=best.ext.unmapped if best.ext is not None else None)
         except bigfile.TooLarge as e:
             out_path.unlink(missing_ok=True)
             return unsupported(Document(info.name, info.fmt, sha, []), str(e))
@@ -241,7 +243,11 @@ class Pipeline:
             verdict = {"status": "auxiliary", "confidence": 1.0 if scan.rows else 0.0, "checks": [], "feedback": [],
                        "kind": kind, "completeness": "consistent"}
         else:
-            verdict = validate_stats(scan.stats, scan.stated_totals, scan.source_rows, scan.share)
+            verdict = validate_stats(scan.stats, scan.stated_totals, scan.source_rows, scan.share, scan.skipped)
+            if self._accept(best) and verdict["status"] not in ("reconciled", "unreconciled"):
+                scan.note(f"The first {len(sample.regions[0].df):,} rows passed the checks with {best.route} spec "
+                          f"{best.spec.get('id') or ''}; the whole file did not: "
+                          + "; ".join(verdict.get("feedback") or [])[:300])
         out = self._finish(sample, best, attempts, verdict, fp, scan.share if kind == "cost_lines" else None, t0,
                            big=scan)
         self._keep(info, sha, move)

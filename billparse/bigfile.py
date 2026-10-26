@@ -17,6 +17,7 @@ and are refused above LARGE_FILE_MB. The code that reads a large file stays here
 
 from __future__ import annotations
 
+import codecs
 import csv
 import gzip
 import hashlib
@@ -40,7 +41,7 @@ from .analyze import resolve_service_sums
 from .attributes import extract as extract_attributes
 from .attributes import normalize_regions
 from .docmodel import HEADER_SCAN_ROWS, TEXT_EXT, Document, Region, _frame, _tabular, _unique_headers, detect_header_row
-from .spec import HOW, run
+from .spec import HOW, needed_columns, run
 from .transforms import CANONICAL, DATES, NUMERIC
 from .validate import RowStats, clean_rows
 
@@ -55,7 +56,7 @@ def setting(name: str, default: float) -> float:
 
 
 def large_file_bytes() -> int:
-    return int(setting("LARGE_FILE_MB", 300) * MB)              # larger (uncompressed): the large path
+    return int(setting("LARGE_FILE_MB", 100) * MB)              # larger (uncompressed): the large path
 
 
 def max_uncompressed_bytes() -> int:
@@ -76,7 +77,7 @@ def too_large_message(size: int | None = None) -> str:
 
 def export_csv_message(fmt: str, size: int) -> str:
     return (f"Export this report as CSV to parse a file this large: this {fmt} file is {size / MB:,.0f} MB, and "
-            f"{fmt} files are read whole, up to {setting('LARGE_FILE_MB', 300):g} MB (LARGE_FILE_MB).")
+            f"{fmt} files are read whole, up to {setting('LARGE_FILE_MB', 100):g} MB (LARGE_FILE_MB).")
 
 
 # ---------------------------------------------------------------- classify
@@ -207,6 +208,36 @@ class _Counted(io.RawIOBase):
         super().close()
 
 
+class _Recode(io.RawIOBase):
+    """Bytes in any encoding as UTF-8, a character that does not decode replaced by U+FFFD: the encoding is told from
+    the first 64 KB, and a stray byte later in the file (a name, a tag) must not stop the parse."""
+
+    def __init__(self, f, encoding: str):
+        self.f = f
+        self.dec = codecs.getincrementaldecoder("utf-8-sig" if encoding == "utf8" else encoding)(errors="replace")
+        self.buf = b""
+        self.replaced = False
+        self.done = False
+
+    def readable(self) -> bool:
+        return True
+
+    def readinto(self, b) -> int:
+        while not self.buf and not self.done:
+            raw = self.f.read(4 * MB)
+            text = self.dec.decode(raw, final=not raw)
+            self.done = not raw
+            self.replaced = self.replaced or "\ufffd" in text
+            self.buf = text.encode("utf-8")
+        n = min(len(b), len(self.buf))
+        b[:n], self.buf = self.buf[:n], self.buf[n:]
+        return n
+
+    def close(self) -> None:
+        self.f.close()
+        super().close()
+
+
 class Source:
     """A large file opened for reading: its bytes (decompressed), how far through the file the reading is, and the
     CSV dialect and header, read as docmodel._read_csv reads them."""
@@ -256,41 +287,62 @@ class Source:
         self.header_row = detect_header_row(rows)
         self.columns = _unique_headers(rows[self.header_row] if self.header_row < len(rows) else [])
 
-    def frames(self, chunk_rows: Callable[[], int]) -> Iterator[pd.DataFrame]:
+    @property
+    def header_names(self) -> list[str]:
+        """The file's column names (the header row of a CSV, the schema of a Parquet file)."""
+        if self.info.fmt == "csv":
+            return list(self.columns)
+        return _unique_headers([str(c) for c in pq.ParquetFile(self._parquet_path()).schema_arrow.names])
+
+    def frames(self, chunk_rows: Callable[[], int], columns: list[str] | None = None) -> Iterator[pd.DataFrame]:
         """The data rows as frames of about chunk_rows() rows (asked again before each frame), header applied, values as
-        the small path reads them: text for CSV (blank = missing), as stored for Parquet."""
-        if self.info.fmt == "parquet":
-            yield from self._parquet(chunk_rows)
-            return
+        the small path reads them: text for CSV (blank = missing), as stored for Parquet. columns: read only these
+        (the others are never parsed)."""
         self.skipped = 0
+        if self.info.fmt == "parquet":
+            yield from self._parquet(chunk_rows, columns)
+            return
 
         def bad(row) -> str:
             self.skipped += 1
             return "skip"
+        keep = columns if columns is not None else self.columns
         with self.open() as f:
+            self.recode = _Recode(f, self.encoding)
             reader = pacsv.open_csv(
-                pa.PythonFile(f, mode="r"),
+                pa.PythonFile(io.BufferedReader(self.recode, 8 * MB), mode="r"),
                 read_options=pacsv.ReadOptions(skip_rows=self.header_row + 1, column_names=self.columns,
-                                               encoding=self.encoding, block_size=8 * MB),
+                                               encoding="utf8", block_size=8 * MB),
                 parse_options=pacsv.ParseOptions(delimiter=self.sep, newlines_in_values=True, invalid_row_handler=bad),
-                convert_options=pacsv.ConvertOptions(column_types={c: pa.string() for c in self.columns},
-                                                     null_values=[""], strings_can_be_null=True,
-                                                     quoted_strings_can_be_null=True))
+                convert_options=pacsv.ConvertOptions(column_types={c: pa.string() for c in keep},
+                                                     include_columns=keep, null_values=[""],
+                                                     strings_can_be_null=True, quoted_strings_can_be_null=True))
             yield from _batched(reader, chunk_rows, lambda t: t.to_pandas())
 
-    def _parquet(self, chunk_rows: Callable[[], int]) -> Iterator[pd.DataFrame]:
-        path = self.info.path
-        if self.info.compression == "zip":
-            self.extracted = (self.tmp_dir or path.parent) / f"{path.name}.{os.getpid()}.parquet"
+    @property
+    def replaced(self) -> bool:
+        return bool(getattr(getattr(self, "recode", None), "replaced", False))
+
+    def _parquet_path(self) -> Path:
+        """The Parquet file; one in a zip is written out first (Parquet needs to seek)."""
+        if self.info.compression != "zip":
+            return self.info.path
+        if self.extracted is None or not self.extracted.exists():
+            path = self.info.path
+            self.extracted = (self.tmp_dir or path.parent) / f"{path.name}.{os.getpid()}.{id(self)}.parquet"
             with zipfile.ZipFile(path) as z, z.open(self.info.member or "") as m, self.extracted.open("wb") as out:
                 while (b := m.read(8 * MB)):
                     out.write(b)
-            path = self.extracted
+        return self.extracted
+
+    def _parquet(self, chunk_rows: Callable[[], int], columns: list[str] | None) -> Iterator[pd.DataFrame]:
         self.raw = _Counted(io.BytesIO())
-        pf = pq.ParquetFile(path)
+        pf = pq.ParquetFile(self._parquet_path())
         self.total = pf.metadata.num_rows or 1
+        names = dict(zip(_unique_headers([str(c) for c in pf.schema_arrow.names]), pf.schema_arrow.names, strict=True))
+        read = None if columns is None else [names[c] for c in columns if c in names]
         try:
-            for batch in pf.iter_batches(batch_size=max(1, chunk_rows())):
+            for batch in pf.iter_batches(batch_size=max(1, chunk_rows()), columns=read):
                 self.raw.n += batch.num_rows
                 df = batch.to_pandas()
                 yield _frame(df, "", header_in_df=True).df   # as docmodel reads a Parquet file
@@ -343,13 +395,15 @@ def _batched(reader, chunk_rows: Callable[[], int], to_frame) -> Iterator[pd.Dat
 
 # ---------------------------------------------------------------- the sample
 def sample_doc(info: FileInfo, sha: str, rows: int | None = None) -> Document:
-    """The header and the first SAMPLE_ROWS rows as the Document a small file of them would give: the routes, the
-    fingerprint, the agent and the source viewer work on it."""
-    n = int(rows or setting("SAMPLE_ROWS", 50_000))
+    """The header and the first rows (SAMPLE_ROWS, or fewer to stay within SAMPLE_CELLS values) as the Document a
+    small file of them would give: the routes, the fingerprint, the agent and the source viewer work on it."""
     doc = Document(name=info.name, file_type=info.fmt, sha256=sha, regions=[])
     if info.refused:
         return doc
     src = Source(info)
+    # SAMPLE_ROWS rows, fewer for a wide file: at most SAMPLE_CELLS values (every route reads every column)
+    width = max(1, len(src.header_names))
+    n = int(rows or min(setting("SAMPLE_ROWS", 50_000), max(1_000, setting("SAMPLE_CELLS", 2_500_000) // width)))
     frames = src.frames(lambda: n)
     df = next(frames, None)
     frames.close()
@@ -415,23 +469,29 @@ class Scan:
 
 
 def scan(spec: dict, info: FileInfo, sample: Document, catalog_dir: Path | None = None, out: Path | None = None,
-         full: bool = True, on_progress: Callable[[str], None] | None = None) -> Scan:
+         full: bool = True, on_progress: Callable[[str], None] | None = None, unmapped: dict | None = None) -> Scan:
     """Read the whole file in chunks with the spec. full: the steps of a parse (attributes, coverage, services, the
     rows to `out` as Parquet, the rolled-up lines); else only the spec, the cleaning and the statistics (the
-    regression gate). Raises TooLarge when the file grows past MAX_UNCOMPRESSED_GB."""
+    regression gate). unmapped: the fields guessed on the sample for columns the spec does not name, used for every
+    chunk (else each chunk would guess from its own first rows). Raises TooLarge when the file grows past
+    MAX_UNCOMPRESSED_GB."""
+    spec = dict(spec, _no_extra=True, **({"_unmapped": unmapped} if unmapped is not None else {}))
     pa.set_cpu_count(max(1, int(setting("LARGE_IO_THREADS", 2))))
     pa.set_io_thread_count(max(1, int(setting("LARGE_IO_THREADS", 2))))
     res = Scan(path=out)
     src = Source(info, tmp_dir=out.parent if out else None)
     budget = setting("LARGE_MEMORY_MB", 2048) * MB
-    size = {"rows": int(setting("CHUNK_ROWS", 250_000))}
+    columns = needed_columns(spec, src.header_names, unmapped)
+    # CHUNK_ROWS rows, fewer for a wide file: the columns read plus about 50 the steps add, at most CHUNK_CELLS values
+    size = {"rows": min(int(setting("CHUNK_ROWS", 250_000)),
+                        max(1_000, int(setting("CHUNK_CELLS", 12_000_000)) // (len(columns) + 50)))}
     writer: pq.ParquetWriter | None = None
     schema: pa.Schema | None = None
     pending: list[pd.DataFrame] = []
     kind = (spec.get("meta") or {}).get("kind", "cost_lines")
     base = rss()
     try:
-        for chunk in src.frames(lambda: size["rows"]):
+        for chunk in src.frames(lambda: size["rows"], columns):
             region = Region(kind="frame", name=info.region_name, df=chunk, header_row=src.header,
                             row_offset=res.source_rows)
             ext = run(spec, Document(info.name, info.fmt, sample.sha256, [region]), catalog_dir)
@@ -469,7 +529,9 @@ def scan(spec: dict, info: FileInfo, sample: Document, catalog_dir: Path | None 
             writer.close()
     res.skipped = getattr(src, "skipped", 0)
     if res.skipped:
-        res.note(f"{res.skipped:,} rows have a different number of fields than the header; they were skipped")
+        res.note(f"{res.skipped:,} rows have a different number of fields than the header; they were not read")
+    if src.replaced:
+        res.note("Some characters of the file are not valid in its encoding; they were replaced by \ufffd")
     if pending:
         res.rolled = _cap(roll(pd.concat(pending, ignore_index=True)), res, 1)
         res.rolled = finish_rolled(res.rolled)

@@ -50,14 +50,31 @@ RI = "arn:aws:ec2:us-east-1:111122223333:reserved-instances/1d3fbc13-f181-4c40-9
 SP = "arn:aws:savingsplans::111122223333:savingsplan/7a2c1b9e-0d55-4f0e-9c1a-3b5e2f8d1c44"
 
 
-def generate(path: Path, rows: int, seed: int = 7) -> float:
-    """Write a gzip CUR 2.0 CSV with `rows` lines (hourly lines over one month). Returns the billed total."""
+WIDE = 100                      # --wide: product attribute and tag columns a real CUR has (about 125 columns in all)
+
+
+def _wide_values(rnd: random.Random, n: int) -> list[list[str]]:
+    """Some sets of values for the extra columns: most are empty on a line, as in a real CUR."""
+    words = ["Linux", "Shared", "Used", "No License required", "NA", "Yes", "No", "Compute Instance", "EBS only",
+             "Up to 10 Gigabit", "Intel Xeon Platinum 8175", "64-bit", "3.1 GHz", "8 GiB", "4", "2", "standard"]
+    out = []
+    for _ in range(n):
+        out.append([rnd.choice(words) if rnd.random() < 0.35 else "" for _ in range(WIDE)])
+    return out
+
+
+def generate(path: Path, rows: int, seed: int = 7, wide: bool = False) -> float:
+    """Write a gzip CUR 2.0 CSV with `rows` lines (hourly lines over one month). Returns the billed total. wide: 100
+    more columns (product attributes and tags) that the spec does not read."""
     rnd = random.Random(seed)
+    extra_cols = [f"product_attribute_{i:03d}" for i in range(WIDE // 2)] + \
+        [f"resource_tags_user_tag_{i:03d}" for i in range(WIDE - WIDE // 2)] if wide else []
+    extra_rows = _wide_values(rnd, 64) if wide else [[]]
     start = date(2026, 9, 1)
     total = 0.0
     with gzip.open(path, "wt", newline="", compresslevel=6) as f:
         w = csv.writer(f)
-        w.writerow(COLUMNS)
+        w.writerow(COLUMNS + extra_cols)
         for i in range(rows):
             d = start + timedelta(days=i % 30)
             code, name, ut, op, unit, types = ITEMS[i % len(ITEMS)]
@@ -93,12 +110,12 @@ def generate(path: Path, rows: int, seed: int = 7) -> float:
                 cost = 0.0
             elif kind == "SavingsPlanCoveredUsage":
                 row.update(savings_plan_savings_plan_a_r_n=SP, savings_plan_savings_plan_effective_cost=round(cost * 0.7, 8))
-            w.writerow([row.get(c, "") for c in COLUMNS])
+            w.writerow([row.get(c, "") for c in COLUMNS] + extra_rows[i % len(extra_rows)])
             total += cost
             if kind == "SavingsPlanCoveredUsage":            # its negation, as the next line
                 neg = dict(row, line_item_line_item_type="SavingsPlanNegation", line_item_unblended_cost=-cost,
                            savings_plan_savings_plan_effective_cost="", pricing_public_on_demand_cost="")
-                w.writerow([neg.get(c, "") for c in COLUMNS])
+                w.writerow([neg.get(c, "") for c in COLUMNS] + extra_rows[i % len(extra_rows)])
                 total -= cost
     return round(total, 2)
 
@@ -145,14 +162,15 @@ def main() -> None:
     ap.add_argument("--entry", choices=["path", "bytes"], default="path")
     ap.add_argument("--child", help=argparse.SUPPRESS)
     ap.add_argument("--keep", type=Path, help="keep the generated file here")
+    ap.add_argument("--wide", action="store_true", help=f"{WIDE} more columns the spec does not read")
     a = ap.parse_args()
     if a.child:
         return child(a.child, a.entry)
     catalog_dir()
     tmp = Path(tempfile.mkdtemp())
-    f = (a.keep or tmp) / f"cur2-{a.rows}.csv.gz"
+    f = (a.keep or tmp) / f"cur2-{a.rows}{'-wide' if a.wide else ''}.csv.gz"
     t0 = time.perf_counter()
-    expected = generate(f, a.rows) if not f.exists() else None
+    expected = generate(f, a.rows, wide=a.wide) if not f.exists() else None
     gen = time.perf_counter() - t0
     with gzip.open(f, "rb") as g:
         raw = sum(len(b) for b in iter(lambda: g.read(8 << 20), b""))
@@ -161,7 +179,7 @@ def main() -> None:
     if out.returncode != 0:
         sys.exit(f"parse failed ({out.returncode}): {out.stderr[-3000:]}")
     res = json.loads(out.stdout.strip().splitlines()[-1])
-    res.update(entry=a.entry, file_rows=a.rows, gz_mb=round(f.stat().st_size / 1e6, 1), csv_mb=round(raw / 1e6, 1),
+    res.update(entry=a.entry, file_rows=a.rows, columns=len(COLUMNS) + (WIDE if a.wide else 0), gz_mb=round(f.stat().st_size / 1e6, 1), csv_mb=round(raw / 1e6, 1),
                rows_per_s=round((res["rows"] or 0) / res["seconds"]) if res["seconds"] else None,
                expected_total=expected, generate_s=round(gen, 1))
     print(json.dumps(res, indent=1))

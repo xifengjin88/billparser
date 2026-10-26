@@ -678,7 +678,8 @@ def start_parse(store: Store, name: str, path: Path, sha: str, force: bool, use_
                 temp: bool = False) -> str:
     """Parse the file at path (its SHA-256 is sha) in the background. temp: path is an upload, moved into the store
     or removed when the parse ends."""
-    large = bigfile.classify(path, name).large
+    info = bigfile.classify(path, name)                 # once: the parse takes it (a gzip is read to tell its size)
+    large = info.large
     with _lock:
         t = _tasks.get(sha)
         if t and not t["future"].done():
@@ -697,7 +698,7 @@ def start_parse(store: Store, name: str, path: Path, sha: str, force: bool, use_
             task["progress"] = "reading" if large else None
             try:
                 result = pipe.parse_path(path, name, force=force, agent=agent_step, user=user, on_step=step,
-                                         move=temp, sha=sha)
+                                         move=temp, sha=sha, info=info)
                 row = store.document(sha)
                 if row is not None and user and not row.uploaded_by:
                     store.update_document(sha, uploaded_by=user)

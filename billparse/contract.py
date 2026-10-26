@@ -35,7 +35,8 @@ STATUS = {"reconciled": "auto_accepted", "unreconciled": "auto_accepted", "auxil
           "needs_review": "needs_review", "unsupported": "needs_review", "approved": "approved"}
 DOC_TYPE = {"price_sheet": "estimate", "recommendations": "other", "inventory": "inventory"}
 TEXT_FIELDS = ("pricing_model", "commitment_id", "commitment_type", "commitment_status", "instance_type",
-               "operating_system", "database_engine", "deployment_option", "usage_type", "unit", "line_type_raw")
+               "operating_system", "database_engine", "deployment_option", "usage_type", "unit", "line_type_raw",
+               "sku_id", "sku_price_id", "meter_id")
 COST_FIELDS = ("list_cost", "contracted_cost", "effective_cost")    # typed beside the billed cost (Charge.cost)
 COST_TYPES = {"billed": "cost", "list": "list_cost", "contracted": "contracted_cost", "effective": "effective_cost"}
 USAGE_KINDS = {"usage", "marketplace_usage"}
@@ -44,7 +45,7 @@ HOW = "_how:"                   # per row: how a value was made ("printed", "der
 # the dimensions a roll-up keeps: lines that differ in none of them are one charge
 ROLLUP_KEYS = ["service_code", "service_name", "service_raw", "region", "account_id", "charge_type", "pricing_model",
                "instance_type", "operating_system", "database_engine", "deployment_option", "usage_type", "unit",
-               "commitment_id", "currency", "provider", "coverage", "line_type_raw"]
+               "commitment_id", "currency", "provider", "coverage", "line_type_raw", "sku_id", "sku_price_id", "meter_id"]
 
 
 # ---------------------------------------------------------------- cites
@@ -300,7 +301,7 @@ def _charge(i: int, r: dict, loc: Locator, sections: dict[str, str]) -> Charge:
         c.period_start = cv(d, cite)
     if (d := _date(r.get("charge_end"))):
         c.period_end = cv(d, cite)
-    if (p := _str(r.get("product_code"))):
+    if "sku_id" not in r and (p := _str(r.get("product_code"))):    # no SKU column: the product id, as before
         c.sku_id = cv(p, cite)
     attrs: dict = {}
     # effective_cost and list_cost: deprecated in 1.4: use the typed fields

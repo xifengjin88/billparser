@@ -48,6 +48,9 @@ CANONICAL = {
     "commitment_status": "used or unused (unused commitment capacity)",
     "coverage": "How the usage was priced: on_demand, reserved, savings_plan, committed_use, spot, unknown",
     "line_type_raw": "The provider's own line type, unchanged (SavingsPlanCoveredUsage, DiscountedUsage, ...)",
+    "sku_id": "The provider's SKU of the line, as printed (AWS product/sku, FOCUS SkuId, GCP sku.id)",
+    "sku_price_id": "The provider's id of the exact price of the line (AWS pricing/RateCode, FOCUS SkuPriceId)",
+    "meter_id": "The provider's meter id (Azure MeterId)",
 }
 NUMERIC = {"billed_cost", "effective_cost", "list_cost", "contracted_cost", "credits", "quantity", "unit_price",
            "tax"}
@@ -81,6 +84,13 @@ def map_unique(s: pd.Series, f: Callable) -> pd.Series:
     are not all strings (1 and 1.0 hash alike) take the plain map. The result has the type s.map(f) infers."""
     if len(s) < UNIQUE_MIN:
         return s.map(f)
+    if isinstance(s.dtype, pd.StringDtype) and s.dtype.na_value is np.nan:   # text (CSV): no object copy
+        codes, uniques = pd.factorize(s)
+        values = np.empty(len(uniques) + 1, dtype=object)
+        values[:-1] = [f(u) for u in uniques]
+        if (codes < 0).any():
+            values[-1] = f(s.dtype.na_value)            # code -1: a missing value, as s.map(f) passes it
+        return pd.Series(values[codes], index=s.index, name=s.name).infer_objects()
     obj = s.astype(object)
     na = obj.isna().to_numpy()
     filled = obj[~na]

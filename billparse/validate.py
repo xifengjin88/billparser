@@ -210,15 +210,21 @@ def validate(ext: Extraction, alt: Extraction | None = None, resolved_share: flo
 
 
 def validate_stats(stats: RowStats, stated_totals: list[dict], source_rows: int,
-                   resolved_share: float | None = None) -> dict:
+                   resolved_share: float | None = None, unread_rows: int = 0) -> dict:
     """The verdict of a file read in chunks (bigfile.py): the same checks, names, statuses and weights as validate(),
-    from the merged statistics. Exports have no tree of sums and no second reading."""
+    from the merged statistics. Exports have no tree of sums and no second reading. unread_rows: rows of the file the
+    reader could not read (a different number of fields than the header): they can carry money, so the row coverage
+    check fails."""
     if not stats.cost_rows:
         return _summarize([Check("rows", "fail", "No cost rows extracted", -1.0)], 0.0, reconciled=False)
     checks = [Check("rows", "pass", f"{stats.rows} rows", 0.1), _labels(stats), _line_math(stats)]
     tot_check, reconciled = _stated_totals(stated_totals, {}, stats.total, stats.non_tax, stats.rows)
     checks.append(tot_check)
-    checks.append(_coverage(None, source_rows, stats.rows, stated_totals))
+    if unread_rows:
+        checks.append(Check("row_coverage", "fail", f"{unread_rows:,} rows of the file could not be read (a different "
+                            f"number of fields than the header); {source_rows:,} rows were read", -0.25))
+    else:
+        checks.append(_coverage(None, source_rows, stats.rows, stated_totals))
     checks += _plausibility(stats)
     checks += _resolution(resolved_share)
     return _summarize(checks, _confidence(checks), reconciled)

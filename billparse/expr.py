@@ -34,11 +34,17 @@ def _missing(n: int, index) -> pd.Series:
 _SPREAD = {"savingsplannegation", "savingsplanrecurringfee", "savingsplanupfrontfee", "rifee"}
 
 
-def _cur_effective(line_type: pd.Series, billed: pd.Series, ri: pd.Series, sp: pd.Series) -> pd.Series:
+def _cur_effective(line_type: pd.Series, billed: pd.Series, ri: pd.Series, sp: pd.Series,
+                   ri_unused_upfront: pd.Series | None = None, ri_unused_recurring: pd.Series | None = None,
+                   sp_total: pd.Series | None = None, sp_used: pd.Series | None = None) -> pd.Series:
     """AWS CUR effective (amortized) cost by line type: DiscountedUsage -> the reservation effective cost,
-    SavingsPlanCoveredUsage -> the Savings Plan effective cost, negation and commitment fee lines -> 0 (their cost is
+    SavingsPlanCoveredUsage -> the Savings Plan effective cost, negation and upfront fee lines -> 0 (their cost is
     spread into the usage they cover), every other line -> its unblended cost. A file with neither effective-cost
-    column gives no effective cost at all: without them the amortized cost cannot be known."""
+    column gives no effective cost at all: without them the amortized cost cannot be known.
+
+    The recurring fee lines carry the commitment that was not used (AWS, "Understanding your amortized costs"):
+    RIFee -> unused amortized upfront fee + unused recurring fee; SavingsPlanRecurringFee -> total commitment to date
+    - used commitment. When the file has no such columns, those lines stay 0 as the other fee lines."""
     if ri.attrs.get("missing") and sp.attrs.get("missing"):
         return _missing(len(billed), billed.index)
     kind = line_type.map(lambda v: re.sub(r"[\s_-]+", "", str(v).lower()) if isinstance(v, str) else "")
@@ -48,6 +54,17 @@ def _cur_effective(line_type: pd.Series, billed: pd.Series, ri: pd.Series, sp: p
     out[kind.eq("savingsplancoveredusage")] = sp[kind.eq("savingsplancoveredusage")]
     spread = kind.isin(_SPREAD)
     out[spread] = 0.0
+
+    def given(*cols) -> bool:
+        return all(isinstance(c, pd.Series) and not c.attrs.get("missing") for c in cols)
+    if given(ri_unused_upfront, ri_unused_recurring):
+        fee = kind.eq("rifee")
+        unused = ri_unused_upfront.reindex(billed.index).fillna(0) + ri_unused_recurring.reindex(billed.index).fillna(0)
+        out[fee] = unused[fee]
+    if given(sp_total, sp_used):
+        fee = kind.eq("savingsplanrecurringfee")
+        unused = sp_total.reindex(billed.index) - sp_used.reindex(billed.index).fillna(0)
+        out[fee] = unused[fee]
     out.attrs["how"] = pd.Series(np.where(spread, "derived", "printed"), index=billed.index)
     return out
 

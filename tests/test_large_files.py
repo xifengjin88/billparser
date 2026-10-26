@@ -111,7 +111,8 @@ def test_same_results_on_a_300k_row_cur(tmp_path, monkeypatch):
     assert small["analysis"]["total_billed"] == round(expected, 2)
 
 
-@pytest.mark.parametrize("name", ["aws_cur2.csv.gz", "aws_cur2_commitments.csv.gz", "azure_actual.csv",
+@pytest.mark.parametrize("name", ["aws_cur2.csv.gz", "aws_cur2_commitments.csv.gz", "aws_cur_legacy.csv.gz",
+                                  "aws_cur2_product_map.csv.gz", "azure_actual.csv",
                                   "azure_amortized.csv", "azure_ea_usage.csv", "focus_commitments.parquet",
                                   "focus_gcp.parquet", "pc_invoice_recon.csv"])
 def test_same_results_on_the_samples_in_small_chunks(tmp_path, monkeypatch, name):
@@ -321,3 +322,61 @@ def test_gzip_classify_stops_early(tmp_path, monkeypatch):
     monkeypatch.setenv("LARGE_FILE_MB", "1")
     info = bigfile.classify(f)
     assert info.large and info.fmt == "csv" and info.size <= 8 * 1024 * 1024   # one 8 MB read, not 40 MB
+
+
+# ---------------------------------------------------------------- review fixes: columns, unread rows, encoding
+def test_a_large_cur_reads_only_the_columns_its_spec_names(tmp_path, monkeypatch):
+    from billparse.spec import needed_columns
+    f = tmp_path / "wide.csv.gz"
+    bench_large.generate(f, 3_000, wide=True)
+    info = bigfile.classify(f)
+    header = bigfile.Source(info).header_names
+    spec = json.loads((ROOT / "specs" / "builtin" / "aws-cur2.json").read_text())
+    need = needed_columns(spec, header)
+    assert len(header) == len(bench_large.COLUMNS) + bench_large.WIDE and len(need) < len(bench_large.COLUMNS)
+    assert "reservation_effective_cost" in need and not any(c.startswith("resource_tags_") for c in need)
+    small, large, r = _both(tmp_path, monkeypatch, f, 1_000)
+    _same(small, large)
+
+
+def test_rows_that_cannot_be_read_fail_row_coverage(tmp_path, monkeypatch):
+    lines = ["Service,Description,Cost"] + [f"Amazon EC2,line {i},10.00" for i in range(20)]
+    lines[5] = "Amazon EC2,line with a comma, not quoted,99.00"       # 4 fields: the reader skips it
+    f = tmp_path / "bill.csv"
+    f.write_text("\n".join(lines) + "\n")
+    monkeypatch.setenv("LARGE_FILE_MB", TINY)
+    pipe = _pipe(tmp_path)
+    r = pipe.parse_path(f, agent=False)
+    cov = next(c for c in r["checks"] if c["name"] == "row_coverage")
+    assert cov["status"] == "fail" and "1 rows of the file could not be read" in cov["detail"]
+    assert r["status"] == "needs_review" and r["completeness"] == "contradicted"
+
+
+def test_a_bad_byte_after_the_first_64_kb_does_not_stop_the_parse(tmp_path, monkeypatch):
+    rows = [f"Amazon EC2,line {i},1.00" for i in range(5_000)]           # about 120 KB of UTF-8
+    rows[4_000] = "Amazon EC2,Caf\xe9 tag,1.00"
+    f = tmp_path / "bill.csv"
+    f.write_bytes(("Service,Description,Cost\n" + "\n".join(rows) + "\n").encode("utf-8").replace(
+        b"Caf\xc3\xa9", b"Caf\xe9"))                                   # one cp1252 byte in a UTF-8 file
+    monkeypatch.setenv("LARGE_FILE_MB", TINY)
+    pipe = _pipe(tmp_path)
+    r = pipe.parse_path(f, agent=False)
+    assert r["rows"] == 5_000 and r["analysis"]["total_billed"] == 5000.0
+    assert any("replaced" in w for w in r["warnings"])
+    rows_out = pipe.store.get_rows(r["sha256"])
+    assert "Caf� tag" in set(rows_out["description"])
+
+
+def test_the_sample_and_the_chunks_are_sized_in_cells(tmp_path, monkeypatch):
+    f = tmp_path / "wide.csv.gz"
+    bench_large.generate(f, 6_000, wide=True)                         # 124 columns
+    monkeypatch.setenv("SAMPLE_CELLS", str(124 * 2_000))
+    doc = bigfile.sample_doc(bigfile.classify(f), "x")
+    assert len(doc.regions[0].df) == 2_000
+
+
+def test_nightly_runs_no_job_without_the_agent(tmp_path):
+    from billparse.learn import run_queued_jobs
+    pipe = _pipe(tmp_path)
+    pipe.store.enqueue_agent_job("layout:x", "sha", "big.csv", kind="new")
+    assert run_queued_jobs(pipe) == [] and pipe.store.agent_jobs("queued")      # use_agent off: nothing is paid
