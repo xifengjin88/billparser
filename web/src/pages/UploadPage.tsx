@@ -4,7 +4,7 @@ import { toast } from 'sonner'
 import { FileUpIcon, Loader2Icon, XIcon } from 'lucide-react'
 
 import type { ParseTask } from '@/api/client'
-import { useDocuments, useSettings, useStartParse, useTasks } from '@/api/queries'
+import { learningActive, useDocuments, useSettings, useStartParse, useTasks } from '@/api/queries'
 import { CompletenessPill, ConfidencePill, Pill, StatusPill } from '@/components/app/badges'
 import { DataTable } from '@/components/app/DataTable'
 import { Empty, NativeSelect, PageHeader, Section } from '@/components/app/common'
@@ -146,7 +146,7 @@ function TaskTable({ tasks }: { tasks: ParseTask[] }) {
   return (
     <div className="divide-y rounded-lg border">
       {tasks.map((t) => (
-        <div key={t.sha256} className="flex flex-wrap items-center gap-x-4 gap-y-1 px-3 py-2 text-sm">
+        <div key={t.job_id ?? t.sha256} className="flex flex-wrap items-center gap-x-4 gap-y-1 px-3 py-2 text-sm">
           <div className="min-w-0 flex-1">
             <div className="truncate font-medium">{t.name}</div>
             {t.state === 'running' && (
@@ -155,6 +155,7 @@ function TaskTable({ tasks }: { tasks: ParseTask[] }) {
               </div>
             )}
             {t.state === 'error' && <div className="text-xs break-words text-red-700 dark:text-red-300">{t.error}</div>}
+            {t.state === 'done' && <Learning task={t} />}
           </div>
           {t.state === 'done' && (
             <>
@@ -171,6 +172,36 @@ function TaskTable({ tasks }: { tasks: ParseTask[] }) {
           {t.state === 'error' && <Pill t="red">failed</Pill>}
         </div>
       ))}
+    </div>
+  )
+}
+
+// the learning run a parse queued: the first result is ready before it, and a proved spec replaces that result later
+const LEARNED: Record<string, string> = {
+  proved: 'learned a spec: the result was read again with it',
+  unproved: 'ended without a spec that proves the file; the first result stands',
+  limit: 'stopped at its limit; the first result stands',
+  rejected: 'its spec broke files read before; the first result stands',
+  stopped: 'stopped; the first result stands',
+  error: 'failed; the first result stands',
+}
+
+function Learning({ task }: { task: ParseTask }) {
+  const l = task.learning
+  if (!l) return null
+  if (learningActive(task)) {
+    return (
+      <div className="flex items-center gap-1.5 text-xs text-violet-700 dark:text-violet-300">
+        <Loader2Icon className="size-3 animate-spin" />
+        First result ready, learning a better spec{l.state === 'queued' ? ' (queued)' : ''}
+        {l.progress ? ` · ${l.progress}` : ''}
+      </div>
+    )
+  }
+  const said = (l.agent_status && LEARNED[l.agent_status]) ?? (l.state === 'done' ? 'ended' : `ended ${l.state}`)
+  return (
+    <div className="text-xs text-muted-foreground">
+      Learning {said}{l.cost_usd != null ? ` · ${usd(l.cost_usd)}` : ''}
     </div>
   )
 }

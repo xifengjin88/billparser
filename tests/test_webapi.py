@@ -29,7 +29,6 @@ def client(tmp_path, monkeypatch):
     monkeypatch.setenv("BILLPARSE_USE_LLM", "0")
     analyze_mod._RESOLVER = None
     webapi._pipeline.cache_clear()
-    webapi._tasks.clear()
     pipe = Pipeline(Settings(store_dir=tmp_path / "store", catalog_dir=tmp_path / "data", use_llm=False))
     api.app.dependency_overrides[webapi.get_store] = lambda: pipe.store
     api.app.dependency_overrides[webapi.get_pipeline] = lambda: pipe

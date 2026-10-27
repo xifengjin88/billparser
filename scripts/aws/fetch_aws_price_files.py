@@ -147,7 +147,8 @@ def versions_to_fetch(service: str, as_of: str | None) -> list[dict]:
     return []
 
 
-def main() -> int:
+def main(argv: list[str] | None = None) -> int:
+    """argv: the command line's arguments (the worker's weekly price refresh calls it with its own)."""
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--out", required=True, type=Path)
     ap.add_argument("--service", action="append", help=f"repeatable; default: {', '.join(SERVICES)}")
@@ -161,7 +162,7 @@ def main() -> int:
     ap.add_argument("--force", action="store_true", help="download again files that are already done")
     ap.add_argument("--progress-every", type=float, default=10.0, help="seconds between progress lines (0: none)")
     ap.add_argument("--dry-run", action="store_true", help="list the files and their count, download nothing")
-    a = ap.parse_args()
+    a = ap.parse_args(argv)
     started = datetime.now(UTC)
     want = set(a.region or [])
 

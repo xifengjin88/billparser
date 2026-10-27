@@ -27,7 +27,7 @@ from pathlib import Path
 import pandas as pd
 
 from . import agent as agent_mod
-from . import bigfile, contract, coverage
+from . import bigfile, contract, coverage, jobs
 from . import llm as llm_mod
 from .analyze import analyze, resolve_services
 from .attributes import extract as extract_attributes
@@ -59,6 +59,8 @@ class Settings:
     price_defaults: PriceDefaults = field(default_factory=PriceDefaults)   # what pricing may assume (none)
     # LLM spec candidates in the first round, generated in parallel (1: one at a time, as before)
     spec_candidates: int = field(default_factory=lambda: max(1, int(os.environ.get("BILLPARSE_SPEC_CANDIDATES") or 2)))
+    # the agent step runs in this parse (the tests, with a fake agent model); else it is a job of the learn queue
+    learn_inline: bool = False
 
 
 @dataclass
@@ -123,7 +125,7 @@ class Pipeline:
         t0 = time.perf_counter()
         result = self._parse_large(info, force, on_step, move, sha, price_defaults)
         if agent and self.s.use_agent and not result.get("cached") and agent_mod.needs_agent(result):
-            agent_mod.enqueue_for(self, result)          # run later on the sample (cli: jobs drain), never inline
+            self.queue_learning(agent_mod.enqueue_for(self, result))     # on the sample, never inline
         if run and not result.get("cached"):
             self._record_run(result, None, int((time.perf_counter() - t0) * 1000), user)
         return result
@@ -142,15 +144,30 @@ class Pipeline:
         job = None
         if agent and self.s.use_agent and not result.get("cached") and agent_mod.needs_agent(result):
             job_id = agent_mod.enqueue_for(self, result)    # one job per layout (a retried job is queued again)
-            if job_id is not None:
+            if job_id is not None and self.s.learn_inline:
                 if on_step is not None:
                     on_step("learning")
                 job = agent_mod.run_job(self, job_id, llm=self.agent_llm, limits=self.agent_limits)
                 if job["status"] == "proved":           # else the first pass stands
                     result = self.store.get_result(result["sha256"]) or result
+            elif job_id is not None:
+                result["learn_job_id"] = self.queue_learning(job_id)
         if run and not result.get("cached"):
             self._record_run(result, job, int((time.perf_counter() - t0) * 1000), user)
         return result
+
+    def queue_learning(self, agent_job_id: int | None) -> int | None:
+        """A learn job (worker.run_learn) for this agent job: the parse ends now, the learning runs on the learn queue.
+        Its parent is the parse job that runs this parse, so a proved spec sends that job's webhook again."""
+        if agent_job_id is None:
+            return None
+        aj = self.store.agent_job(agent_job_id)
+        if aj is None or aj["status"] != "queued":
+            return None
+        job, _ = jobs.enqueue(self.store, "learn", "learn", name=aj["name"], sha256=aj["sha256"],
+                              options={"agent_job_id": agent_job_id}, dedupe_key=f"learn:{agent_job_id}:{aj.get('attempts') or 0}",
+                              parent_id=jobs.current_job.get())
+        return job["id"]
 
     def _save_contract(self, doc: Document, summary: dict, rows: pd.DataFrame) -> dict:
         """The result in invoice-parser's contract (contract.py), kept beside the lines; returns what the lists show."""

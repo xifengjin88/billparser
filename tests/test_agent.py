@@ -153,7 +153,8 @@ def test_a_parse_runs_the_agent_step_by_itself(tmp_path):
         shutil.copy(f, tmp_path / "data" / "raw" / f.name)
     analyze_mod._RESOLVER = None
     llm = FakeLLM([tool_use(1, "check_spec", {"spec": GOOD}), tool_use(2, "submit_spec", {"spec": GOOD, "note": "none"})])
-    pipe = Pipeline(Settings(store_dir=tmp_path / "store", catalog_dir=tmp_path / "data", use_llm=False, use_agent=True),
+    pipe = Pipeline(Settings(store_dir=tmp_path / "store", catalog_dir=tmp_path / "data", use_llm=False, use_agent=True,
+                             learn_inline=True),
                     agent_llm=llm)
     steps: list[str] = []
     f = tmp_path / "bill.txt"
@@ -175,7 +176,8 @@ def test_a_layout_the_agent_did_not_prove_is_not_tried_again(tmp_path):
         shutil.copy(f, tmp_path / "data" / "raw" / f.name)
     analyze_mod._RESOLVER = None
     llm = FakeLLM([tool_use(1, "submit_spec", {"spec": BAD, "note": "none"})] * 3)
-    pipe = Pipeline(Settings(store_dir=tmp_path / "store", catalog_dir=tmp_path / "data", use_llm=False, use_agent=True),
+    pipe = Pipeline(Settings(store_dir=tmp_path / "store", catalog_dir=tmp_path / "data", use_llm=False, use_agent=True,
+                             learn_inline=True),
                     agent_llm=llm)
     first = pipe.parse_bytes(BILL.encode(), "bill.txt")
     assert first["completeness"] != "reconciled" and len(pipe.store.agent_jobs()) == 1

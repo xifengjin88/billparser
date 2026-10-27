@@ -2,7 +2,7 @@
  "openapi": "3.1.0",
  "info": {
   "title": "billparse",
-  "description": "HTTP API: upload a file, get the parsed document; read and manage the layout specs and the learning jobs.\n\n    uvicorn billparse.api:app --host 0.0.0.0 --port 8000        (the API page: GET /parse)\n    curl -F file=@invoice.pdf localhost:8000/parse\n\nThe paths and response models are invoice-parser's (invoiceparse/api.py and webapi.py), so its web app and clients\nwork unchanged. The store comes from the environment (DATABASE_URL, PARSER_DATA_DIR), as for the CLI. Parsing runs\nbillparse's pipeline: built-in specs, learned specs, the rule mapper, then (with ANTHROPIC_API_KEY) the LLM routes.\nWith AGENT_ENABLED=1, a file that no spec proves gets one from the agent during its upload (agent.py), and is read\nwith it; /learn/jobs lists every learning run. Learning costs money: it is off unless AGENT_ENABLED=1.\n",
+  "description": "HTTP API: upload a file, get the parsed document; read and manage the layout specs and the learning jobs.\n\n    uvicorn billparse.api:app --host 0.0.0.0 --port 8000        (the API page: GET /parse)\n    curl -F file=@invoice.pdf localhost:8000/parse\n\nThe paths and response models are invoice-parser's (invoiceparse/api.py and webapi.py), so its web app and clients\nwork unchanged. The store comes from the environment (DATABASE_URL, PARSER_DATA_DIR), as for the CLI. Parsing runs\nbillparse's pipeline: built-in specs, learned specs, the rule mapper, then (with ANTHROPIC_API_KEY) the LLM routes.\n\nParses run in worker processes (python -m billparse worker), never in the API: POST /parse/jobs queues one and answers\nat once (poll GET /parse/jobs/{id}, or give a callback_url for a signed webhook). POST /parse queues one and waits for\nit, up to PARSE_WAIT_SECONDS (300): a parse that takes longer answers 202 with the job, as POST /parse/jobs does.\nWith AGENT_ENABLED=1, a file that no spec proves gets one from the agent in a learning job of its own (agent.py): the\nparse answers with its first-pass result, and a proved spec replaces the stored result later (the webhook event\nresult.updated). /learn/jobs lists every learning run. Learning costs money: it is off unless AGENT_ENABLED=1.\n",
   "version": "1"
  },
  "paths": {
@@ -183,7 +183,7 @@
      "web"
     ],
     "summary": "Parse Start",
-    "description": "Start parsing a file and return at once; GET /parse/tasks/{sha256} says how it goes.",
+    "description": "Queue a parse of a file and return at once; GET /parse/tasks/{sha256} says how it goes.",
     "operationId": "parse_start_parse_start_post",
     "parameters": [
      {
@@ -359,6 +359,7 @@
      "web"
     ],
     "summary": "Parse Tasks",
+    "description": "The latest parse or reprice of the last 100 files, newest first.",
     "operationId": "parse_tasks_parse_tasks_get",
     "responses": {
      "200": {
@@ -529,7 +530,7 @@
      "web"
     ],
     "summary": "Stop Document",
-    "description": "Stop the learning or improving run of this file (the parse itself takes seconds and is not stopped).",
+    "description": "Stop this file's jobs: its parse (at the parse's next step) and its learning or improving run.",
     "operationId": "stop_document_documents__sha256__stop_post",
     "parameters": [
      {
@@ -1571,10 +1572,368 @@
     }
    }
   },
+  "/parse/jobs": {
+   "post": {
+    "summary": "Parse Job",
+    "description": "Queue a parse and answer at once (202). The file's parse already queued or running: that job (200).",
+    "operationId": "parse_job_parse_jobs_post",
+    "parameters": [
+     {
+      "name": "force",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "boolean",
+       "description": "parse again a file seen before; a learning or improving job of the file that ended without a spec runs again",
+       "default": false,
+       "title": "Force"
+      },
+      "description": "parse again a file seen before; a learning or improving job of the file that ended without a spec runs again"
+     },
+     {
+      "name": "callback_url",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "description": "POSTed a signed JSON body when the job ends (and again when learning replaces the result); must start with one of CALLBACK_ALLOWLIST",
+       "title": "Callback Url"
+      },
+      "description": "POSTed a signed JSON body when the job ends (and again when learning replaces the result); must start with one of CALLBACK_ALLOWLIST"
+     },
+     {
+      "name": "backend",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Backend"
+      }
+     },
+     {
+      "name": "fallback",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Fallback"
+      }
+     },
+     {
+      "name": "assume_os",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "description": "price lines that name no operating system as this one (Linux)",
+       "title": "Assume Os"
+      },
+      "description": "price lines that name no operating system as this one (Linux)"
+     },
+     {
+      "name": "assume_tenancy",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "description": "price lines that name no tenancy as this one (Shared)",
+       "title": "Assume Tenancy"
+      },
+      "description": "price lines that name no tenancy as this one (Shared)"
+     },
+     {
+      "name": "assume_software",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "description": "price lines that name no pre-installed software as this (NA)",
+       "title": "Assume Software"
+      },
+      "description": "price lines that name no pre-installed software as this (NA)"
+     },
+     {
+      "name": "assume_license",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "description": "price lines that name no license model as this one",
+       "title": "Assume License"
+      },
+      "description": "price lines that name no license model as this one"
+     },
+     {
+      "name": "assume_region",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "description": "price lines that name no region as this one (us-east-1)",
+       "title": "Assume Region"
+      },
+      "description": "price lines that name no region as this one (us-east-1)"
+     }
+    ],
+    "requestBody": {
+     "required": true,
+     "content": {
+      "multipart/form-data": {
+       "schema": {
+        "$ref": "#/components/schemas/Body_parse_job_parse_jobs_post"
+       }
+      }
+     }
+    },
+    "responses": {
+     "202": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/JobOut"
+        }
+       }
+      }
+     },
+     "200": {
+      "description": "the file is already being parsed: its job",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/JobOut"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   },
+   "get": {
+    "summary": "Parse Jobs",
+    "description": "Parse and reprice jobs, newest first.",
+    "operationId": "parse_jobs_parse_jobs_get",
+    "parameters": [
+     {
+      "name": "sha256",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Sha256"
+      }
+     },
+     {
+      "name": "state",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "State"
+      }
+     },
+     {
+      "name": "limit",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "integer",
+       "maximum": 500,
+       "default": 50,
+       "title": "Limit"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "array",
+         "items": {
+          "$ref": "#/components/schemas/JobOut"
+         },
+         "title": "Response Parse Jobs Parse Jobs Get"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/parse/jobs/{job_id}": {
+   "get": {
+    "summary": "Parse Job Get",
+    "operationId": "parse_job_get_parse_jobs__job_id__get",
+    "parameters": [
+     {
+      "name": "job_id",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "integer",
+       "title": "Job Id"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/JobOut"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/parse/jobs/{job_id}/stop": {
+   "post": {
+    "summary": "Parse Job Stop",
+    "description": "A queued job ends `stopped` at once; a running one at the parse's next step (between two chunks of a large\nfile).",
+    "operationId": "parse_job_stop_parse_jobs__job_id__stop_post",
+    "parameters": [
+     {
+      "name": "job_id",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "integer",
+       "title": "Job Id"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/JobOut"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
   "/parse": {
    "post": {
     "summary": "Parse",
-    "description": "Parse one file (CSV, TSV, xlsx, JSON, YAML, Terraform, PDF, pptx, docx, text, zip).",
+    "description": "Parse one file (CSV, TSV, xlsx, JSON, YAML, Terraform, PDF, pptx, docx, text, zip): a worker parses it while\nthis request waits, up to PARSE_WAIT_SECONDS (300). Longer (a large export): 202 with the job, to poll at\nGET /parse/jobs/{id}. The result is the first pass: a learning run, when the file needs one, runs after it.",
     "operationId": "parse_parse_post",
     "parameters": [
      {
@@ -1697,6 +2056,16 @@
        "application/json": {
         "schema": {
          "$ref": "#/components/schemas/ParseResult"
+        }
+       }
+      }
+     },
+     "202": {
+      "description": "not done within PARSE_WAIT_SECONDS: the job, to poll",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/JobOut"
         }
        }
       }
@@ -2098,7 +2467,7 @@
   "/learn/jobs/{job_id}/retry": {
    "post": {
     "summary": "Learn Retry",
-    "description": "Let this layout be sent to Claude again on its next upload (or backfill).",
+    "description": "Run this layout's learning again: a learn job (a worker runs it when the agent is on).",
     "operationId": "learn_retry_learn_jobs__job_id__retry_post",
     "parameters": [
      {
@@ -2182,10 +2551,10 @@
   "/learn/backfill": {
    "post": {
     "summary": "Learn Backfill",
-    "description": "Parse again every stored document that no spec proved, so each layout gets a spec. Calls the Claude API\nonce per new layout: allowed only with AGENT_ENABLED=1.",
+    "description": "Queue a parse of every stored document that no spec proved, so each layout gets a spec (in learn jobs). Calls\nthe Claude API once per new layout: allowed only with AGENT_ENABLED=1.",
     "operationId": "learn_backfill_learn_backfill_post",
     "responses": {
-     "200": {
+     "202": {
       "description": "Successful Response",
       "content": {
        "application/json": {
@@ -2206,8 +2575,53 @@
   "/nightly": {
    "post": {
     "summary": "Nightly",
-    "description": "Run the nightly loop and answer with its report.",
+    "description": "Queue the nightly loop (a worker runs it); its report is the job's result (GET /jobs/{id}).",
     "operationId": "nightly_nightly_post",
+    "responses": {
+     "202": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "additionalProperties": true,
+         "type": "object",
+         "title": "Response Nightly Nightly Post"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/jobs/schedules": {
+   "get": {
+    "summary": "Schedules",
+    "description": "Each schedule (the weekly AWS price refresh, the nightly loop): its next run and its last job.",
+    "operationId": "schedules_jobs_schedules_get",
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "items": {
+          "additionalProperties": true,
+          "type": "object"
+         },
+         "type": "array",
+         "title": "Response Schedules Jobs Schedules Get"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/jobs/stats": {
+   "get": {
+    "summary": "Job Stats",
+    "description": "Jobs per queue and state.",
+    "operationId": "job_stats_jobs_stats_get",
     "responses": {
      "200": {
       "description": "Successful Response",
@@ -2216,7 +2630,49 @@
         "schema": {
          "additionalProperties": true,
          "type": "object",
-         "title": "Response Nightly Nightly Post"
+         "title": "Response Job Stats Jobs Stats Get"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/jobs/{job_id}": {
+   "get": {
+    "summary": "Job Get",
+    "description": "Any job (a parse, reprice, learning run, price refresh or nightly loop), with its result.",
+    "operationId": "job_get_jobs__job_id__get",
+    "parameters": [
+     {
+      "name": "job_id",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "integer",
+       "title": "Job Id"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "additionalProperties": true,
+         "title": "Response Job Get Jobs  Job Id  Get"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
         }
        }
       }
@@ -2361,6 +2817,20 @@
      "file"
     ],
     "title": "Body_learn_spec_specs_learn_post"
+   },
+   "Body_parse_job_parse_jobs_post": {
+    "properties": {
+     "file": {
+      "type": "string",
+      "contentMediaType": "application/octet-stream",
+      "title": "File"
+     }
+    },
+    "type": "object",
+    "required": [
+     "file"
+    ],
+    "title": "Body_parse_job_parse_jobs_post"
    },
    "Body_parse_parse_post": {
     "properties": {
@@ -3914,6 +4384,224 @@
     ],
     "title": "InviteIn"
    },
+   "JobOut": {
+    "properties": {
+     "job_id": {
+      "type": "integer",
+      "title": "Job Id"
+     },
+     "kind": {
+      "type": "string",
+      "title": "Kind"
+     },
+     "queue": {
+      "type": "string",
+      "title": "Queue"
+     },
+     "sha256": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Sha256"
+     },
+     "name": {
+      "type": "string",
+      "title": "Name"
+     },
+     "state": {
+      "type": "string",
+      "title": "State"
+     },
+     "progress": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Progress"
+     },
+     "created": {
+      "type": "number",
+      "title": "Created"
+     },
+     "started": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Started"
+     },
+     "finished": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Finished"
+     },
+     "attempts": {
+      "type": "integer",
+      "title": "Attempts"
+     },
+     "error": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Error"
+     },
+     "summary": {
+      "anyOf": [
+       {
+        "additionalProperties": true,
+        "type": "object"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Summary"
+     },
+     "learning": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/LearningOut"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "callback_state": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Callback State"
+     },
+     "status_url": {
+      "type": "string",
+      "title": "Status Url"
+     },
+     "result_url": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Result Url"
+     }
+    },
+    "type": "object",
+    "required": [
+     "job_id",
+     "kind",
+     "queue",
+     "sha256",
+     "name",
+     "state",
+     "created",
+     "attempts",
+     "status_url"
+    ],
+    "title": "JobOut",
+    "description": "A parse job (POST /parse/jobs, GET /parse/jobs/{id}): the summary is ParseTask's fields once it is done."
+   },
+   "LearningOut": {
+    "properties": {
+     "state": {
+      "type": "string",
+      "title": "State"
+     },
+     "agent_status": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Agent Status"
+     },
+     "cost_usd": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Cost Usd"
+     },
+     "job_id": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Job Id"
+     },
+     "agent_job_id": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Agent Job Id"
+     },
+     "progress": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Progress"
+     }
+    },
+    "type": "object",
+    "required": [
+     "state"
+    ],
+    "title": "LearningOut",
+    "description": "The learning run a parse queued (a learn job): the parse's first-pass result is ready before it ends."
+   },
    "MappingPage": {
     "properties": {
      "rows": {
@@ -4348,6 +5036,38 @@
        }
       ],
       "title": "Cost Usd"
+     },
+     "job_id": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Job Id"
+     },
+     "queue": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Queue"
+     },
+     "learning": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/LearningOut"
+       },
+       {
+        "type": "null"
+       }
+      ]
      }
     },
     "type": "object",

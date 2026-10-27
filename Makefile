@@ -8,13 +8,13 @@ SERVICE ?= api
 
 .DEFAULT_GOAL := help
 .PHONY: help up dev down start stop restart build logs ps status psql migrate nightly shell destroy \
-        backup-db reset-db prices samples corpus corpus-check corpus-accept corpus-agent agent-jobs test lint lint-fix typecheck web-types api-local web-local
+        backup-db reset-db worker logs-worker prices samples corpus corpus-check corpus-accept corpus-agent agent-jobs test lint lint-fix typecheck web-types api-local web-local
 
 help:  ## Show the targets
 	@awk 'BEGIN {FS = ":.*## "} /^[a-z-]+:.*## / {printf "  %-12s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
 
 # ------------------------------------------------------------------ Docker
-up:  ## Build the images and start db, api and web in the background
+up:  ## Build the images and start db, api, the workers and web in the background
 	$(COMPOSE) up --build --detach
 	@echo "API: http://localhost:$${API_PORT:-8010}/parse   web app: http://localhost:$${WEB_PORT:-8090}"
 
@@ -105,8 +105,8 @@ test:  ## Run the tests
 	uv run pytest -q
 
 lint:  ## Lint the backend (Ruff) and the web app (oxlint)
-	uv run ruff check billparse/api.py billparse/webapi.py billparse/agent.py billparse/auth.py billparse/db.py billparse/store.py \
-		billparse/settings.py billparse/bigfile.py migrations/env.py tests/test_webapi.py tests/conftest.py scripts/export_openapi.py
+	uv run ruff check billparse/api.py billparse/webapi.py billparse/agent.py billparse/auth.py billparse/db.py billparse/store.py billparse/jobs.py billparse/worker.py \
+		billparse/settings.py billparse/bigfile.py migrations/env.py tests/test_webapi.py tests/test_jobs.py tests/conftest.py scripts/export_openapi.py
 	cd web && pnpm lint
 
 lint-fix:  ## Apply Ruff's safe fixes
@@ -118,8 +118,14 @@ typecheck:  ## Type check the web app (tsc)
 web-types:  ## Generate the web app's API types from the FastAPI OpenAPI document
 	cd web && pnpm gen:api
 
-api-local:  ## Run the API on this machine (SQLite unless DATABASE_URL is set)
+api-local:  ## Run the API on this machine (SQLite unless DATABASE_URL is set: then run make worker too)
 	uv run uvicorn billparse.api:app --reload --port 8000
+
+worker:  ## Run a worker on this machine for every queue (needs DATABASE_URL; SQLite runs the jobs in the API)
+	uv run python -m billparse worker --queues small:$${PARSE_WORKERS:-2},learn:1,large:$${LARGE_PARSE_WORKERS:-1},maintenance:1
+
+logs-worker:  ## Follow the workers' logs (worker and worker-large)
+	$(COMPOSE) logs --follow worker worker-large
 
 web-local:  ## Run the web app's dev server on this machine (http://localhost:5173; start api-local first)
 	cd web && pnpm dev

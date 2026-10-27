@@ -123,6 +123,48 @@ class AgentJobRow(SQLModel, table=True):
     seconds: float | None = None
 
 
+ACTIVE_PER_FILE = "kind IN ('parse','reprice') AND state IN ('queued','running','stopping')"
+
+
+class JobRow(SQLModel, table=True):
+    """One unit of background work (jobs.py): a parse, a reprice, a learning run, a scheduled task. Worker processes
+    claim it (FOR UPDATE SKIP LOCKED on PostgreSQL), hold it by a lease they renew, and finish it; a job whose lease
+    expired comes back (a dead worker). Never rows or file contents: they stay where the store keeps them."""
+    __tablename__: ClassVar[str] = "job"
+    __table_args__ = (
+        # at most one active parse or reprice per file: a second upload of the same file gets the same job
+        sa.Index("job_active_file", "sha256", unique=True, postgresql_where=sa.text(ACTIVE_PER_FILE),
+                 sqlite_where=sa.text(ACTIVE_PER_FILE)),
+    )
+    id: int | None = Field(default=None, sa_type=sa.BigInteger().with_variant(sa.Integer, "sqlite"),
+                           primary_key=True)
+    kind: str                                        # parse | reprice | learn | prices | nightly
+    queue: str = Field(index=True)                   # small | large | learn | maintenance
+    state: str = Field(index=True)                   # queued | running | stopping | done | error | stopped
+    sha256: str | None = Field(default=None, index=True)
+    name: str
+    options: dict[str, Any] = Field(default_factory=dict, sa_type=JSON)
+    dedupe_key: str | None = Field(default=None, unique=True)    # prices:2026-W44, nightly:2026-10-27
+    progress: str | None = None
+    attempts: int = 0
+    max_attempts: int = 2
+    lease_until: float | None = None
+    worker: str | None = None                        # host:pid:thread
+    created: float
+    started: float | None = None
+    finished: float | None = None
+    deadline: float | None = None
+    created_by: str | None = None
+    error: str | None = Field(default=None, sa_type=sa.Text)
+    result: dict[str, Any] | None = Field(default=None, sa_type=JSON)    # a summary, never rows
+    callback_url: str | None = None
+    callback_state: str | None = Field(default=None, index=True)        # pending | sent | failed
+    callback_event: str | None = None                # the event to send: parse.done, result.updated, ...
+    callback_attempts: int = 0
+    callback_next: float | None = None
+    parent_id: int | None = Field(default=None, sa_type=sa.BigInteger().with_variant(sa.Integer, "sqlite"))
+
+
 class AppUserRow(SQLModel, table=True):
     """A person admitted to the web app: a Google account of the allowed domain that gave a valid invite code once."""
     __tablename__: ClassVar[str] = "app_users"
@@ -263,5 +305,7 @@ def engine_for(url: str) -> Engine:
         engine = create_engine(url, connect_args={"check_same_thread": False, "timeout": 30})
         SQLModel.metadata.create_all(engine)
     else:
-        engine = create_engine(url, pool_pre_ping=True)   # PostgreSQL: the schema comes from the migrations
+        # PostgreSQL: the schema comes from the migrations. DB_POOL_SIZE: a worker sets its threads + 2
+        engine = create_engine(url, pool_pre_ping=True, pool_size=int(os.environ.get("DB_POOL_SIZE") or 5),
+                               max_overflow=int(os.environ.get("DB_MAX_OVERFLOW") or 10))
     return engine

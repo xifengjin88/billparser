@@ -7,12 +7,13 @@ without LLM calls.
 
 ## Quick start
 
-With Docker (PostgreSQL, the API and the web app):
+With Docker (PostgreSQL, the API, two workers and the web app):
 
 ```bash
 cp example.env .env                     # optional: ANTHROPIC_API_KEY, AUTH, ...
 make up                                 # web app http://localhost:8090, API http://localhost:8010/parse
-make dev                                # the same with hot reload (API and web app)
+make dev                                # the same with hot reload (API, workers and web app)
+make logs-worker                        # what the workers do
 make help                               # every target: logs, psql, migrate, nightly, backup-db, destroy, ...
 ```
 
@@ -28,7 +29,7 @@ uv sync --extra dev
 python samples/make_samples.py          # 13 sample files in samples/files/
 cp tests/fixtures/raw/*.json data/raw/  # tiny demo catalog; see "Service catalog" for the real one
 python -m billparse parse samples/files/* --no-llm
-make api-local                          # API on :8000
+make api-local                          # API on :8000 (with SQLite it runs the jobs itself: INLINE_WORKER)
 make web-local                          # web app on :5173 (cd web && pnpm install first)
 make test                               # tests; LLM routes use a fake LLM
 ```
@@ -42,7 +43,7 @@ The web app (`web/`: React, Vite, shadcn/ui, react-query; nginx in Docker forwar
 
 | Page | What it does |
 |---|---|
-| Upload | Drop files; each one is parsed in the background (`POST /parse/start`, polled at `GET /parse/tasks/{sha}`) |
+| Upload | Drop files; each one is queued and parsed by a worker (`POST /parse/start`, polled at `GET /parse/tasks/{sha}`); a learning run shows apart, after the first result |
 | Documents | Every file: status, confidence, total, route; a document's lines, checks, analysis and routes tried |
 | Review | The queue (`needs_review`, `unsupported`, most money first). Edit or delete lines, add lines, map unresolved services to catalog services, **Check again** (validates and analyzes again, saves nothing), tick the checklist, **Approve** |
 | Specs | Built-in and learned specs, every version, make one current, mark verified, the files each one parsed |
@@ -54,6 +55,69 @@ review item, saves each service pick as a synonym, and marks a candidate spec ve
 API types for the web app come from the OpenAPI document: `make web-types`. `GET /parse` is the API page with
 every endpoint. The endpoints of the CLI era stay: `POST /parse`, `GET /results/{sha}`, `/results/{sha}/rows`,
 `/review`, `/specs/{id}`, `POST /specs/{id}/approve`, `/nightly`, `/metrics`, plus `/health`.
+
+### Parse jobs (for other services)
+
+```bash
+curl -F file=@cur.csv.gz 'localhost:8010/parse/jobs?callback_url=https://hooks.example.com/billparse'
+# 202 {"job_id": 41, "sha256": "...", "state": "queued", "status_url": "/parse/jobs/41", ...}
+curl localhost:8010/parse/jobs/41      # state, progress, summary, learning; result_url once done
+curl localhost:8010/documents/<sha256> # the document
+```
+
+- `POST /parse/jobs` queues a parse and answers at once (202). A file that is already queued or running answers its
+  job (200). `GET /parse/jobs?sha256=&state=&limit=`, `GET /parse/jobs/{id}`, `POST /parse/jobs/{id}/stop`.
+- `POST /parse` keeps its request and its `ParseResult`: it queues the parse and waits for it, up to
+  `PARSE_WAIT_SECONDS` (300). A parse that takes longer (a large export) answers **202** with the job, to poll as
+  above. The result is the first pass: learning runs after it.
+- Webhooks: `callback_url` must start with one of `CALLBACK_ALLOWLIST` (empty: webhooks are off and a URL gets 400),
+  https only (http://localhost in development). The worker POSTs `{"event", "job_id", "sha256", "state", "summary",
+  "result_url", "sent_at"}` (never the rows) with `X-Billparse-Signature: sha256=<HMAC-SHA256 of the body with
+  CALLBACK_SECRET>`, `X-Billparse-Event` and `X-Billparse-Job`; 10 s timeout, no redirects. Events: `parse.done`,
+  `parse.error`, `parse.stopped`, and `result.updated` (learning proved a spec and the stored result changed). A
+  non-2xx answer is tried again after 30 s, 2 min, 10 min, 1 h and 6 h, then the callback is `failed`.
+- `POST /nightly` queues the nightly loop (202); `GET /jobs/{id}` shows any job with its result (the nightly report,
+  the price load). `GET /jobs/schedules`: each schedule's next run and last job. `GET /jobs/stats`: jobs per queue
+  and state.
+
+## Jobs and workers
+
+Every parse, reprice, learning run, price refresh and nightly loop is a row of the `job` table (`jobs.py`;
+PostgreSQL, migration `78fc8de19bf8`). The API only queues; worker processes run the jobs
+(`python -m billparse worker --queues small:2,learn:1`):
+
+| Queue | Jobs | Served by (docker compose) | Threads |
+|---|---|---|---|
+| `small` | parse and reprice of files under `LARGE_FILE_MB` | `worker` | `PARSE_WORKERS` (2) |
+| `learn` | learning runs (the agent; they cost money) | `worker` | 1 |
+| `large` | parse and reprice of large files | `worker-large` | `LARGE_PARSE_WORKERS` (1) |
+| `maintenance` | the weekly price refresh, the nightly loop | `worker-large` | 1 |
+
+- A worker claims a job with `FOR UPDATE SKIP LOCKED` (two workers never take the same job) and holds it with a
+  60 s lease that it renews every 15 s. A worker that dies loses its lease: another worker takes the job again
+  (at most 2 attempts; a learning run 1, because a retry costs money). A job never lives only in memory, so an API
+  or worker restart loses nothing; `GET /parse/tasks/{sha}` works after a restart.
+- At most one parse or reprice per file is queued or running (a partial unique index): a second upload of the same
+  file gets the same job.
+- Stop (`POST /parse/jobs/{id}/stop`, or Stop on a document) and the deadline per queue (`JOB_DEADLINE_SMALL` 1800 s,
+  `_LEARN` 3600, `_LARGE` 7200, `_MAINTENANCE` 7200) end a job at the parse's next step: between two chunks of a
+  large file.
+- Learning is a job of its own: the parse answers with its first-pass result, and a learning run that proves a spec
+  replaces the stored result later (webhook `result.updated`). Small files never wait for large files or learning.
+- SIGTERM: a worker claims nothing more and lets its jobs finish (`stop_grace_period`: 2 min for `worker`, 10 min
+  for `worker-large`); what is left comes back through its lease (a parse is idempotent per file).
+- Schedules, from every worker (a `dedupe_key` per run, so two workers make one job): the AWS price refresh every
+  `PRICES_REFRESH_DAY` (sun) at `PRICES_REFRESH_HOUR_UTC` (10), the nightly loop at `NIGHTLY_HOUR_UTC` (11). An
+  empty value turns one off. The price refresh downloads into `PRICE_FILES_DIR.incoming-<date>` and replaces the
+  previous files only when the download is complete; then it loads them (a load that loses more than 10% of a price
+  list's rates is refused: the job ends `error` and the current snapshot stays). Stored documents are not repriced.
+- More API or worker containers: `docker compose up --scale api=2 --scale worker=3` (behind a load balancer for the
+  API). Their state is in PostgreSQL and the shared `billparse-data` volume.
+- Connections to PostgreSQL: a worker opens at most its threads + 4 (`DB_POOL_SIZE` = threads + 2, overflow 2), the
+  API at most 15. The default compose (api, worker with 3 threads, worker-large with 2) uses at most 15 + 7 + 6 = 28
+  of PostgreSQL's 100.
+- Local runs with SQLite (`make api-local`, the tests): `INLINE_WORKER=1` (the default with SQLite) runs a worker in
+  the API process. With PostgreSQL outside Docker: `make api-local` and `make worker`.
 
 Sign-in is optional and works as in invoice-parser: `AUTH=google` with a Google OAuth client, one email domain,
 and an invite code the first time (see `example.env`). The redirect URI is `<address>/api/auth/callback`.
@@ -176,11 +240,11 @@ rows (`SAMPLE_ROWS`, fewer for a wide file: `SAMPLE_CELLS`); the accepted spec t
 (`CHUNK_ROWS`, fewer for a wide file: `CHUNK_CELLS`), each chunk through the same steps as a small file. Only the
 columns the spec names are read, and a line keeps no extra text of the other columns. A row with another number of
 fields than the header cannot be read: the row coverage check fails. A byte that is not valid in the file's encoding
-is replaced (with a warning). Agent jobs of large files are queued; the nightly loop runs them. The rows go to one Parquet file. Only sums stay in memory: the statistics the checks
+is replaced (with a warning). Learning runs of large files, as of small files, are jobs of the `learn` queue. The rows go to one Parquet file. Only sums stay in memory: the statistics the checks
 read (the same checks, names and weights as a small file) and the lines rolled up by service, region, account,
 charge type, coverage, month and the other keys of a charge. The analysis and the contract come from the rolled-up
 lines, so their sums are exact; a charge counts its lines in its `lines` attribute. The source viewer shows the
-first rows. Large parses run in their own pool (`LARGE_PARSE_WORKERS`); a waiting one shows `queued`.
+first rows. Large parses run on their own queue (`large`, `LARGE_PARSE_WORKERS` threads); a waiting one shows `queued`.
 `scripts/bench_large.py` measures one: 5M CUR rows (1.5 GB CSV) in 76 s with 1.7 GB of memory, against 118 s and
 11 GB in memory.
 
@@ -200,7 +264,9 @@ savings and assumes no discount: that belongs to its consumers. `commitment_oppo
 
 ## Learning loop
 
-Run nightly: `python -m billparse nightly` (or `POST /nightly`).
+The workers run it every day at `NIGHTLY_HOUR_UTC` (11). By hand: `python -m billparse nightly`, or `POST /nightly`
+(queued). It queues a learning job for every agent job that waits (with the agent on); it removes temporary uploads
+older than a day that no job uses.
 
 1. Retries every open review item with the current spec library and the LLM.
 2. If a learned spec failed on a file (including when a renamed column stopped it matching),
@@ -239,6 +305,8 @@ python scripts/aws/fetch_aws_price_files.py --all-services --savings-plans --out
 make prices                                   # load PRICE_FILES_DIR into DATABASE_URL as one snapshot
 make prices ARGS="--only AmazonRDS"           # one price list; the others stay as they are
 ```
+
+In Docker the workers do both every week (`PRICES_REFRESH_DAY`, `PRICES_REFRESH_HOUR_UTC`; see "Jobs and workers").
 
 - **History, written only on change.** A rate row has `effective_from`/`effective_to`. A load closes the rates whose
   price changed or that are gone and inserts the new ones; an unchanged rate is not written again. AWS prints a recent
@@ -329,14 +397,14 @@ Schema changes go through Alembic: change `billparse/db.py`, then
   `azure-cost-analysis-export` and `gcp-cost-table` are marked unverified. Run real samples first.
 - No OCR: scanned PDFs are detected and queued. Hook Azure Document Intelligence or Textract
   into `docmodel._read_pdf` to produce the same word-with-position rows.
-- Parses run in a thread pool in the API process (`PARSE_WORKERS`), large files in a second pool
-  (`LARGE_PARSE_WORKERS`). A task is in memory: an API restart forgets running tasks (never stored results). One API
-  container only.
+- The API and the workers share the `billparse-data` volume (uploads, result rows), so they run on one host. Files
+  go through `Store`: object storage (S3) would change that one place.
+- Webhooks go out from the workers: a receiver must be reachable from them, and on `CALLBACK_ALLOWLIST`.
 - Large files (more than `LARGE_FILE_MB` uncompressed, default 100 MB): CSV and Parquet only, plain, in gzip, or as
   the one file of a zip. A large Excel, PDF or JSON file is refused ("Export this report as CSV"), and so is a file
   of more than `MAX_UNCOMPRESSED_GB` (default 50) uncompressed. A layout whose spec reshapes the table (a month per
-  column) or reads a grid cannot be read in chunks. The agent never runs inline on a large file: its job is queued, works on
-  the first rows, and runs in the nightly loop (with the agent on). A CSV row with another number of fields than the
+  column) or reads a grid cannot be read in chunks. The agent works on a large file's first rows, in a learning job, as for
+  a small file. A CSV row with another number of fields than the
   header is not read and the row coverage check fails; a small file keeps a row with fewer fields.
 - Files just under `LARGE_FILE_MB` use the in-memory path, about 10 to 18 times the CSV size in memory (a 100 MB
   CUR: about 1 to 2 GB). Set `LARGE_FILE_MB` from the memory a parse may use.
