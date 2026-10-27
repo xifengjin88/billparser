@@ -58,6 +58,10 @@ def _print_summary(r: dict) -> None:
 
 
 def main(argv: list[str] | None = None) -> None:
+    args = sys.argv[1:] if argv is None else argv
+    if args[:1] == ["worker"]:                       # python -m billparse worker --queues small:2,learn:1
+        from .worker import main as worker_main
+        return worker_main(args[1:])
     ap = argparse.ArgumentParser(prog="billparse")
     sub = ap.add_subparsers(dest="cmd", required=True)
     p = sub.add_parser("parse")
@@ -66,6 +70,7 @@ def main(argv: list[str] | None = None) -> None:
     p.add_argument("--no-llm", action="store_true")
     p.add_argument("--force", action="store_true")
     sub.add_parser("nightly")
+    sub.add_parser("worker", help="run the jobs of the job table (--queues small:2,learn:1)")
     sp = sub.add_parser("specs")
     sp.add_argument("action", nargs="?", default="list", choices=["list", "show", "approve", "rollback", "test"])
     sp.add_argument("id", nargs="?")
@@ -82,7 +87,8 @@ def main(argv: list[str] | None = None) -> None:
 
     load_env()
     configure_logging()
-    pipe = Pipeline(Settings(use_llm=not getattr(a, "no_llm", False)))
+    # a command runs its learning itself (a worker runs the API's)
+    pipe = Pipeline(Settings(use_llm=not getattr(a, "no_llm", False), learn_inline=True))
     if a.cmd == "parse":
         for f in a.files:
             r = pipe.parse_file(f, force=a.force)
@@ -134,9 +140,9 @@ def _agent(pipe: Pipeline, a) -> None:
         job_id = agent.enqueue_for(pipe, r) or next(j["id"] for j in st.agent_jobs() if j["layout_key"] == key)
         st.retry_agent_job(job_id)
         _print_job(agent.run_job(pipe, job_id))
-    elif a.action == "drain":
+    elif a.action == "drain":                       # a worker runs them (python -m billparse worker)
         for j in reversed(st.agent_jobs("queued")):
-            _print_job(agent.run_job(pipe, j["id"]))
+            print(f"job {j['id']} {j['name']}: learn job {pipe.queue_learning(j['id'])}")
 
 
 def _print_job(j: dict) -> None:

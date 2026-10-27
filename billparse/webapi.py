@@ -3,7 +3,8 @@ jobs, costs and the service map. The paths and response models are invoice-parse
 web app runs unchanged; behind them is billparse's pipeline, store and agent.
 
 A document's view is the contract document (contract.py) that each parse saves beside its lines; the approved
-version ("gold") replaces it after review. The server keeps nothing in memory between requests but the parse tasks.
+version ("gold") replaces it after review. The server keeps nothing in memory between requests: a parse, a reprice
+and a learning run are rows of the job table (jobs.py) that a worker runs (worker.py).
 """
 
 from __future__ import annotations
@@ -12,11 +13,7 @@ import hashlib
 import io
 import json
 import os
-import threading
 import time
-import traceback
-from concurrent.futures import Future, ThreadPoolExecutor
-from dataclasses import replace
 from decimal import Decimal
 from functools import lru_cache
 from pathlib import Path
@@ -26,11 +23,10 @@ from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, Upl
 from fastapi.responses import Response
 from pydantic import BaseModel, Field
 
-from . import agent, auth, bigfile, contract, highlight
+from . import agent, auth, bigfile, contract, highlight, jobs, worker
 from . import llm as llm_mod
 from .analyze import RESOLVER_LOCK, get_resolver
 from .pipeline import Pipeline
-from .pipeline import Settings as PipelineSettings
 from .pricing import PriceDefaults
 from .review import CHECKLIST, apply_edits, approve, charge_rows, drop_gaps
 from .schema import DOC_TYPES, KINDS, Cite, Document, Pricing, cv
@@ -46,7 +42,7 @@ MAX_UPLOAD_MB = int(os.environ.get("MAX_UPLOAD_MB", "2048"))
 def get_store() -> Store:
     """The store of the API (billparse.api uses this same function, so a test's override covers both)."""
     store = Store(data_dir())
-    store.recover_agent_jobs()                       # agent jobs that a stopped app left running
+    worker.ensure_inline(store)                      # INLINE_WORKER (SQLite): this process runs the jobs left queued
     return store
 
 
@@ -54,21 +50,7 @@ def llm_wanted() -> bool:
     return os.environ.get("BILLPARSE_USE_LLM", "1") != "0" and bool(os.environ.get("ANTHROPIC_API_KEY"))
 
 
-@lru_cache(maxsize=32)
-def _pipeline(store: Store, use_llm: bool, backend: str | None = None, fallback: str | None = None) -> Pipeline:
-    """One pipeline per choice of models (kept and reused): backend sets the spec route's model and effort, fallback
-    the agent's ("model:effort", see llm.llm_choices); None or "claude" keep the .env settings."""
-    pipe = Pipeline(PipelineSettings(store_dir=store.root, catalog_dir=catalog_dir(), use_llm=use_llm), store=store)
-    notes = []
-    if use_llm and (c := llm_mod.parse_choice(backend)):
-        pipe.llm = llm_mod.AnthropicLLM(model=c[0], effort=c[1])
-        notes.append(f"spec {backend}")
-    if (c := llm_mod.parse_choice(fallback)):
-        base = agent.Limits.from_env()
-        pipe.agent_limits = replace(base, model=c[0], effort=c[1] or base.effort)
-        notes.append(f"agent {fallback}")
-    pipe.choice_note = ", ".join(notes) or None
-    return pipe
+_pipeline = worker.pipeline_for                      # one pipeline per choice of models (worker.py)
 
 
 def get_pipeline(store: Store = Depends(get_store)) -> Pipeline:
@@ -355,6 +337,16 @@ class SourceLine(BaseModel):
     top: float | None = None         # PDF: the line's top in points (the page image has highlight.SCALE pixels a point)
 
 
+class LearningOut(BaseModel):
+    """The learning run a parse queued (a learn job): the parse's first-pass result is ready before it ends."""
+    state: str                              # the learn job: queued, running, stopping, done, error, stopped
+    agent_status: str | None = None         # its agent job: proved, unproved, limit, ...
+    cost_usd: float | None = None
+    job_id: int | None = None
+    agent_job_id: int | None = None
+    progress: str | None = None
+
+
 class ParseTask(BaseModel):
     sha256: str
     name: str
@@ -376,6 +368,9 @@ class ParseTask(BaseModel):
     model_calls: int | None = None
     cached: bool | None = None
     cost_usd: float | None = None
+    job_id: int | None = None
+    queue: str | None = None
+    learning: LearningOut | None = None
 
 
 class PriceDefaultsIn(BaseModel):
@@ -501,12 +496,16 @@ def _row(store: Store, sha: str) -> dict:
     return row_dict(store, row)
 
 
-def row_dict(store: Store, row, runs: list[dict] | None = None) -> dict:
+def busy(store: Store) -> set[str]:
+    """The files a parse or reprice job is queued or running for (one query for a whole list)."""
+    return {j["sha256"] for j in jobs.list_jobs(store, kinds=jobs.FILE_KINDS, states=jobs.ACTIVE, limit=10_000)}
+
+
+def row_dict(store: Store, row, runs: list[dict] | None = None, busy: set[str] | None = None) -> dict:
     summary = row.summary or {}
     c = summary.get("contract") or {}
     last = (runs if runs is not None else store.runs(row.sha256))[-1:] or [{}]
-    t = _tasks.get(row.sha256)
-    running = t is not None and not t["future"].done()
+    running = row.sha256 in busy if busy is not None else bool(jobs.active(store, row.sha256, jobs.FILE_KINDS))
     return {"sha256": row.sha256, "name": row.name, "fmt": row.file_type, "uploaded_at": row.uploaded_at,
             "status": "processing" if running and not summary else contract.status_of(row.status),
             "completeness": c.get("completeness") or summary.get("completeness"),
@@ -661,42 +660,8 @@ def settings() -> Settings:
 
 
 # ------------------------------------------------------------------ parsing in the background
-# A parse can take minutes (a layout spec is learned or improved): the browser starts it, then polls its task.
-_pool = ThreadPoolExecutor(max_workers=int(os.environ.get("PARSE_WORKERS", "2")), thread_name_prefix="parse")
-# large files (bigfile.py) in a pool of their own, so they never hold up small files: LARGE_PARSE_WORKERS at a time
-_large_pool = ThreadPoolExecutor(max_workers=int(os.environ.get("LARGE_PARSE_WORKERS", "1")),
-                                 thread_name_prefix="parse-large")
-_tasks: dict[str, dict] = {}
-_lock = threading.Lock()
-
-
-def _task_out(store: Store, sha: str, t: dict) -> ParseTask:
-    fut: Future = t["future"]
-    out = ParseTask(sha256=sha, name=t["name"], state="running", started=t["started"], started_by=t.get("by"))
-    if not fut.done():
-        out.progress = _progress(store, sha, t["started"]) or t.get("progress")
-        return out
-    out.finished = t.get("finished")
-    if (e := fut.exception()) is not None:
-        out.state, out.error = "error", f"{type(e).__name__}: {e}"
-        return out
-    r: dict = fut.result()
-    c = r.get("contract") or {}
-    row = store.document(sha)
-    job = store.agent_job_for(sha) if not r.get("cached") else None
-    out.state = "done"
-    out.status = contract.status_of(row.status if row else r.get("status"))
-    out.lane, out.completeness, out.confidence = c.get("lane"), c.get("completeness"), c.get("confidence")
-    out.charges, out.gaps = c.get("charges"), c.get("gaps")
-    out.counted_total = c.get("counted_total") if c.get("charges") else None
-    out.elapsed_ms = int((r.get("seconds") or 0) * 1000)
-    out.model_calls, out.cached = int(r.get("llm_calls") or 0), bool(r.get("cached"))
-    out.total_ms = int(((t.get("finished") or time.time()) - t["started"]) * 1000) if not r.get("cached") else None
-    ran = job if job and (job.get("started") or 0) >= t["started"] - 1 else None
-    out.cost_usd = round(ran["cost_usd"], 6) if ran else None
-    return out
-
-
+# A parse is a job (jobs.py) that a worker runs (worker.py): the browser starts it, then polls its task. A file's
+# learning run is a job of its own (the learn queue): the parse is done before it, and `learning` says how it goes.
 def _progress(store: Store, sha: str, since: float) -> str | None:
     """What the learning or improving job of this file is doing now (from its trace), or None."""
     job = store.agent_job_for(sha)
@@ -717,6 +682,40 @@ def _progress(store: Store, sha: str, since: float) -> str | None:
     return " · ".join(parts)
 
 
+def learning_of(store: Store, job: dict) -> LearningOut | None:
+    """The learn job this parse queued, with its agent job's status and cost."""
+    learn = next(iter(jobs.list_jobs(store, kinds=("learn",), parent_id=job["id"], limit=1)), None)
+    if learn is None:
+        return None
+    aj_id = (learn.get("options") or {}).get("agent_job_id")
+    aj = store.agent_job(aj_id) if aj_id else None
+    return LearningOut(state=learn["state"], agent_status=aj["status"] if aj else None,
+                       cost_usd=round(aj["cost_usd"], 6) if aj and aj.get("cost_usd") is not None else None,
+                       job_id=learn["id"], agent_job_id=aj_id,
+                       progress=_progress(store, job["sha256"], learn["started"] or learn["created"])
+                       if learn["state"] == "running" else None)
+
+
+def _task_out(store: Store, job: dict) -> ParseTask:
+    """A parse or reprice job as the web app's task: queued and running are both `running` (progress says which)."""
+    out = ParseTask(sha256=job["sha256"], name=job["name"], state="running", started=job["created"],
+                    started_by=job.get("created_by"), job_id=job["id"], queue=job["queue"])
+    if job["state"] in jobs.ACTIVE:
+        out.progress = "queued" if job["state"] == "queued" else \
+            "stopping" if job["state"] == "stopping" else job.get("progress")
+        return out
+    out.finished = job.get("finished")
+    if job["state"] != "done":
+        out.state, out.error = "error", job.get("error") or job["state"]
+        return out
+    out.state = "done"
+    for k, v in (job.get("result") or {}).items():
+        if k in ParseTask.model_fields and k not in ("state", "sha256", "name"):
+            setattr(out, k, v)
+    out.learning = learning_of(store, job)
+    return out
+
+
 def _use_llm(backend: str | None) -> bool:
     if backend is None:
         return llm_wanted()
@@ -725,44 +724,19 @@ def _use_llm(backend: str | None) -> bool:
 
 def start_parse(store: Store, name: str, path: Path, sha: str, force: bool, use_llm: bool, user: str | None = None,
                 agent_step: bool = True, backend: str | None = None, fallback: str | None = None,
-                temp: bool = False, defaults: PriceDefaults | None = None) -> str:
-    """Parse the file at path (its SHA-256 is sha) in the background. temp: path is an upload, moved into the store
-    or removed when the parse ends."""
-    info = bigfile.classify(path, name)                 # once: the parse takes it (a gzip is read to tell its size)
-    large = info.large
-    with _lock:
-        t = _tasks.get(sha)
-        if t and not t["future"].done():
-            if temp:
-                path.unlink(missing_ok=True)
-            return sha                                   # already being parsed: the same task
-        pipe = _pipeline(store, use_llm, backend or None, fallback or None)
-        task: dict = {"name": name, "started": time.time(), "by": user, "progress": "queued" if large else None}
-
-        def step(s: str) -> None:
-            task.update(step=s)
-            if s.startswith("reading"):
-                task["progress"] = s[0].upper() + s[1:]
-
-        def run() -> dict:
-            task["progress"] = "reading" if large else None
-            try:
-                result = pipe.parse_path(path, name, force=force, agent=agent_step, user=user, on_step=step,
-                                         move=temp, sha=sha, info=info, price_defaults=defaults)
-                row = store.document(sha)
-                if row is not None and user and not row.uploaded_by:
-                    store.update_document(sha, uploaded_by=user)
-                return result
-            except Exception:
-                traceback.print_exc()
-                raise
-            finally:
-                task["finished"] = time.time()
-                if temp:
-                    path.unlink(missing_ok=True)
-        task["future"] = (_large_pool if large else _pool).submit(run)
-        _tasks[sha] = task
-    return sha
+                temp: bool = False, defaults: PriceDefaults | None = None,
+                callback_url: str | None = None) -> tuple[dict, bool]:
+    """Queue a parse of the file at path (its SHA-256 is sha): (the job, True), or the file's parse already queued
+    or running (that job, False). temp: path is an upload, moved into the store by the parse, or removed."""
+    large = bigfile.classify(path, name).large           # the queue: a large file never holds up small ones
+    options = {"force": force, "use_llm": use_llm, "agent_step": agent_step, "backend": backend or None,
+               "fallback": fallback or None, "price_defaults": defaults.given() if defaults else None,
+               "temp_path": str(path) if temp else None}
+    job, created = jobs.enqueue(store, "parse", "large" if large else "small", name=name, sha256=sha, options=options,
+                                created_by=user, callback_url=callback_url)
+    if not created and temp:
+        path.unlink(missing_ok=True)
+    return job, created
 
 
 @router.post("/parse/start", response_model=ParseTask, tags=["web"])
@@ -771,30 +745,39 @@ def parse_start(request: Request, file: UploadFile = File(...), force: bool = Qu
                 assume_os: str | None = ASSUME_OS, assume_tenancy: str | None = ASSUME_TENANCY,
                 assume_software: str | None = ASSUME_SOFTWARE, assume_license: str | None = ASSUME_LICENSE,
                 assume_region: str | None = ASSUME_REGION, store: Store = Depends(get_store)) -> ParseTask:
-    """Start parsing a file and return at once; GET /parse/tasks/{sha256} says how it goes."""
-    for choice in (backend, fallback):
+    """Queue a parse of a file and return at once; GET /parse/tasks/{sha256} says how it goes."""
+    check_choices(backend, fallback)
+    path, sha, _ = save_upload(file, store)
+    job, _ = start_parse(store, file.filename or "upload", path, sha, force, _use_llm(backend),
+                         auth.current_user(request), agent_step=fallback != "none", backend=backend,
+                         fallback=fallback, temp=True,
+                         defaults=price_defaults(assume_os, assume_tenancy, assume_software, assume_license,
+                                                 assume_region))
+    return _task_out(store, job)
+
+
+def check_choices(*choices: str | None) -> None:
+    for choice in choices:
         if choice and choice not in ("claude", "none") and llm_mod.parse_choice(choice) is None:
             raise HTTPException(400, f"Unknown model choice {choice!r}; known: claude, none, "
                                      f"{', '.join(llm_mod.llm_choices())}")
-    path, sha, _ = save_upload(file, store)
-    sha = start_parse(store, file.filename or "upload", path, sha, force, _use_llm(backend), auth.current_user(request),
-                      agent_step=fallback != "none", backend=backend, fallback=fallback, temp=True,
-                      defaults=price_defaults(assume_os, assume_tenancy, assume_software, assume_license,
-                                              assume_region))
-    return _task_out(store, sha, _tasks[sha])
 
 
 @router.get("/parse/tasks", response_model=list[ParseTask], tags=["web"])
 def parse_tasks(store: Store = Depends(get_store)) -> list[ParseTask]:
-    return [_task_out(store, sha, t) for sha, t in sorted(_tasks.items(), key=lambda x: -x[1]["started"])]
+    """The latest parse or reprice of the last 100 files, newest first."""
+    latest: dict[str, dict] = {}
+    for j in jobs.list_jobs(store, kinds=jobs.FILE_KINDS, limit=500):
+        latest.setdefault(j["sha256"], j)
+    return [_task_out(store, j) for j in list(latest.values())[:100]]
 
 
 @router.get("/parse/tasks/{sha256}", response_model=ParseTask, tags=["web"])
 def parse_task(sha256: str, store: Store = Depends(get_store)) -> ParseTask:
-    t = _tasks.get(sha256)
-    if t is None:
-        raise HTTPException(404, "No parse of this file was started since the API started.")
-    return _task_out(store, sha256, t)
+    job = jobs.latest(store, sha256)
+    if job is None:
+        raise HTTPException(404, "No parse of this file was started.")
+    return _task_out(store, job)
 
 
 def _stored(store: Store, sha: str) -> Path:
@@ -813,8 +796,8 @@ def reparse(sha256: str, request: Request, store: Store = Depends(get_store)) ->
     for j in store.agent_jobs():                     # this file's last job runs again on this parse
         if j["sha256"] == sha256 and j["status"] not in ("queued", "running", "stopping"):
             store.retry_agent_job(j["id"])
-    sha = start_parse(store, row["name"], path, sha256, True, llm_wanted(), auth.current_user(request))
-    return _task_out(store, sha, _tasks[sha])
+    job, _ = start_parse(store, row["name"], path, sha256, True, llm_wanted(), auth.current_user(request))
+    return _task_out(store, job)
 
 
 @router.post("/documents/{sha256}/reprice", response_model=ParseTask, tags=["web"])
@@ -826,31 +809,21 @@ def reprice(sha256: str, request: Request, body: PriceDefaultsIn | None = None,
     if store.get_result(sha256) is None:
         raise HTTPException(404, "The document has no stored result to price.")
     defaults = PriceDefaults(**body.model_dump()) if body is not None else None
-    with _lock:
-        t = _tasks.get(sha256)
-        if t and not t["future"].done():
-            return _task_out(store, sha256, t)
-        pipe = _pipeline(store, False)
-        task: dict = {"name": row["name"], "started": time.time(), "by": auth.current_user(request),
-                      "progress": "pricing"}
-
-        def run() -> dict:
-            try:
-                return pipe.reprice(sha256, defaults if defaults is None or defaults.given() else None)
-            finally:
-                task["finished"] = time.time()
-        task["future"] = _pool.submit(run)
-        _tasks[sha256] = task
-    return _task_out(store, sha256, task)
+    job, _ = jobs.enqueue(store, "reprice", "small", name=row["name"], sha256=sha256,
+                          options={"price_defaults": defaults.given() if defaults else None},
+                          created_by=auth.current_user(request))
+    return _task_out(store, job)
 
 
 @router.post("/documents/{sha256}/stop", tags=["web"])
 def stop_document(sha256: str, store: Store = Depends(get_store)) -> dict[str, list[int]]:
-    """Stop the learning or improving run of this file (the parse itself takes seconds and is not stopped)."""
+    """Stop this file's jobs: its parse (at the parse's next step) and its learning or improving run."""
     _row(store, sha256)
     stopped = [j["id"] for j in store.agent_jobs() if j["sha256"] == sha256 and j["status"] in ("queued", "running")]
     for job_id in stopped:
         stop_job(store, job_id)
+    for j in jobs.active(store, sha256):
+        jobs.request_stop(store, j["id"])
     return {"stopped": stopped}
 
 
@@ -860,8 +833,8 @@ def parse_current(sha256: str, request: Request, store: Store = Depends(get_stor
     request, so it is free."""
     row = _row(store, sha256)
     path = _stored(store, sha256)
-    sha = start_parse(store, row["name"], path, sha256, True, False, auth.current_user(request), agent_step=False)
-    return _task_out(store, sha, _tasks[sha])
+    job, _ = start_parse(store, row["name"], path, sha256, True, False, auth.current_user(request), agent_step=False)
+    return _task_out(store, job)
 
 
 # ------------------------------------------------------------------ documents
@@ -907,11 +880,9 @@ def charge_detail(sha256: str, charge_id: str, store: Store = Depends(get_store)
 def delete_document(sha256: str, store: Store = Depends(get_store)) -> dict:
     """Delete the result, its runs and the uploaded file. Layout specs and jobs stay."""
     row = _row(store, sha256)
-    t = _tasks.get(sha256)
-    if row["status"] == "processing" or (t and not t["future"].done()):
-        raise HTTPException(409, "This file is being parsed; delete it when the parse ends.")
+    if row["status"] == "processing" or jobs.active(store, sha256):
+        raise HTTPException(409, "This file has a job queued or running; delete it when the job ends.")
     store.delete_document(sha256)
-    _tasks.pop(sha256, None)
     return {"deleted": sha256}
 
 

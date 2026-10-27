@@ -111,7 +111,10 @@ export const useSourceLines = (sha: string, page: number | null) =>
     queryFn: () => api.get<SourceLine[]>(`/documents/${sha}/source/lines${qs({ page })}`),
   })
 
-const anyRunning = (tasks?: ParseTask[]) => !!tasks?.some((t) => t.state === 'running')
+// a parse, or the learning run it queued, that has not ended yet
+export const learningActive = (t?: ParseTask) => ['queued', 'running', 'stopping'].includes(t?.learning?.state ?? '')
+const busy = (t?: ParseTask) => t?.state === 'running' || learningActive(t)
+const anyRunning = (tasks?: ParseTask[]) => !!tasks?.some(busy)
 
 export const useTasks = () =>
   useQuery({
@@ -126,7 +129,7 @@ export const useTask = (sha: string, enabled = true) =>
     queryFn: () => api.get<ParseTask>(`/parse/tasks/${sha}`),
     enabled,
     retry: false,
-    refetchInterval: (q) => (q.state.data?.state === 'running' ? 1500 : false),
+    refetchInterval: (q) => (busy(q.state.data) ? 1500 : false),
   })
 
 export function useStartParse() {

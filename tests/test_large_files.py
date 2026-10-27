@@ -14,7 +14,6 @@ import subprocess
 import sys
 import time
 import zipfile
-from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import numpy as np
@@ -242,13 +241,10 @@ def client(tmp_path, monkeypatch):
     pipe = _pipe(tmp_path)
     monkeypatch.setenv("CATALOG_DIR", str(tmp_path / "data"))
     monkeypatch.setenv("BILLPARSE_USE_LLM", "0")
-    monkeypatch.setattr(webapi, "_large_pool", ThreadPoolExecutor(1, thread_name_prefix="parse-large"))
     webapi._pipeline.cache_clear()
-    webapi._tasks.clear()
     api.app.dependency_overrides[webapi.get_store] = lambda: pipe.store
     api.app.dependency_overrides[webapi.get_pipeline] = lambda: pipe
     yield TestClient(api.app)
-    webapi._large_pool.shutdown(wait=True)
     api.app.dependency_overrides.clear()
     webapi._pipeline.cache_clear()
     analyze_mod._RESOLVER = None

@@ -120,7 +120,7 @@ export interface paths {
         put?: never;
         /**
          * Parse Start
-         * @description Start parsing a file and return at once; GET /parse/tasks/{sha256} says how it goes.
+         * @description Queue a parse of a file and return at once; GET /parse/tasks/{sha256} says how it goes.
          */
         post: operations["parse_start_parse_start_post"];
         delete?: never;
@@ -136,7 +136,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Parse Tasks */
+        /**
+         * Parse Tasks
+         * @description The latest parse or reprice of the last 100 files, newest first.
+         */
         get: operations["parse_tasks_parse_tasks_get"];
         put?: never;
         post?: never;
@@ -216,7 +219,7 @@ export interface paths {
         put?: never;
         /**
          * Stop Document
-         * @description Stop the learning or improving run of this file (the parse itself takes seconds and is not stopped).
+         * @description Stop this file's jobs: its parse (at the parse's next step) and its learning or improving run.
          */
         post: operations["stop_document_documents__sha256__stop_post"];
         delete?: never;
@@ -583,6 +586,68 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/parse/jobs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Parse Jobs
+         * @description Parse and reprice jobs, newest first.
+         */
+        get: operations["parse_jobs_parse_jobs_get"];
+        put?: never;
+        /**
+         * Parse Job
+         * @description Queue a parse and answer at once (202). The file's parse already queued or running: that job (200).
+         */
+        post: operations["parse_job_parse_jobs_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/parse/jobs/{job_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Parse Job Get */
+        get: operations["parse_job_get_parse_jobs__job_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/parse/jobs/{job_id}/stop": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Parse Job Stop
+         * @description A queued job ends `stopped` at once; a running one at the parse's next step (between two chunks of a large
+         *     file).
+         */
+        post: operations["parse_job_stop_parse_jobs__job_id__stop_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/parse": {
         parameters: {
             query?: never;
@@ -594,7 +659,10 @@ export interface paths {
         put?: never;
         /**
          * Parse
-         * @description Parse one file (CSV, TSV, xlsx, JSON, YAML, Terraform, PDF, pptx, docx, text, zip).
+         * @description Parse one file (CSV, TSV, xlsx, JSON, YAML, Terraform, PDF, pptx, docx, text, zip): a worker parses it while
+         *     this request waits, up to PARSE_WAIT_SECONDS (300). Longer (a large export): 202 with the job, to poll at
+         *     GET /parse/jobs/{id}. The result is the first pass: a learning run, when the file needs one, runs after it.
+         *     The wait holds no request thread (async): many callers waiting never block the other endpoints.
          */
         post: operations["parse_parse_post"];
         delete?: never;
@@ -785,7 +853,7 @@ export interface paths {
         put?: never;
         /**
          * Learn Retry
-         * @description Let this layout be sent to Claude again on its next upload (or backfill).
+         * @description Run this layout's learning again: a learn job (a worker runs it when the agent is on).
          */
         post: operations["learn_retry_learn_jobs__job_id__retry_post"];
         delete?: never;
@@ -826,8 +894,8 @@ export interface paths {
         put?: never;
         /**
          * Learn Backfill
-         * @description Parse again every stored document that no spec proved, so each layout gets a spec. Calls the Claude API
-         *     once per new layout: allowed only with AGENT_ENABLED=1.
+         * @description Queue a parse of every stored document that no spec proved, so each layout gets a spec (in learn jobs). Calls
+         *     the Claude API once per new layout: allowed only with AGENT_ENABLED=1.
          */
         post: operations["learn_backfill_learn_backfill_post"];
         delete?: never;
@@ -847,9 +915,69 @@ export interface paths {
         put?: never;
         /**
          * Nightly
-         * @description Run the nightly loop and answer with its report.
+         * @description Queue the nightly loop (a worker runs it); its report is the job's result (GET /jobs/{id}).
          */
         post: operations["nightly_nightly_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/jobs/schedules": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Schedules
+         * @description Each schedule (the weekly AWS price refresh, the nightly loop): its next run and its last job.
+         */
+        get: operations["schedules_jobs_schedules_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/jobs/stats": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Job Stats
+         * @description Jobs per queue and state.
+         */
+        get: operations["job_stats_jobs_stats_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/jobs/{job_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Job Get
+         * @description Any job (a parse, reprice, learning run, price refresh or nightly loop), with its result.
+         */
+        get: operations["job_get_jobs__job_id__get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -938,6 +1066,11 @@ export interface components {
              * @default false
              */
             replace: boolean;
+        };
+        /** Body_parse_job_parse_jobs_post */
+        Body_parse_job_parse_jobs_post: {
+            /** File */
+            file: string;
         };
         /** Body_parse_parse_post */
         Body_parse_parse_post: {
@@ -1368,6 +1501,65 @@ export interface components {
             /** Code */
             code: string;
         };
+        /**
+         * JobOut
+         * @description A parse job (POST /parse/jobs, GET /parse/jobs/{id}): the summary is ParseTask's fields once it is done.
+         */
+        JobOut: {
+            /** Job Id */
+            job_id: number;
+            /** Kind */
+            kind: string;
+            /** Queue */
+            queue: string;
+            /** Sha256 */
+            sha256: string | null;
+            /** Name */
+            name: string;
+            /** State */
+            state: string;
+            /** Progress */
+            progress?: string | null;
+            /** Created */
+            created: number;
+            /** Started */
+            started?: number | null;
+            /** Finished */
+            finished?: number | null;
+            /** Attempts */
+            attempts: number;
+            /** Error */
+            error?: string | null;
+            /** Summary */
+            summary?: {
+                [key: string]: unknown;
+            } | null;
+            learning?: components["schemas"]["LearningOut"] | null;
+            /** Callback State */
+            callback_state?: string | null;
+            /** Status Url */
+            status_url: string;
+            /** Result Url */
+            result_url?: string | null;
+        };
+        /**
+         * LearningOut
+         * @description The learning run a parse queued (a learn job): the parse's first-pass result is ready before it ends.
+         */
+        LearningOut: {
+            /** State */
+            state: string;
+            /** Agent Status */
+            agent_status?: string | null;
+            /** Cost Usd */
+            cost_usd?: number | null;
+            /** Job Id */
+            job_id?: number | null;
+            /** Agent Job Id */
+            agent_job_id?: number | null;
+            /** Progress */
+            progress?: string | null;
+        };
         /** MappingPage */
         MappingPage: {
             /** Rows */
@@ -1500,6 +1692,11 @@ export interface components {
             cached?: boolean | null;
             /** Cost Usd */
             cost_usd?: number | null;
+            /** Job Id */
+            job_id?: number | null;
+            /** Queue */
+            queue?: string | null;
+            learning?: components["schemas"]["LearningOut"] | null;
         };
         /**
          * PriceDefaultsIn
@@ -2773,6 +2970,160 @@ export interface operations {
             };
         };
     };
+    parse_jobs_parse_jobs_get: {
+        parameters: {
+            query?: {
+                sha256?: string | null;
+                state?: string | null;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JobOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    parse_job_parse_jobs_post: {
+        parameters: {
+            query?: {
+                /** @description parse again a file seen before; a learning or improving job of the file that ended without a spec runs again */
+                force?: boolean;
+                /** @description POSTed a signed JSON body when the job ends (and again when learning replaces the result); must start with one of CALLBACK_ALLOWLIST */
+                callback_url?: string | null;
+                backend?: string | null;
+                fallback?: string | null;
+                /** @description price lines that name no operating system as this one (Linux) */
+                assume_os?: string | null;
+                /** @description price lines that name no tenancy as this one (Shared) */
+                assume_tenancy?: string | null;
+                /** @description price lines that name no pre-installed software as this (NA) */
+                assume_software?: string | null;
+                /** @description price lines that name no license model as this one */
+                assume_license?: string | null;
+                /** @description price lines that name no region as this one (us-east-1) */
+                assume_region?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_parse_job_parse_jobs_post"];
+            };
+        };
+        responses: {
+            /** @description the file is already being parsed: its job */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JobOut"];
+                };
+            };
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JobOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    parse_job_get_parse_jobs__job_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JobOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    parse_job_stop_parse_jobs__job_id__stop_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JobOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     parse_parse_post: {
         parameters: {
             query?: {
@@ -2806,6 +3157,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ParseResult"];
+                };
+            };
+            /** @description not done within PARSE_WAIT_SECONDS: the job, to poll */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JobOut"];
                 };
             };
             /** @description Validation Error */
@@ -3204,7 +3564,7 @@ export interface operations {
         requestBody?: never;
         responses: {
             /** @description Successful Response */
-            200: {
+            202: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -3226,6 +3586,50 @@ export interface operations {
         requestBody?: never;
         responses: {
             /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+        };
+    };
+    schedules_jobs_schedules_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    }[];
+                };
+            };
+        };
+    };
+    job_stats_jobs_stats_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -3234,6 +3638,39 @@ export interface operations {
                     "application/json": {
                         [key: string]: unknown;
                     };
+                };
+            };
+        };
+    };
+    job_get_jobs__job_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

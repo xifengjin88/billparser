@@ -6,8 +6,13 @@
 The paths and response models are invoice-parser's (invoiceparse/api.py and webapi.py), so its web app and clients
 work unchanged. The store comes from the environment (DATABASE_URL, PARSER_DATA_DIR), as for the CLI. Parsing runs
 billparse's pipeline: built-in specs, learned specs, the rule mapper, then (with ANTHROPIC_API_KEY) the LLM routes.
-With AGENT_ENABLED=1, a file that no spec proves gets one from the agent during its upload (agent.py), and is read
-with it; /learn/jobs lists every learning run. Learning costs money: it is off unless AGENT_ENABLED=1.
+
+Parses run in worker processes (python -m billparse worker), never in the API: POST /parse/jobs queues one and answers
+at once (poll GET /parse/jobs/{id}, or give a callback_url for a signed webhook). POST /parse queues one and waits for
+it, up to PARSE_WAIT_SECONDS (300): a parse that takes longer answers 202 with the job, as POST /parse/jobs does.
+With AGENT_ENABLED=1, a file that no spec proves gets one from the agent in a learning job of its own (agent.py): the
+parse answers with its first-pass result, and a proved spec replaces the stored result later (the webhook event
+result.updated). /learn/jobs lists every learning run. Learning costs money: it is off unless AGENT_ENABLED=1.
 """
 
 from __future__ import annotations
@@ -17,20 +22,24 @@ from .settings import configure_logging, load_env
 load_env()               # before the modules below read their settings from os.environ
 configure_logging()
 
+import asyncio  # noqa: E402
 import json  # noqa: E402
+import os  # noqa: E402
 import time  # noqa: E402
 from typing import Any, Literal  # noqa: E402
 
 from fastapi import Depends, FastAPI, File, Form, HTTPException, Query, Request, UploadFile  # noqa: E402
+from fastapi.concurrency import run_in_threadpool  # noqa: E402
 from fastapi.middleware.gzip import GZipMiddleware  # noqa: E402
+from fastapi.responses import JSONResponse  # noqa: E402
 from pydantic import BaseModel  # noqa: E402
 from sqlalchemy import text  # noqa: E402
 from starlette.middleware.sessions import SessionMiddleware  # noqa: E402
 
-from . import agent, auth, contract, webapi  # noqa: E402
+from . import agent, auth, contract, jobs, webapi, worker  # noqa: E402
 from .docmodel import load_bytes  # noqa: E402
 from .export import to_schema  # noqa: E402
-from .learn import metrics, run_nightly  # noqa: E402
+from .learn import metrics  # noqa: E402
 from .pipeline import Pipeline  # noqa: E402
 from .spec import SpecError, check_spec  # noqa: E402
 from .store import Store  # noqa: E402
@@ -86,36 +95,140 @@ def health(store: Store = Depends(get_store)) -> dict:
 
 
 # ------------------------------------------------------------------ documents
-@app.post("/parse", response_model=ParseResult)
-def parse(request: Request, file: UploadFile = File(...),
-          force: bool = Query(False, description="parse again a file seen before; a learning or improving job of the "
-                                                 "file that ended without a spec runs again"),
+class JobOut(BaseModel):
+    """A parse job (POST /parse/jobs, GET /parse/jobs/{id}): the summary is ParseTask's fields once it is done."""
+    job_id: int
+    kind: str
+    queue: str
+    sha256: str | None
+    name: str
+    state: str                      # queued, running, stopping, done, error, stopped
+    progress: str | None = None
+    created: float
+    started: float | None = None
+    finished: float | None = None
+    attempts: int
+    error: str | None = None
+    summary: dict[str, Any] | None = None
+    learning: webapi.LearningOut | None = None
+    callback_state: str | None = None
+    status_url: str
+    result_url: str | None = None
+
+
+def job_out(store: Store, job: dict) -> JobOut:
+    return JobOut(job_id=job["id"], kind=job["kind"], queue=job["queue"], sha256=job["sha256"], name=job["name"],
+                  state=job["state"], progress=job.get("progress"), created=job["created"], started=job.get("started"),
+                  finished=job.get("finished"), attempts=job["attempts"], error=job.get("error"),
+                  summary=job.get("result"), callback_state=job.get("callback_state"),
+                  learning=webapi.learning_of(store, job) if job["kind"] == "parse" else None,
+                  status_url=f"/parse/jobs/{job['id']}",
+                  result_url=f"/documents/{job['sha256']}" if job["state"] == "done" and job["sha256"] else None)
+
+
+def _queue_parse(request: Request, file: UploadFile, store: Store, force: bool, defaults, callback_url: str | None,
+                 backend: str | None = None, fallback: str | None = None) -> tuple[dict, bool]:
+    try:
+        jobs.check_callback_url(callback_url)
+    except ValueError as e:
+        raise HTTPException(400, str(e)) from e
+    webapi.check_choices(backend, fallback)
+    path, sha, _ = save_upload(file, store)            # on disk, never whole in memory (a large export)
+    if force:
+        _rerun_jobs(store, sha)
+    use_llm = webapi._use_llm(backend)
+    return webapi.start_parse(store, file.filename or "upload", path, sha, force, use_llm, auth.current_user(request),
+                              agent_step=fallback != "none", backend=backend, fallback=fallback, temp=True,
+                              defaults=defaults, callback_url=callback_url)
+
+
+FORCE = Query(False, description="parse again a file seen before; a learning or improving job of the file that ended "
+                                 "without a spec runs again")
+
+
+@app.post("/parse/jobs", response_model=JobOut, status_code=202,
+          responses={200: {"model": JobOut, "description": "the file is already being parsed: its job"}})
+def parse_job(request: Request, file: UploadFile = File(...), force: bool = FORCE,
+              callback_url: str | None = Query(None, description="POSTed a signed JSON body when the job ends (and "
+                                               "again when learning replaces the result); must start with one of "
+                                               "CALLBACK_ALLOWLIST"),
+              backend: str | None = Query(None), fallback: str | None = Query(None),
+              assume_os: str | None = webapi.ASSUME_OS, assume_tenancy: str | None = webapi.ASSUME_TENANCY,
+              assume_software: str | None = webapi.ASSUME_SOFTWARE, assume_license: str | None = webapi.ASSUME_LICENSE,
+              assume_region: str | None = webapi.ASSUME_REGION, store: Store = Depends(get_store)) -> Any:
+    """Queue a parse and answer at once (202). The file's parse already queued or running: that job (200)."""
+    job, created = _queue_parse(request, file, store, force, webapi.price_defaults(
+        assume_os, assume_tenancy, assume_software, assume_license, assume_region), callback_url, backend, fallback)
+    out = job_out(store, job)
+    return out if created else JSONResponse(out.model_dump(), status_code=200)
+
+
+@app.get("/parse/jobs", response_model=list[JobOut])
+def parse_jobs(sha256: str | None = None, state: str | None = None, limit: int = Query(50, le=500),
+               store: Store = Depends(get_store)) -> list[JobOut]:
+    """Parse and reprice jobs, newest first."""
+    return [job_out(store, j) for j in jobs.list_jobs(store, sha256=sha256, state=state, kinds=jobs.FILE_KINDS,
+                                                       limit=limit)]
+
+
+@app.get("/parse/jobs/{job_id}", response_model=JobOut)
+def parse_job_get(job_id: int, store: Store = Depends(get_store)) -> JobOut:
+    job = jobs.get(store, job_id)
+    if job is None:
+        raise HTTPException(404, "No job with this id.")
+    return job_out(store, job)
+
+
+@app.post("/parse/jobs/{job_id}/stop", response_model=JobOut)
+def parse_job_stop(job_id: int, store: Store = Depends(get_store)) -> JobOut:
+    """A queued job ends `stopped` at once; a running one at the parse's next step (between two chunks of a large
+    file)."""
+    job = jobs.request_stop(store, job_id)
+    if job is None:
+        raise HTTPException(404, "No job with this id.")
+    return job_out(store, job)
+
+
+def parse_wait() -> float:
+    return float(os.environ.get("PARSE_WAIT_SECONDS") or 300)
+
+
+@app.post("/parse", response_model=ParseResult,
+          responses={202: {"model": JobOut, "description": "not done within PARSE_WAIT_SECONDS: the job, to poll"}})
+async def parse(request: Request, file: UploadFile = File(...), force: bool = FORCE,
           assume_os: str | None = webapi.ASSUME_OS, assume_tenancy: str | None = webapi.ASSUME_TENANCY,
           assume_software: str | None = webapi.ASSUME_SOFTWARE, assume_license: str | None = webapi.ASSUME_LICENSE,
-          assume_region: str | None = webapi.ASSUME_REGION,
-          pipe: Pipeline = Depends(get_pipeline)) -> ParseResult:
-    """Parse one file (CSV, TSV, xlsx, JSON, YAML, Terraform, PDF, pptx, docx, text, zip)."""
-    path, sha, _ = save_upload(file, pipe.store)       # on disk, never whole in memory (a large export)
-    if force:
-        _rerun_jobs(pipe.store, sha)
-    t0 = time.time()
-    try:
-        r = pipe.parse_path(path, file.filename or "upload", force=force, user=auth.current_user(request), move=True,
-                            sha=sha, price_defaults=webapi.price_defaults(assume_os, assume_tenancy, assume_software,
-                                                                         assume_license, assume_region))
-    finally:
-        path.unlink(missing_ok=True)
-    c = r.get("contract") or {}
-    row = pipe.store.document(r["sha256"])
-    job = pipe.store.agent_job_for(r["sha256"]) if not r.get("cached") else None
-    learn = float(job["cost_usd"] or 0) if job and (job.get("started") or 0) >= t0 - 1 else 0.0
-    claude = float(r.get("claude_cost_usd") or 0.0)
-    return ParseResult(sha256=r["sha256"], name=r["file"], status=contract.status_of(row.status if row else r["status"]),
-                       lane=c.get("lane") or "", completeness=c.get("completeness") or "unchecked",
-                       confidence=c.get("confidence"), elapsed_ms=int((r.get("seconds") or 0) * 1000),
-                       model_calls=int(r.get("llm_calls") or 0), cached=bool(r.get("cached")),
-                       cost_usd={"claude": claude, "sandbox": learn, "total": round(claude + learn, 6)},
-                       document=_contract(pipe.store, r["sha256"]))
+          assume_region: str | None = webapi.ASSUME_REGION, store: Store = Depends(get_store)) -> Any:
+    """Parse one file (CSV, TSV, xlsx, JSON, YAML, Terraform, PDF, pptx, docx, text, zip): a worker parses it while
+    this request waits, up to PARSE_WAIT_SECONDS (300). Longer (a large export): 202 with the job, to poll at
+    GET /parse/jobs/{id}. The result is the first pass: a learning run, when the file needs one, runs after it.
+    The wait holds no request thread (async): many callers waiting never block the other endpoints."""
+    job, _ = await run_in_threadpool(_queue_parse, request, file, store, force, webapi.price_defaults(
+        assume_os, assume_tenancy, assume_software, assume_license, assume_region), None)
+    end = time.monotonic() + parse_wait()
+    while job["state"] in jobs.ACTIVE and time.monotonic() < end:
+        await asyncio.sleep(0.5)
+        job = await run_in_threadpool(jobs.get, store, job["id"]) or job
+    if job["state"] in jobs.ACTIVE:
+        return JSONResponse((await run_in_threadpool(job_out, store, job)).model_dump(), status_code=202)
+    if job["state"] != "done":
+        raise HTTPException(500 if job["state"] == "error" else 409, job.get("error") or job["state"])
+    return await run_in_threadpool(_parse_result, store, job)
+
+
+def _parse_result(store: Store, job: dict) -> ParseResult:
+    """A done parse job as POST /parse's answer (it reads the stored document: in a thread, never the event loop)."""
+    t = job.get("result") or {}
+    row = store.document(job["sha256"])
+    if row is None:
+        raise HTTPException(500, "The parse kept no document")
+    claude = float(t.get("claude_cost_usd") or 0.0)
+    return ParseResult(sha256=job["sha256"], name=row.name, status=t.get("status") or contract.status_of(row.status),
+                       lane=t.get("lane") or "", completeness=t.get("completeness") or "unchecked",
+                       confidence=t.get("confidence"), elapsed_ms=int(t.get("elapsed_ms") or 0),
+                       model_calls=int(t.get("model_calls") or 0), cached=bool(t.get("cached")),
+                       cost_usd={"claude": claude, "sandbox": 0.0, "total": round(claude, 6)},
+                       document=_contract(store, job["sha256"]))
 
 
 @app.get("/documents", response_model=list[webapi.DocumentItem])
@@ -123,16 +236,13 @@ def documents(store: Store = Depends(get_store)) -> list[dict]:
     runs: dict[str, list[dict]] = {}
     for r in store.runs():
         runs.setdefault(r["sha256"], []).append(r)
-    return [webapi.row_dict(store, row, runs.get(row.sha256, [])) for row in store.list_documents()]
+    busy = webapi.busy(store)
+    return [webapi.row_dict(store, row, runs.get(row.sha256, []), busy) for row in store.list_documents()]
 
 
 @app.get("/documents/{sha256}")
 def document(sha256: str, store: Store = Depends(get_store)) -> dict:
     """The parsed document in the output contract (the approved version when there is one)."""
-    t = webapi._tasks.get(sha256)
-    if t and not t["future"].done() and t.get("step") == "learning":
-        raise HTTPException(409, "A layout spec is being learned for this file; its result is written when the "
-                                 "learning job ends (GET /learn/jobs).")
     if store.document(sha256) is None:
         raise HTTPException(404, "No document with this SHA-256.")
     return _contract(store, sha256)
@@ -297,10 +407,11 @@ def learn_job(job_id: int, store: Store = Depends(get_store)) -> dict:
 
 @app.post("/learn/jobs/{job_id}/retry")
 def learn_retry(job_id: int, store: Store = Depends(get_store)) -> dict:
-    """Let this layout be sent to Claude again on its next upload (or backfill)."""
+    """Run this layout's learning again: a learn job (a worker runs it when the agent is on)."""
     if not store.retry_agent_job(job_id):
         raise HTTPException(409, "No such run, or it is running.")
-    return {"id": job_id, "status": "queued"}
+    learn = worker.pipeline_for(store, False).queue_learning(job_id) if agent.enabled() else None
+    return {"id": job_id, "status": "queued", "learn_job_id": learn}
 
 
 @app.post("/learn/jobs/{job_id}/stop")
@@ -310,13 +421,16 @@ def learn_stop(job_id: int, store: Store = Depends(get_store)) -> dict:
     status = webapi.stop_job(store, job_id)
     if status is None:
         raise HTTPException(404, "No such job.")
+    for j in jobs.list_jobs(store, kinds=("learn",), states=jobs.ACTIVE, limit=500):
+        if (j.get("options") or {}).get("agent_job_id") == job_id:
+            jobs.request_stop(store, j["id"])
     return {"id": job_id, "status": status}
 
 
-@app.post("/learn/backfill")
-def learn_backfill(store: Store = Depends(get_store), pipe: Pipeline = Depends(get_pipeline)) -> list[dict]:
-    """Parse again every stored document that no spec proved, so each layout gets a spec. Calls the Claude API
-    once per new layout: allowed only with AGENT_ENABLED=1."""
+@app.post("/learn/backfill", status_code=202)
+def learn_backfill(request: Request, store: Store = Depends(get_store)) -> list[dict]:
+    """Queue a parse of every stored document that no spec proved, so each layout gets a spec (in learn jobs). Calls
+    the Claude API once per new layout: allowed only with AGENT_ENABLED=1."""
     if not agent.enabled():
         raise HTTPException(403, "Learning calls the Claude API and costs money; set AGENT_ENABLED=1 to allow it.")
     out = []
@@ -324,17 +438,46 @@ def learn_backfill(store: Store = Depends(get_store), pipe: Pipeline = Depends(g
         summary = row.summary or {}
         if not agent.needs_agent(summary) or (path := store.file_path(row.sha256)) is None:
             continue
-        r = pipe.parse_path(path, store.doc_name(row.sha256), force=True)
-        out.append({"sha256": row.sha256, "name": row.name, "status": contract.status_of(r.get("status")),
-                    "completeness": (r.get("contract") or {}).get("completeness")})
+        job, _ = webapi.start_parse(store, store.doc_name(row.sha256), path, row.sha256, True, webapi.llm_wanted(),
+                                    auth.current_user(request))
+        out.append({"sha256": row.sha256, "name": row.name, "job_id": job["id"], "state": job["state"]})
     return out
 
 
-# ------------------------------------------------------------------ billparse's own: the nightly loop
-@app.post("/nightly")
-def nightly(pipe: Pipeline = Depends(get_pipeline)) -> dict[str, Any]:
-    """Run the nightly loop and answer with its report."""
-    return run_nightly(pipe)
+# ------------------------------------------------------------------ billparse's own: the nightly loop, schedules
+@app.post("/nightly", status_code=202)
+def nightly(request: Request, store: Store = Depends(get_store)) -> dict[str, Any]:
+    """Queue the nightly loop (a worker runs it); its report is the job's result (GET /jobs/{id})."""
+    job, _ = jobs.enqueue(store, "nightly", "maintenance", name="nightly (by request)",
+                          created_by=auth.current_user(request), max_attempts=1)
+    return {**job, "status_url": f"/jobs/{job['id']}"}
+
+
+@app.get("/jobs/schedules")
+def schedules(store: Store = Depends(get_store)) -> list[dict]:
+    """Each schedule (the weekly AWS price refresh, the nightly loop): its next run and its last job."""
+    out = []
+    for s in worker.schedules():
+        last = next(iter(jobs.list_jobs(store, kinds=(s["kind"],), limit=1)), None)
+        out.append({k: v for k, v in s.items() if k != "due"} | {"last_job": None if last is None else {
+            "id": last["id"], "state": last["state"], "created": last["created"], "finished": last.get("finished"),
+            "error": last.get("error")}})
+    return out
+
+
+@app.get("/jobs/stats")
+def job_stats(store: Store = Depends(get_store)) -> dict[str, Any]:
+    """Jobs per queue and state."""
+    return jobs.stats(store)
+
+
+@app.get("/jobs/{job_id}")
+def job_get(job_id: int, store: Store = Depends(get_store)) -> dict[str, Any]:
+    """Any job (a parse, reprice, learning run, price refresh or nightly loop), with its result."""
+    job = jobs.get(store, job_id)
+    if job is None:
+        raise HTTPException(404, "No job with this id.")
+    return job
 
 
 @app.get("/metrics")

@@ -22,6 +22,25 @@ services:
         - action: rebuild
           path: ./uv.lock
 
+  worker: &dev-worker                 # the code mounted; a change restarts the worker (running jobs come back)
+    command: ["watchfiles", "--filter", "python", "--sigint-timeout", "30",
+              "python -m billparse worker --queues small:${PARSE_WORKERS:-2},learn:1",
+              "/app/billparse", "/app/svcres", "/app/prices"]
+    volumes:
+      - ./billparse:/app/billparse
+      - ./svcres:/app/svcres
+      - ./prices:/app/prices
+      - ./specs:/app/specs
+      - ./scripts:/app/scripts
+    environment:
+      WATCHFILES_FORCE_POLLING: "true"
+
+  worker-large:
+    <<: *dev-worker
+    command: ["watchfiles", "--filter", "python", "--sigint-timeout", "30",
+              "python -m billparse worker --queues large:${LARGE_PARSE_WORKERS:-1},maintenance:1",
+              "/app/billparse", "/app/svcres", "/app/prices"]
+
   web:                                # the Vite dev server: a change under web/src shows at once
     build:
       context: ./web

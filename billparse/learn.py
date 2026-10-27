@@ -144,13 +144,18 @@ def promote_candidates(pipeline) -> list[dict]:
 
 # ---------------------------------------------------------------- queued agent jobs
 def run_queued_jobs(pipeline) -> list[dict]:
-    """The agent jobs a parse queued and did not run (a large file's: the agent never runs inline on one), oldest
-    first. Only when the agent is on (AGENT_ENABLED=1 and a key): a job calls the Claude API."""
+    """The agent jobs that wait (a person queued them again, or a worker that stopped left them), oldest first: each
+    gets its learn job, which a worker runs (learn_inline: run here). Only when the agent is on (AGENT_ENABLED=1 and
+    a key): a job calls the Claude API."""
     from . import agent
     if not pipeline.s.use_agent:
         return []
     out = []
     for j in reversed(pipeline.store.agent_jobs("queued")):
+        if not pipeline.s.learn_inline:
+            out.append({"job": j["id"], "file": j["name"], "status": "queued",
+                        "learn_job": pipeline.queue_learning(j["id"])})
+            continue
         done = agent.run_job(pipeline, j["id"], llm=pipeline.agent_llm, limits=pipeline.agent_limits)
         out.append({"job": j["id"], "file": j["name"], "status": done["status"], "cost_usd": done.get("cost_usd")})
     return out

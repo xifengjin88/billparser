@@ -2,7 +2,20 @@
 #   API: http://localhost:8010/parse     web app: http://localhost:8090   (API_PORT, WEB_PORT; other ports than
 #   invoice-parser's, so both stacks run side by side)
 # Settings (ANTHROPIC_API_KEY, AUTH, ...) come from .env when it exists; see example.env.
+# The API queues the work; `worker` runs small files and learning, `worker-large` large files, the weekly AWS price
+# refresh and the nightly loop (jobs.py, worker.py). More API or worker containers: docker compose up --scale.
 name: billparse
+
+x-app: &app                            # what the api and the workers share: the image, the settings, the volume
+  image: billparse:local               # built here, never pulled from a registry
+  build: .
+  pull_policy: build
+  env_file:
+    - path: .env
+      required: false
+  volumes:
+    - billparse-data:/data             # uploads, result rows, nightly reports, the catalog and its synonyms
+  restart: unless-stopped
 
 services:
   db:
@@ -23,18 +36,13 @@ services:
       retries: 30
 
   api:
-    image: billparse:local             # built here, never pulled from a registry
-    build: .
-    pull_policy: build
-    env_file:
-      - path: .env
-        required: false
-    environment:
+    <<: *app
+    environment: &env
       DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-billparse}:${POSTGRES_PASSWORD:-billparse}@db:5432/${POSTGRES_DB:-billparse}
       PARSER_DATA_DIR: /data/store
       CATALOG_DIR: /data/catalog
-    volumes:
-      - billparse-data:/data           # uploads, result rows, nightly reports, the catalog and its synonyms
+      PRICE_FILES_DIR: /data/aws-price-files
+      INLINE_WORKER: "0"               # the API runs no job: the workers do
     ports:
       - "${API_PORT:-8010}:8000"
     depends_on:
@@ -46,7 +54,33 @@ services:
       timeout: 3s
       start_period: 30s
       retries: 10
-    restart: unless-stopped
+
+  worker:                              # small files and learning: a learning run never takes a small-file thread
+    <<: *app
+    command: ["python", "-m", "billparse", "worker", "--queues", "small:${PARSE_WORKERS:-2},learn:1"]
+    environment:
+      <<: *env
+      RUN_MIGRATIONS: "0"              # the api container runs them
+    stop_grace_period: 2m              # SIGTERM: running jobs finish; what is left comes back through its lease
+    depends_on:
+      db:
+        condition: service_healthy
+      api:
+        condition: service_healthy     # the migrations ran
+
+  worker-large:                        # large files, the weekly price refresh, the nightly loop
+    <<: *app
+    command: ["python", "-m", "billparse", "worker", "--queues", "large:${LARGE_PARSE_WORKERS:-1},maintenance:1"]
+    environment:
+      <<: *env
+      RUN_MIGRATIONS: "0"
+    stop_grace_period: 10m
+    mem_limit: ${LARGE_WORKER_MEM:-6g}  # a full price load peaks near 2 GB, a large parse under 1 GB
+    depends_on:
+      db:
+        condition: service_healthy
+      api:
+        condition: service_healthy
 
   web:
     build:
