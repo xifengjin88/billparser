@@ -8,7 +8,7 @@ SERVICE ?= api
 
 .DEFAULT_GOAL := help
 .PHONY: help up dev down start stop restart build logs ps status psql migrate nightly shell destroy \
-        backup-db reset-db samples corpus corpus-check corpus-accept corpus-agent agent-jobs test lint lint-fix typecheck web-types api-local web-local
+        backup-db reset-db prices samples corpus corpus-check corpus-accept corpus-agent agent-jobs test lint lint-fix typecheck web-types api-local web-local
 
 help:  ## Show the targets
 	@awk 'BEGIN {FS = ":.*## "} /^[a-z-]+:.*## / {printf "  %-12s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -94,6 +94,9 @@ corpus-agent:  ## The same, and run the agent on every file not proved (AGENT_EN
 
 agent-jobs:  ## List the agent's jobs in the local store
 	uv run python -m billparse agent list
+
+prices:  ## Load the AWS price files (PRICE_FILES_DIR) into the price catalog (DATABASE_URL); ARGS="--only AmazonRDS"
+	uv run python scripts/refresh_prices.py $(ARGS)
 
 samples:  ## Make the sample files in samples/files
 	uv run python samples/make_samples.py
