@@ -306,3 +306,53 @@ def test_no_sample_gets_worse(tmp_path, name):
         assert c["status"] == "fail" and factor in c["detail"], c
     else:
         assert priced["confidence"] >= plain["confidence"] - 1e-9, [c for c in priced["checks"] if c["status"] != "skip"]
+
+
+# ---------------------------------------------------------------- review fixes
+def test_a_guessed_usage_type_is_no_false_alarm(tmp_path):
+    """The reseller invoice's "Amazon S3 Standard Storage" gives usage type "S3" from the words: catalog_row, not
+    no_such_product; and one tested line is too few to judge."""
+    pipe = _pipe(tmp_path)
+    r = pipe.parse_file(FILES / "reseller_invoice.pdf")
+    rows = pipe.store.get_rows(r["sha256"])
+    s3 = rows[rows["usage_type"].eq("S3")]
+    assert len(s3) and set(s3["price_missing"]) == {"catalog_row"}
+    assert "no_such_product" not in set(rows["price_missing"].dropna())
+    assert _checks(r)["catalog_grounding"]["status"] == "skip"
+
+
+@pytest.mark.parametrize("large", [False, True])
+def test_a_wrong_region_column_on_exact_matches(tmp_path, monkeypatch, large):
+    """Every region changed: the lines still match by SKU and rate code, but they print another region than the
+    product."""
+    def region(df):
+        for c in ("product/region", "product/regionCode"):
+            df.loc[df[c].ne(""), c] = "eu-north-9"
+        return df
+    r = _parse(tmp_path, monkeypatch, _write(tmp_path, "region.csv.gz", region), large)
+    c = _checks(r)["catalog_grounding"]
+    assert c["status"] == "fail" and "region eu-north-9 vs us-east-1" in c["detail"] and "rows:" in c["detail"], c
+
+
+@pytest.mark.parametrize("large", [False, True])
+def test_a_monthly_list_price_on_an_old_bill_blames_the_printed_column(tmp_path, monkeypatch, large):
+    """Lines before the catalog's history are compared too (a price never changes by ×730), and implied_unit_price
+    compares against the catalog's price, so only printed_list_price fails."""
+    def monthly(df):
+        hourly = df["pricing/unit"].eq("Hrs") & df["pricing/publicOnDemandRate"].ne("")
+        rate = pd.to_numeric(df.loc[hourly, "pricing/publicOnDemandRate"])
+        df.loc[hourly, "pricing/publicOnDemandRate"] = (rate * 730).astype(str)
+        return df
+    old = _cur_september(tmp_path)                               # September 2026: before the fixture's history
+    df = monthly(pd.read_csv(old, dtype=str, keep_default_na=False))
+    path = tmp_path / "old_monthly.csv.gz"
+    df.to_csv(path, index=False, compression="gzip")
+    checks = _checks(_parse(tmp_path, monkeypatch, path, large))
+    assert checks["printed_list_price"]["status"] == "fail" and "×730" in checks["printed_list_price"]["detail"]
+    assert checks["implied_unit_price"]["status"] in ("pass", "skip"), checks["implied_unit_price"]
+
+
+def test_an_old_bill_with_another_price_only_warns(catalog):
+    rows = _priced(catalog, sku_id=[LINUX] * 6, list_unit_price=[0.25] * 6, charge_start=["2020-01-15"] * 6)
+    assert rows["price_assumptions"].str.contains("before_history").all()
+    assert _both(rows)["printed_list_price"]["status"] == "warn"

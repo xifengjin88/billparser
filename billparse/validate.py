@@ -126,6 +126,7 @@ def _nearest_mixup(r: pd.Series) -> pd.Series:
     return pd.Series(np.array(MIXUPS)[np.abs(logs[:, None] - _LOG_MIXUPS[None, :]).argmin(axis=1)], index=r.index)
 MAX_EXAMPLES = 5
 FAR = 10.0      # a price more than 10x off the list price: no discount explains it (quantity and price swapped)
+MIN_GROUNDED = 5   # catalog_grounding skips with fewer lines tested (one guessed line must not fail a file)
 
 
 def _col(df: pd.DataFrame, name: str) -> pd.Series:
@@ -181,6 +182,8 @@ class RowStats:
     catalog_lines: int = 0
     g_priced: list = field(default_factory=lambda: [0, 0.0])       # catalog_grounding: [lines, cost] priced
     g_nosuch: list = field(default_factory=lambda: [0, 0.0])       # ... and no_such_product
+    g_conflict: list = field(default_factory=lambda: [0, 0.0])     # ... and exact matches whose printed region, type
+    #                                                                or OS is not the product's (price_conflict)
     g_values: dict = field(default_factory=dict)                   # the values not found -> cost (at most 50)
     pl: list = field(default_factory=lambda: [0, 0.0, 0.0])        # printed_list_price: [lines, weight, agreeing]
     pl_mix: dict = field(default_factory=dict)                     # a mix-up factor -> weight
@@ -263,12 +266,17 @@ class RowStats:
         cost = pd.to_numeric(df["billed_cost"], errors="coerce").abs().fillna(0.0)
         priced = asked & level.isin(PRICED)
         notes = _col(df, "price_assumptions").astype(str)
-        plain = ~notes.str.contains("tiered|before_history", regex=True)
         # catalog_grounding: priced against no_such_product
         nosuch = asked & level.eq("unmatched") & _col(df, "price_missing").eq("no_such_product")
-        for acc, m in ((self.g_priced, priced), (self.g_nosuch, nosuch)):
+        conflict = priced & _col(df, "price_conflict").notna() & _col(df, "price_conflict").astype(str).ne("")
+        for acc, m in ((self.g_priced, priced), (self.g_nosuch, nosuch), (self.g_conflict, conflict)):
             acc[0] += int(m.sum())
             acc[1] += float(cost[m].sum())
+        if conflict.any():
+            for v, c in cost[conflict].groupby(_col(df, "price_conflict")[conflict].astype(str)).sum().items():
+                if v in self.g_values or len(self.g_values) < 50:
+                    self.g_values[v] = self.g_values.get(v, 0.0) + float(c)
+            self._example("catalog_grounding", df, conflict, lambda r: str(r["price_conflict"]))
         if nosuch.any():
             for v, c in cost[nosuch].groupby(_product_label(df.loc[nosuch])).sum().items():
                 if v in self.g_values or len(self.g_values) < 50:
@@ -279,7 +287,9 @@ class RowStats:
         cat = pd.to_numeric(_col(df, "catalog_unit_price"), errors="coerce")
         qty = pd.to_numeric(_col(df, "quantity"), errors="coerce")
         own = printed.notna() & ~_flag(df, "_list_unit_price_inferred")
-        m = asked & level.eq("exact") & own & (cat > 0) & plain
+        # dates before the catalog's history count too (its history starts at the first import): a price never
+        # changes by a mix-up factor, so only those fail; another difference warns (the price may have changed)
+        m = asked & level.eq("exact") & own & (cat > 0) & ~notes.str.contains("tiered")
         if m.any():
             r = printed[m] / cat[m]
             w = (qty[m] * printed[m]).abs().fillna(0.0)
@@ -296,8 +306,10 @@ class RowStats:
             self._example("printed_list_price", df, off,
                           lambda row: f"printed {row['list_unit_price']} vs catalog {row['catalog_unit_price']} "
                                       f"per {row.get('unit')}")
-        # implied_unit_price: what the line paid per unit against the catalog (on-demand lines, first tiers)
-        ratio = pd.to_numeric(_col(df, "price_ratio"), errors="coerce")
+        # implied_unit_price: what the line paid per unit against the catalog's price (never the printed list price:
+        # printed_list_price compares that one, so each failure points at its own column)
+        implied = pd.to_numeric(_col(df, "implied_unit_price"), errors="coerce")
+        ratio = implied / cat.where(cat > 0)
         cov = _col(df, "coverage")
         first_tier = ~notes.str.contains("tiered")
         m = priced & cov.isin(("on_demand", "unknown")) & first_tier & ratio.notna()
@@ -314,8 +326,9 @@ class RowStats:
             off = pd.Series(False, index=df.index)
             off[m] = (r < 0.5) | (r > 1.05)
             self._example("implied_unit_price", df, off,
-                          lambda row: f"ratio {float(row['price_ratio']):.4g}: paid {row.get('billed_cost')} for "
-                                      f"{row.get('quantity')} {row.get('unit')}, list {row.get('list_unit_price')}")
+                          lambda row: f"ratio {float(row['implied_unit_price']) / float(row['catalog_unit_price']):.4g}"
+                                      f": paid {row.get('billed_cost')} for {row.get('quantity')} {row.get('unit')}, "
+                                      f"catalog {row.get('catalog_unit_price')}")
         # price_units: lines whose unit the price's cannot be converted to
         self.pu[0] += float(cost[asked].sum())
         bad = asked & level.eq("unit_mismatch")
@@ -370,7 +383,7 @@ class RowStats:
         for f in ("rows", "cost_rows", "total", "non_tax", "label_cost", "label_rows", "abs_cost", "lm_n", "lm_ok", "ratio_n",
                   "ratio_sum", "ratio_sq", "bad_dates", "negatives", "catalog_lines"):
             setattr(self, f, getattr(self, f) + getattr(o, f))
-        for f in ("g_priced", "g_nosuch", "pl", "ip", "pu", "uh", "co"):
+        for f in ("g_priced", "g_nosuch", "g_conflict", "pl", "ip", "pu", "uh", "co"):
             setattr(self, f, [a + b for a, b in zip(getattr(self, f), getattr(o, f), strict=True)])
         for mine, theirs in ((self.pl_mix, o.pl_mix), (self.ip_mix, o.ip_mix)):
             for k, v in theirs.items():
@@ -668,19 +681,25 @@ def _times(f: float) -> str:
 
 def _grounding(s: RowStats) -> Check:
     """catalog_grounding: of the AWS usage cost whose service the catalog has, the share whose product no catalog
-    row has (no_such_product): a type, region or usage type read from a wrong column."""
+    row has (no_such_product), or whose exact match prints another region, instance type or OS than the product
+    (price_conflict): a value read from a wrong column. At least MIN_GROUNDED lines, else skip."""
+    lines = s.g_priced[0] + s.g_nosuch[0]
+    if lines < MIN_GROUNDED:
+        return Check("catalog_grounding", "skip", f"{lines} line(s) tested against the catalog's products: too few")
     use_cost = (s.g_priced[1] + s.g_nosuch[1]) > 0
     i = 1 if use_cost else 0
     base = s.g_priced[i] + s.g_nosuch[i]
-    if not base:
-        return Check("catalog_grounding", "skip", "No line could be tested against the catalog's products")
-    share = s.g_nosuch[i] / base
+    bad = s.g_nosuch[i] + s.g_conflict[i]
+    share = bad / base
     what = "cost" if use_cost else "lines"
     if share < 0.02:
         return Check("catalog_grounding", "pass", f"{1 - share:.0%} of the priced {what} name products the catalog "
-                     f"has ({s.g_priced[0]:,} lines)", 0.10)
+                     f"has, as printed ({s.g_priced[0]:,} lines)", 0.10)
     top = ", ".join(v for v, _ in sorted(s.g_values.items(), key=lambda kv: -kv[1])[:5])
-    detail = (f"{share:.0%} of the {what} names products no catalog row has ({s.g_nosuch[0]:,} lines): {top}"
+    parts = [f"{s.g_nosuch[0]:,} name products no catalog row has" if s.g_nosuch[0] else "",
+             f"{s.g_conflict[0]:,} print another region, type or OS than the product their SKU or rate code matched"
+             if s.g_conflict[0] else ""]
+    detail = (f"{share:.0%} of the {what} does not fit the catalog ({'; '.join(p for p in parts if p)}): {top}"
               + _examples(s, "catalog_grounding"))
     if share <= 0.10:
         return Check("catalog_grounding", "warn", detail, 0.0)
@@ -714,7 +733,7 @@ def _implied(s: RowStats) -> Check:
     share = ok / w
     if share >= 0.90:
         return Check("implied_unit_price", "pass", f"{share:.0%} of the on-demand cost ({n:,} lines) is paid at 0.5 "
-                     "to 1.05 times the list price", 0.10)
+                     "to 1.05 times the catalog's list price", 0.10)
     if (f := _mixup(s.ip_mix, w, 0.05)) is not None:
         return Check("implied_unit_price", "fail", f"unit or column mix-up: ratio ≈ {_times(f)} on "
                      f"{s.ip_mix[f] / w:.0%} of the on-demand cost" + _examples(s, "implied_unit_price"), -0.20)

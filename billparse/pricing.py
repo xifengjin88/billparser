@@ -31,9 +31,11 @@ from typing import TYPE_CHECKING
 import numpy as np
 import pandas as pd
 
+from prices import normalize as nz
 from prices.units import normalize as unit_of
 
 from .attributes import _ec2_instance
+from .spec import HOW
 from .transforms import map_unique
 
 if TYPE_CHECKING:
@@ -48,7 +50,7 @@ ATTRIBUTES = ["operating_system", "tenancy", "license_model", "pre_installed_sw"
               "deployment_option"]                    # the columns that tell an instance type's prices apart
 KEY_COLUMNS = ["rate_code", "sku", "service_code", "usage_type", "operation", "region", "instance_type", *ATTRIBUTES]
 PRICE_COLUMNS = ["price_match_level", "price_missing", "price_assumptions", "implied_unit_price", "price_ratio",
-                 "catalog_sku_id", "catalog_unit_price", "_list_cost_inferred", "_contracted_cost_inferred", "_list_unit_price_inferred"]
+                 "catalog_sku_id", "catalog_unit_price", "price_conflict", "_list_cost_inferred", "_contracted_cost_inferred", "_list_unit_price_inferred"]
 FLAGS = ("_list_cost_inferred", "_contracted_cost_inferred", "_list_unit_price_inferred")   # what pricing filled
 NO_CATALOG = ("azure", "gcp")
 AWS_CODE = re.compile(r"^[A-Za-z][A-Za-z0-9]+$")      # a CUR product code: AmazonEC2, AWSLambda, awskms
@@ -299,7 +301,10 @@ def _same(a: dict | None, b: dict | None) -> bool:
 
 
 SOURCE_COLUMNS = ["sku_price_id", "sku_id", "product_code", "service_code", "usage_type", "operation", "region",
-                  "instance_type", *ATTRIBUTES]       # the line columns a key is made of
+                  "instance_type", *ATTRIBUTES,       # the line columns a key is made of, and how the identifiers
+                  HOW + "usage_type", HOW + "instance_type"]     # were made (a value guessed from the words)
+GUESSED = ("text", "rule")                            # origins of a value read from a line's words or set by a rule
+REGION_CODE = re.compile(r"^[a-z]{2}(?:-[a-z]+)+-\d+$")
 
 
 def _price(rows: pd.DataFrame, priced: pd.Series, qty: pd.Series, cost: pd.Series, catalog: PriceCatalog,
@@ -310,7 +315,12 @@ def _price(rows: pd.DataFrame, priced: pd.Series, qty: pd.Series, cost: pd.Serie
     raw = pd.DataFrame({c: _col(p, c) for c in SOURCE_COLUMNS}, index=p.index).astype(object)
     codes = raw.groupby(SOURCE_COLUMNS, dropna=False, sort=False).ngroup().to_numpy()
     first = pd.Series(np.arange(len(raw))).groupby(codes).first().to_numpy()
-    keys, notes, assumed = _keys(raw.iloc[first].reset_index(drop=True), defaults)
+    uniq = raw.iloc[first].reset_index(drop=True)
+    keys, notes, assumed = _keys(uniq, defaults)
+    # a key whose identifier (usage type, else instance type) the parser guessed from the words: never no_such_product
+    how_usage = uniq[HOW + "usage_type"].isin(GUESSED) & keys["usage_type"].notna()
+    how_type = uniq[HOW + "instance_type"].isin(GUESSED) & keys["usage_type"].isna()
+    guessed = (keys["sku"].isna() & keys["rate_code"].isna() & (how_usage | how_type)).to_numpy()
     dates = _dates(p, period_start, stats)
     # each key looked up at its first and last date, and at every date in between only when those two differ (a
     # price changed inside the file's period)
@@ -327,7 +337,7 @@ def _price(rows: pd.DataFrame, priced: pd.Series, qty: pd.Series, cost: pd.Serie
     for c in ("matched_by", "candidates", "unit_price", "unit", "sku", "effective_from", "tiered", "differs"):
         if c not in per_key:
             per_key[c] = None
-    reasons = _reasons(catalog, keys, texts, per_key["matched_by"].isna().to_numpy(), cache)
+    reasons = _reasons(catalog, keys, texts, per_key["matched_by"].isna().to_numpy(), cache, guessed)
     res = per_key.take(codes).set_axis(p.index)
     if split:
         mask = pairs["code"].isin(split).to_numpy()
@@ -343,11 +353,13 @@ def _price(rows: pd.DataFrame, priced: pd.Series, qty: pd.Series, cost: pd.Serie
 
 
 def _reasons(catalog: PriceCatalog, keys: pd.DataFrame, texts: list[str], unmatched: np.ndarray,
-             cache: KeyCache) -> dict[int, str]:
+             cache: KeyCache, guessed: np.ndarray) -> dict[int, str]:
     """Why a key that names a product (SKU, usage type, or instance type and region) found no price, per key:
     service_not_loaded when the catalog has no prices for its service at all (a catalog gap), no_such_product when no
     product has its SKU, usage type or instance type in its region (a strong sign of a bad parse), else catalog_row.
-    One exists() query for the keys the cache does not know."""
+    Only printed identifiers make no_such_product: one guessed from the words ("S3" in "Amazon S3 Standard
+    Storage") is the guess's fault, not the parse's (catalog_row). One exists() query for the keys the cache does not
+    know."""
     todo = [c for c in np.flatnonzero(unmatched)
             if keys.loc[c, ["sku", "usage_type"]].notna().any()
             or (pd.notna(keys.at[c, "instance_type"]) and pd.notna(keys.at[c, "region"]))]
@@ -370,6 +382,9 @@ def _reasons(catalog: PriceCatalog, keys: pd.DataFrame, texts: list[str], unmatc
         for c in ask:
             cache.exists[texts[c]] = c in found
             out[c] = "catalog_row" if c in found else "no_such_product"
+    for c, why in out.items():
+        if why == "no_such_product" and guessed[c]:
+            out[c] = "catalog_row"
     return out
 
 
@@ -429,7 +444,32 @@ def _apply(rows: pd.DataFrame, idx: pd.Index, keys: pd.DataFrame, codes: np.ndar
     rows.loc[idx, "price_ratio"] = ratio.astype(object).where(ratio.notna(), None)
     rows.loc[ok[ok].index, "catalog_sku_id"] = res.loc[ok, "sku"]
     rows.loc[ok[ok].index, "catalog_unit_price"] = price[ok]      # the catalog's, even where the file printed one
+    rows.loc[idx, "price_conflict"] = _conflicts(rows.loc[idx], res, level.eq("exact"))
     _count(stats, level, missing, cost, ratio, ok, rows.loc[idx], billed)
+
+
+def _conflicts(p: pd.DataFrame, res: pd.DataFrame, exact: pd.Series) -> pd.Series:
+    """An exact match (rate code, SKU, usage type) whose line prints another region, instance type or OS than the
+    matched product: "region eu-north-9 vs us-east-1". Strong evidence of a column read from the wrong place (the
+    rate code or SKU matched the product, the other columns did not). Printed values only; a region only when both
+    are region codes."""
+    out = pd.Series("", index=p.index, dtype=object)
+    for col, fn in (("region", nz.region), ("instance_type", nz.instance_type),
+                    ("operating_system", nz.operating_system)):
+        if col not in p or f"product_{col}" not in res:
+            continue
+        mine = map_unique(p[col], lambda v, fn=fn: fn(v) if isinstance(v, str) and v.strip() else None)
+        theirs = res[f"product_{col}"].astype(object)
+        printed = ~(p[HOW + col].isin(GUESSED) if HOW + col in p else pd.Series(False, index=p.index))
+        both = exact & printed & mine.notna() & theirs.notna() & theirs.astype(str).ne("NA")
+        if col == "region":
+            both &= map_unique(mine, lambda v: bool(REGION_CODE.match(v)) if isinstance(v, str) else False) \
+                & map_unique(theirs, lambda v: bool(REGION_CODE.match(v)) if isinstance(v, str) else False)
+        off = both & mine.astype(str).ne(theirs.astype(str))
+        if off.any():
+            text = col + " " + mine[off].astype(str) + " vs " + theirs[off].astype(str)
+            out[off] = (out[off] + "; " + text).str.strip("; ")
+    return out.where(out.ne(""), None)
 
 
 def _missing(keys: pd.DataFrame, codes: np.ndarray, level: pd.Series, res: pd.DataFrame,
