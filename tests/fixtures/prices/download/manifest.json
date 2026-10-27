@@ -1,0 +1,30 @@
+{
+  "fetched_at": "2026-10-27T00:00:00+00:00",
+  "files": {
+    "AmazonEC2 20261023221355": {
+      "us-east-1": {
+        "rows": 130
+      }
+    },
+    "AWSOutposts 20260831092324": {
+      "us-east-1": {
+        "rows": 1
+      }
+    },
+    "AmazonRDS 20261026214716": {
+      "us-east-1": {
+        "rows": 11
+      }
+    },
+    "AmazonS3 20261015173540": {
+      "us-east-1": {
+        "rows": 3
+      }
+    },
+    "AWSComputeSavingsPlan 20261026233134": {
+      "us-east-1": {
+        "rows": 12
+      }
+    }
+  }
+}

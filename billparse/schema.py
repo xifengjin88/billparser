@@ -6,14 +6,15 @@ from typing import Any, Generic, Literal, Optional, TypeVar, cast
 
 from pydantic import BaseModel, Field
 
-SCHEMA_VERSION = "1.6"            # 1.2: database_engine, deployment_option on charges; 1.3: confidence;
+SCHEMA_VERSION = "1.7"            # 1.2: database_engine, deployment_option on charges; 1.3: confidence;
                                   # 1.4: typed list/contracted/effective cost, coverage, line_type_raw on charges,
                                   #      kind commitment_negation, cost_types and cost_basis on documents
                                   # 1.5: tenancy, license_model, resource_id, pricing_term, purchase_option,
                                   #      list_unit_price, contracted_unit_price on charges (read from export columns)
                                   # 1.6: the analysis gives commitment_eligible_usage (facts) and no savings
-                                  #      estimate; analysis.commitment_opportunity is deprecated, removed in 1.7;
+                                  #      estimate; analysis.commitment_opportunity is deprecated, removed in 1.8;
                                   #      commitment_term on charges; term, payment option and unused on commitments
+                                  # 1.7: pre_installed_sw on charges (AWS product/preInstalledSw)
 
 T = TypeVar("T")
 
@@ -133,6 +134,7 @@ class Charge(BaseModel):
     meter_id: Optional[CitedValue[str]] = None
     tenancy: Optional[CitedValue[str]] = None              # Shared, Dedicated, Host
     license_model: Optional[CitedValue[str]] = None
+    pre_installed_sw: Optional[CitedValue[str]] = None    # AWS: NA, SQL Std, SQL Web, SQL Ent
     resource_id: Optional[CitedValue[str]] = None
     pricing_term: Optional[CitedValue[str]] = None         # OnDemand, Reserved (as printed)
     purchase_option: Optional[CitedValue[str]] = None      # All Upfront, Partial Upfront, No Upfront

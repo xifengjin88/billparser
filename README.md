@@ -173,7 +173,7 @@ without the unused-commitment columns), never 0; and the on-demand part by month
 every eligible line has one, else the billed cost, and says which. Each commitment shows its term, payment option
 and unused amount. billparse estimates no
 savings and assumes no discount: that belongs to its consumers. `commitment_opportunity` is deprecated (schema
-1.6) and removed in 1.7.
+1.6) and removed in 1.8.
 
 ## Learning loop
 
@@ -204,6 +204,44 @@ python scripts/build_catalog.py --raw-dir data/raw --out data/catalog.msgpack
 ```
 
 Corrections: `python -m billparse synonym "VM Hrs" "azure:Virtual Machines"`.
+
+## Price catalog
+
+`prices/` keeps the public AWS list prices in billparse's own database (tables `price_snapshot`, `price_product`,
+`price_rate`, `price_sp_plan`, `price_sp_rate`; migration `efba3358d2c4`). The source is the AWS Price List bulk files:
+public, no login, no cost.
+
+```bash
+python scripts/aws/fetch_aws_price_files.py --all-services --savings-plans --out ~/aws-price-files   # ~1 GB gz
+make prices                                   # load PRICE_FILES_DIR into DATABASE_URL as one snapshot
+make prices ARGS="--only AmazonRDS"           # one price list; the others stay as they are
+```
+
+- **History, written only on change.** A rate row has `effective_from`/`effective_to`. A load closes the rates whose
+  price changed or that are gone and inserts the new ones; an unchanged rate is not written again. AWS prints a recent
+  `EffectiveDate` for most rates, so the oldest version of a rate (`first_version`) also answers earlier dates, and
+  the lookup says so (`before_history`).
+- **Sanity check.** A load that loses more than 10% of a price list's rates, or (a full load) misses a price list, is
+  refused; the current snapshot stays.
+- **Lookup** (`prices.store.get_catalog().lookup(keys)`): one SQL statement for many keys, by rate code, SKU, usage
+  type + operation, or attributes (instance type, region, OS, tenancy, license, software, engine, deployment; give
+  `service_code`: many services share instance types). When several prices fit, none is chosen (`candidates`).
+  `lookup_savings_plans(keys)` gives the Savings Plans rates of a covered SKU.
+
+Measured on a laptop (Docker PostgreSQL 17), all AWS price lists of 2026-10-27:
+
+| | rows | load |
+|---|---|---|
+| AmazonEC2 | 2.2M products, 7.7M rates | 5 min 48 s |
+| AWSComputeSavingsPlan | 16.3M rates | 1 min 56 s |
+| the other 272 lists | 1.0M products, 1.6M rates, 0.2M Savings Plans rates | 2 min 56 s |
+| a second load of unchanged files (RDS, 0.6M rates) | 0 rows written | 18 s |
+
+Peak memory of a load: 1.9 GB (the EC2 files, read in 32 MB batches; 3.2 GB when each file was read whole). The
+largest file is EC2 us-east-1: 18 MB gzip, about 400k rows of 90 columns.
+
+Database size: 9.8 GB. Lookup of 10,000 distinct keys: by rate code 0.5–0.8 s, by SKU 0.3–0.4 s, by usage type
+1.9 s, by attributes 2.6 s (11 s when the OS is not given: then every key is ambiguous), Savings Plans 0.2–1.3 s.
 
 ## Storage
 

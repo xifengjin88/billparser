@@ -101,6 +101,7 @@ class Charge(_Strict):
     list_unit_price: Optional[CitedValue[Decimal]] = None        # FOCUS ListUnitPrice
     contracted_unit_price: Optional[CitedValue[Decimal]] = None  # FOCUS ContractedUnitPrice
     commitment_term: Optional[CitedValue[str]] = None
+    pre_installed_sw: Optional[CitedValue[str]] = None
     attributes: dict[str, Any] = Field(default_factory=dict)
 
 
@@ -205,7 +206,7 @@ def to_schema(doc: internal.Document) -> Document:
                 "operation", "quantity", "unit", "unit_price", "sku_id", "catalog_sku_id", "sku_price_id", "meter_id",
                 "list_cost", "contracted_cost", "effective_cost", "coverage", "line_type_raw", "tenancy", "license_model",
                 "resource_id", "pricing_term", "purchase_option", "list_unit_price", "contracted_unit_price",
-                "commitment_term")},
+                "commitment_term", "pre_installed_sw")},
             attributes=_jsonable(c.attributes),
         ))
     out = dict(

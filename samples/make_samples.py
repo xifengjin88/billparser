@@ -209,7 +209,8 @@ def aws_cur2_product_map() -> float:
 
 # ---------------------------------------------------------------- task 03: every attribute and ID column filled
 FULL_LEGACY = {"lineItem/Operation": "RunInstances", "product/tenancy": "Shared",
-               "product/licenseModel": "No License required", "pricing/PurchaseOption": "",
+               "product/licenseModel": "No License required", "product/preInstalledSw": "NA",
+               "pricing/PurchaseOption": "",
                "lineItem/ResourceId": "i-0abc123def4567890"}
 
 
@@ -224,14 +225,15 @@ def _legacy_full_rows() -> list[dict]:
         r["pricing/publicOnDemandRate"] = round(float(r["pricing/publicOnDemandCost"] or 0) / q, 6) if q else 0
         if "InstanceUsage" in ut or "HeavyUsage" in ut:
             r.update({"lineItem/Operation": "CreateDBInstance:0014", "product/licenseModel": "No license required",
+                      "product/preInstalledSw": "",
                       "lineItem/ResourceId": "arn:aws:rds:us-east-1:444455556666:db:orders"})
         if "Out-Bytes" in ut:
-            r.update({"lineItem/Operation": "", "product/tenancy": "", "product/licenseModel": "",
+            r.update({"lineItem/Operation": "", "product/tenancy": "", "product/licenseModel": "", "product/preInstalledSw": "",
                       "lineItem/ResourceId": ""})
         if typ in ("RIFee", "DiscountedUsage"):
             r["pricing/PurchaseOption"] = "No Upfront"
         if typ in ("SavingsPlanRecurringFee", "Tax"):
-            r.update({"lineItem/Operation": "", "product/tenancy": "", "product/licenseModel": "",
+            r.update({"lineItem/Operation": "", "product/tenancy": "", "product/licenseModel": "", "product/preInstalledSw": "",
                       "lineItem/ResourceId": ""})
         if "c5.large" in ut:
             r["product/operatingSystem"] = "Linux"
@@ -276,7 +278,8 @@ def aws_cur_legacy_full() -> float:
 
 CUR2_MAP_KEYS = {"product/ProductName": "product_name", "product/operatingSystem": "operating_system",
                  "product/databaseEngine": "database_engine", "product/deploymentOption": "deployment_option",
-                 "product/region": "region", "product/tenancy": "tenancy", "product/licenseModel": "license_model"}
+                 "product/region": "region", "product/tenancy": "tenancy", "product/licenseModel": "license_model",
+                 "product/preInstalledSw": "pre_installed_sw"}
 
 
 def _cur2_name(h: str) -> str:
