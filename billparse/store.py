@@ -152,7 +152,8 @@ class Store:
     def spec_docs(self, spec_id: str) -> dict[str, dict]:
         with self.session() as s:
             rows = s.exec(select(SpecDocRow).where(col(SpecDocRow.spec_id) == spec_id)).all()
-        return {r.sha256: {"rows": r.rows, "total": r.total, "confidence": r.confidence} for r in rows}
+        return {r.sha256: {"rows": r.rows, "total": r.total, "confidence": r.confidence, "checks": r.checks or {}}
+                for r in rows}
 
     def fingerprints(self) -> list[tuple[str, dict]]:
         with self.session() as s:

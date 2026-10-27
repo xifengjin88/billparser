@@ -1058,6 +1058,20 @@ export interface components {
              */
             has_gap: boolean;
         };
+        /** CheckRow */
+        CheckRow: {
+            /** Name */
+            name: string;
+            /** Status */
+            status: string;
+            /** Detail */
+            detail: string;
+            /**
+             * Weight
+             * @default 0
+             */
+            weight: number;
+        };
         /** CiteOut */
         CiteOut: {
             /** Label */
@@ -1214,6 +1228,11 @@ export interface components {
             /** Cost Basis */
             cost_basis?: string | null;
             pricing?: components["schemas"]["Pricing"] | null;
+            /**
+             * Price Checks
+             * @default []
+             */
+            price_checks: components["schemas"]["CheckRow"][];
             /** Counted Total */
             counted_total: string;
             /** Money At Risk */

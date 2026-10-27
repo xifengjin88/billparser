@@ -352,7 +352,7 @@ def test_the_contract_carries_the_price_fields(tmp_path):
     r = pipe.parse_file(_cur(tmp_path, list_cost=False))
     doc = _doc(pipe, r["sha256"])
     out = to_schema(doc)
-    assert out.schema_version == "1.8" and out.pricing is not None
+    assert out.schema_version == "1.9" and out.pricing is not None
     priced = [c for c in doc.charges if c.price_match_level]
     assert priced and all(c.price_match_level.origin == "inferred" and c.price_match_level.source == "price_catalog"
                           for c in priced)
@@ -386,7 +386,7 @@ def test_post_parse_returns_the_price_fields(tmp_path, monkeypatch):
             res = client.post("/parse?assume_os=Linux", files={"file": ("cur.csv.gz", fh)})
         assert res.status_code == 200, res.text
         doc = res.json()["document"]
-        assert doc["schema_version"] == "1.8" and doc["pricing"]["defaults"] == {"operating_system": "Linux"}
+        assert doc["schema_version"] == "1.9" and doc["pricing"]["defaults"] == {"operating_system": "Linux"}
         assert any(c.get("price_match_level") for c in doc["charges"])
         sha = res.json()["sha256"]
         task = client.post(f"/documents/{sha}/reprice", json={"tenancy": "Shared"}).json()

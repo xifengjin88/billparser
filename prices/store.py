@@ -76,6 +76,18 @@ QUERY = " UNION ALL ".join([
     + f"JOIN price_rate r ON r.provider = p.provider AND r.sku = p.sku AND {_TERM} AND {_TIER0} AND {_DATE} "
     f"WHERE k.instance_type IS NOT NULL AND k.region IS NOT NULL",
 ])
+# exists(): does any product have this SKU, usage type, or instance type in this region (any OS, any tenancy)
+EXIST_KEYS = ["key_id", "provider", "sku", "service_code", "usage_type", "usage_alt", "instance_type", "region", "as_of"]
+EXIST_QUERY = " UNION ".join([
+    "SELECT k.key_id FROM exist_keys k JOIN price_product p ON p.provider = k.provider AND p.sku = k.sku "
+    "WHERE k.sku IS NOT NULL",
+    *(f"SELECT k.key_id FROM exist_keys k JOIN price_product p ON p.provider = k.provider AND p.usage_type = k.{col} "
+      f"WHERE k.{col} IS NOT NULL" for col in ("usage_type", "usage_alt")),
+    "SELECT k.key_id FROM exist_keys k JOIN price_product p ON p.provider = k.provider "
+    "AND p.instance_type = k.instance_type AND p.region = k.region "
+    "AND (k.service_code IS NULL OR p.service_code = k.service_code) "
+    "WHERE k.instance_type IS NOT NULL AND k.region IS NOT NULL",
+])
 SP_KEYS = ["key_id", "as_of", "discounted_sku", "plan_type", "lease_length", "purchase_option"]
 SP_QUERY = ("SELECT k.key_id, r.id AS sp_rate_id, p.sku AS plan_sku, p.plan_type, p.lease_length, p.purchase_option, "
             "r.unit, r.rate, r.currency, r.effective_from, r.effective_from > k.as_of AS before_history FROM sp_keys k "
@@ -130,6 +142,7 @@ def _typed(found: pd.DataFrame) -> pd.DataFrame:
 class PriceCatalog:
     def __init__(self, engine: Engine):
         self.engine = engine
+        self._services: tuple[str | None, set[str]] | None = None     # (version, service codes)
 
     @classmethod
     def load(cls, url: str | None = None) -> PriceCatalog:
@@ -187,6 +200,30 @@ class PriceCatalog:
         out.loc[out["candidates"] <= 1, "differs"] = None
         return _typed(out.drop(columns=["priority", "preferred", "score", "begin_range", "end_range",
                                         *(f"p_{c}" for c in OPTIONAL)]).reset_index(drop=True))
+
+    def services(self, provider: str = "aws") -> set[str]:
+        """The service codes the catalog has products for (cached per snapshot version): a line of another service is
+        a catalog gap, not a parse error."""
+        version = self.version
+        if self._services is None or self._services[0] != version:
+            with self.engine.connect() as conn:
+                got = conn.execute(sa.text("SELECT DISTINCT service_code FROM price_product WHERE provider = :p"),
+                                   {"p": provider}).scalars().all()
+            self._services = (version, {str(s) for s in got if s})
+        return set(self._services[1])
+
+    def exists(self, keys: pd.DataFrame) -> set:
+        """The key_ids of keys that some product has: its SKU, its usage type, or its instance type in its region (any
+        OS, tenancy or price). One query for many keys; a key that none has was read from a wrong column, or names a
+        product that does not exist."""
+        if keys.empty:
+            return set()
+        frame = _keys_frame(keys.assign(as_of=keys.get("as_of", "2000-01-01")), EXIST_KEYS)
+        found = self._run("exist_keys", EXIST_KEYS, frame, EXIST_QUERY)
+        if found.empty:
+            return set()
+        ids = dict(zip(keys["key_id"].astype(str), keys["key_id"], strict=True))
+        return {ids[str(k)] for k in found["key_id"]}
 
     def lookup_savings_plans(self, keys: pd.DataFrame) -> pd.DataFrame:
         """keys: key_id, as_of, discounted_sku, and any of plan_type, lease_length, purchase_option. Returns every

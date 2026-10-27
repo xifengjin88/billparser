@@ -2819,6 +2819,34 @@
     ],
     "title": "ChargeRow"
    },
+   "CheckRow": {
+    "properties": {
+     "name": {
+      "type": "string",
+      "title": "Name"
+     },
+     "status": {
+      "type": "string",
+      "title": "Status"
+     },
+     "detail": {
+      "type": "string",
+      "title": "Detail"
+     },
+     "weight": {
+      "type": "number",
+      "title": "Weight",
+      "default": 0.0
+     }
+    },
+    "type": "object",
+    "required": [
+     "name",
+     "status",
+     "detail"
+    ],
+    "title": "CheckRow"
+   },
    "CiteOut": {
     "properties": {
      "label": {
@@ -3412,6 +3440,14 @@
         "type": "null"
        }
       ]
+     },
+     "price_checks": {
+      "items": {
+       "$ref": "#/components/schemas/CheckRow"
+      },
+      "type": "array",
+      "title": "Price Checks",
+      "default": []
      },
      "counted_total": {
       "type": "string",

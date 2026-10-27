@@ -107,6 +107,7 @@ class Charge(_Strict):
     price_assumptions: Optional[CitedValue[str]] = None
     implied_unit_price: Optional[CitedValue[Decimal]] = None
     price_ratio: Optional[CitedValue[Decimal]] = None
+    catalog_unit_price: Optional[CitedValue[Decimal]] = None
     attributes: dict[str, Any] = Field(default_factory=dict)
 
 
@@ -241,7 +242,7 @@ def to_schema(doc: internal.Document) -> Document:
                 "list_cost", "contracted_cost", "effective_cost", "coverage", "line_type_raw", "tenancy", "license_model",
                 "resource_id", "pricing_term", "purchase_option", "list_unit_price", "contracted_unit_price",
                 "commitment_term", "pre_installed_sw", "price_match_level", "price_missing", "price_assumptions",
-                "implied_unit_price", "price_ratio")},
+                "implied_unit_price", "price_ratio", "catalog_unit_price")},
             attributes=_jsonable(c.attributes),
         ))
     out = dict(

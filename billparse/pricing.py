@@ -11,7 +11,9 @@ Each line's level (price_match_level):
   assumed        as attributes, with an assumption (price_assumptions): the line's words (NA software, Shared
                  tenancy for an EC2 invoice line) or a default the request gave
   ambiguous      several prices fit; price_missing names the empty key columns that would tell them apart
-  unmatched      no price; price_missing names the missing key columns
+  unmatched      no price; price_missing names the missing key columns, or why: service_not_loaded (the catalog
+                 has no prices for the service: a catalog gap), no_such_product (no product has this SKU, usage type
+                 or instance type in this region: likely read from a wrong column), else catalog_row
   unit_mismatch  a price, in a unit the line's unit cannot be converted to
   no_catalog     an Azure or GCP line: the catalog has no prices for them yet
 The catalog is called once per file (a large file: once per chunk, for the keys the KeyCache does not have) with the
@@ -46,7 +48,7 @@ ATTRIBUTES = ["operating_system", "tenancy", "license_model", "pre_installed_sw"
               "deployment_option"]                    # the columns that tell an instance type's prices apart
 KEY_COLUMNS = ["rate_code", "sku", "service_code", "usage_type", "operation", "region", "instance_type", *ATTRIBUTES]
 PRICE_COLUMNS = ["price_match_level", "price_missing", "price_assumptions", "implied_unit_price", "price_ratio",
-                 "catalog_sku_id", "_list_cost_inferred", "_contracted_cost_inferred", "_list_unit_price_inferred"]
+                 "catalog_sku_id", "catalog_unit_price", "_list_cost_inferred", "_contracted_cost_inferred", "_list_unit_price_inferred"]
 FLAGS = ("_list_cost_inferred", "_contracted_cost_inferred", "_list_unit_price_inferred")   # what pricing filled
 NO_CATALOG = ("azure", "gcp")
 AWS_CODE = re.compile(r"^[A-Za-z][A-Za-z0-9]+$")      # a CUR product code: AmazonEC2, AWSLambda, awskms
@@ -75,6 +77,7 @@ class KeyCache:
 
     def __init__(self) -> None:
         self.results: dict[tuple[str, str], dict | None] = {}
+        self.exists: dict[str, bool] = {}                 # key text -> some product has its SKU, usage or type
 
     def __contains__(self, k: tuple[str, str]) -> bool:
         return k in self.results
@@ -155,7 +158,13 @@ class PriceStats:
 
 def _blank(rows: pd.DataFrame) -> None:
     """The price columns, empty (object: stored rows read back as text must take numbers and flags), and the costs
-    pricing may fill as numbers."""
+    pricing may fill as numbers. Rows priced before (an attempt, then the final pass) lose what that pricing filled,
+    so a catalog value is never taken for a printed one."""
+    for flag, col in (("_list_cost_inferred", "list_cost"), ("_contracted_cost_inferred", "contracted_cost"),
+                      ("_list_unit_price_inferred", "list_unit_price")):
+        if flag in rows and col in rows:
+            rows[col] = rows[col].astype(object)
+            rows.loc[flagged(rows[flag]), col] = None
     for c in PRICE_COLUMNS:
         rows[c] = False if c in FLAGS else None
         rows[c] = rows[c].astype(object)
@@ -318,6 +327,7 @@ def _price(rows: pd.DataFrame, priced: pd.Series, qty: pd.Series, cost: pd.Serie
     for c in ("matched_by", "candidates", "unit_price", "unit", "sku", "effective_from", "tiered", "differs"):
         if c not in per_key:
             per_key[c] = None
+    reasons = _reasons(catalog, keys, texts, per_key["matched_by"].isna().to_numpy(), cache)
     res = per_key.take(codes).set_axis(p.index)
     if split:
         mask = pairs["code"].isin(split).to_numpy()
@@ -329,12 +339,43 @@ def _price(rows: pd.DataFrame, priced: pd.Series, qty: pd.Series, cost: pd.Serie
         res = res.astype(object)
         res.loc[p.index[mask], per_key.columns] = rows_split.to_numpy()
     _apply(rows, p.index, keys, codes, notes.to_numpy()[codes], assumed.to_numpy()[codes], dates, res,
-           qty[p.index], cost[p.index], stats)
+           qty[p.index], cost[p.index], stats, reasons)
+
+
+def _reasons(catalog: PriceCatalog, keys: pd.DataFrame, texts: list[str], unmatched: np.ndarray,
+             cache: KeyCache) -> dict[int, str]:
+    """Why a key that names a product (SKU, usage type, or instance type and region) found no price, per key:
+    service_not_loaded when the catalog has no prices for its service at all (a catalog gap), no_such_product when no
+    product has its SKU, usage type or instance type in its region (a strong sign of a bad parse), else catalog_row.
+    One exists() query for the keys the cache does not know."""
+    todo = [c for c in np.flatnonzero(unmatched)
+            if keys.loc[c, ["sku", "usage_type"]].notna().any()
+            or (pd.notna(keys.at[c, "instance_type"]) and pd.notna(keys.at[c, "region"]))]
+    if not todo:
+        return {}
+    services = catalog.services()
+    out: dict[int, str] = {}
+    ask = []
+    for c in todo:
+        code = keys.at[c, "service_code"]
+        if isinstance(code, str) and services and code not in services:
+            out[c] = "service_not_loaded"
+        elif texts[c] in cache.exists:
+            out[c] = "catalog_row" if cache.exists[texts[c]] else "no_such_product"
+        else:
+            ask.append(c)
+    if ask:
+        frame = keys.loc[ask, ["sku", "service_code", "usage_type", "instance_type", "region"]].assign(key_id=ask)
+        found = catalog.exists(frame)
+        for c in ask:
+            cache.exists[texts[c]] = c in found
+            out[c] = "catalog_row" if c in found else "no_such_product"
+    return out
 
 
 def _apply(rows: pd.DataFrame, idx: pd.Index, keys: pd.DataFrame, codes: np.ndarray, notes: np.ndarray,
            assumed: np.ndarray, dates: pd.Series, res: pd.DataFrame, qty: pd.Series, cost: pd.Series,
-           stats: PriceStats) -> None:
+           stats: PriceStats, reasons: dict[int, str]) -> None:
     found = res["matched_by"].notna()
     cand = pd.to_numeric(res["candidates"], errors="coerce").fillna(0)
     one = found & cand.eq(1)
@@ -355,7 +396,7 @@ def _apply(rows: pd.DataFrame, idx: pd.Index, keys: pd.DataFrame, codes: np.ndar
     level[one & ~unit_ok] = "unit_mismatch"
     level[found & cand.gt(1)] = "ambiguous"
     level[~found] = "unmatched"
-    missing = _missing(keys, codes, level, res)
+    missing = _missing(keys, codes, level, res, reasons)
     # prices: in the line's unit; printed values always win (R1)
     ok = level.isin(MATCHED)
     price = pd.to_numeric(res["unit_price"], errors="coerce") * factor
@@ -387,14 +428,16 @@ def _apply(rows: pd.DataFrame, idx: pd.Index, keys: pd.DataFrame, codes: np.ndar
     rows.loc[idx, "implied_unit_price"] = implied.astype(object).where(implied.notna(), None)
     rows.loc[idx, "price_ratio"] = ratio.astype(object).where(ratio.notna(), None)
     rows.loc[ok[ok].index, "catalog_sku_id"] = res.loc[ok, "sku"]
+    rows.loc[ok[ok].index, "catalog_unit_price"] = price[ok]      # the catalog's, even where the file printed one
     _count(stats, level, missing, cost, ratio, ok, rows.loc[idx], billed)
 
 
-def _missing(keys: pd.DataFrame, codes: np.ndarray, level: pd.Series, res: pd.DataFrame) -> pd.Series:
+def _missing(keys: pd.DataFrame, codes: np.ndarray, level: pd.Series, res: pd.DataFrame,
+             reasons: dict[int, str]) -> pd.Series:
     """What would have matched a line, once per distinct (key, level, differs): the empty attributes of an ambiguous
     key that tell its candidates apart (all its empty ones when none does), and the operation of a usage type that has
-    none; the instance type and region of an unmatched line named by neither rate code, SKU nor usage type; else the
-    catalog has no such product (catalog_row); unit for a unit mismatch."""
+    none; the instance type and region of an unmatched line named by neither rate code, SKU nor usage type; else why
+    (reasons: service_not_loaded, no_such_product, catalog_row); unit for a unit mismatch."""
     differs = res["differs"].astype(object)
     frame = pd.DataFrame({"code": codes, "level": level.fillna("").to_numpy(),
                           "differs": differs.where(differs.notna(), "").astype(str).to_numpy()})
@@ -410,8 +453,8 @@ def _missing(keys: pd.DataFrame, codes: np.ndarray, level: pd.Series, res: pd.Da
                 apart = ["operation", *apart]         # an EC2 or RDS usage type: the operation names the OS, engine
             answers.append(", ".join(apart) or None)
         elif lv == "unmatched":
-            answers.append("catalog_row" if named[code] else
-                            ", ".join(c for c in ("instance_type", "region") if pd.isna(row[c])) or "catalog_row")
+            lacking = "" if named[code] else ", ".join(c for c in ("instance_type", "region") if pd.isna(row[c]))
+            answers.append(lacking or reasons.get(code, "catalog_row"))
         elif lv == "unit_mismatch":
             answers.append("unit")
         else:
@@ -493,10 +536,15 @@ def recompute(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
+def is_flag(v) -> bool:
+    """One flag value: True, 1, "True" or 1.0 (the Parquet rows keep flags as numbers)."""
+    return v is True or (isinstance(v, (int, float)) and not pd.isna(v) and v != 0) \
+        or (isinstance(v, str) and v.lower() in ("true", "1", "1.0"))
+
+
 def flagged(s: pd.Series) -> pd.Series:
-    """A flag column as bool: True, 1, "True" or 1.0 (the Parquet rows keep flags as numbers)."""
-    return s.map(lambda v: v is True or (isinstance(v, (int, float)) and not pd.isna(v) and v != 0)
-                 or (isinstance(v, str) and v.lower() in ("true", "1", "1.0"))).astype(bool)
+    """A flag column as bool."""
+    return s.map(is_flag).astype(bool)
 
 
 def drop_prices(rows: pd.DataFrame) -> pd.DataFrame:

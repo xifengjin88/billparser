@@ -22,9 +22,11 @@ OFFERS = {
     # (:box), with SQL Std, and SQL Std :box; Linux's unused capacity reservation
     "AmazonEC2": {"5G4TA8Z4MUKE6MJB", "EHFDZFP2EH9BD4DX", "E47BRDCTED8CBHEU", "TSKNSGPA2KR5BHCN",
                   "HXGQ45BFM9J2FJ3F", "8AW2DYRV3M9N5RRZ", "AWJMJ73C9RDQFD5N", "XX43P9XZN7A2HHHK", "7EQYX3EPSQG98BNK",
-                  "E9RWRGDUV5X76FUB"},
+                  "E9RWRGDUV5X76FUB",
+                  # what the sample files use: c5.large, a gp3 volume, data transfer to us-west-2
+                  "6U6GZ2DN4RFCJ7D9", "JG3KUJMBRGHV3N8G", "Y5D5G7NDSN6CXMVM"},
     "AWSOutposts": {"WYFNYKVVU5FD662T"},                # an Outpost m5.xlarge: the usage type of EC2's
-    "AmazonRDS": {"C86H957YE4QF4727", "C54NGRMKCQEBBF3B"},
+    "AmazonRDS": {"C86H957YE4QF4727", "C54NGRMKCQEBBF3B", "C4ERBAHB6DJ9BCDR"},     # + db.r6g.large PostgreSQL
     "AmazonS3": {"WP9ANXZGBYYSGJEA"},
 }
 SP_DISCOUNTED = {"5G4TA8Z4MUKE6MJB"}

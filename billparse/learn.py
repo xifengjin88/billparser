@@ -13,9 +13,13 @@ import json
 import time
 from pathlib import Path
 
-from . import bigfile
+from . import bigfile, coverage
 from . import llm as llm_mod
+from .analyze import resolve_services
+from .attributes import extract as extract_attributes
+from .attributes import normalize_regions
 from .docmodel import load_bytes
+from .pricing import KeyCache, match_prices
 from .spec import check_spec, run
 from .validate import clean_rows, validate, validate_stats
 
@@ -42,19 +46,40 @@ def regression_gate(pipeline, spec: dict, spec_id: str) -> dict:
             failures.append({"sha": sha, "reason": f"rows {n} vs {accepted['rows']}"})
         elif abs(total - accepted["total"]) > max(0.05, 0.001 * abs(accepted["total"])):
             failures.append({"sha": sha, "reason": f"total {total:.2f} vs {accepted['total']:.2f}"})
-        elif v["confidence"] < accepted["confidence"] - 0.05:
-            failures.append({"sha": sha, "reason": f"confidence {v['confidence']} vs {accepted['confidence']}"})
+        else:
+            reasons = _broken_checks(accepted.get("checks") or {}, v)
+            if v["confidence"] < accepted["confidence"] - 0.05:
+                reasons.insert(0, f"confidence {v['confidence']} vs {accepted['confidence']}")
+            if reasons:
+                failures.append({"sha": sha, "reason": "; ".join(reasons)})
     return {"passed": not failures, "checked": checked, "failures": failures}
 
 
+def _broken_checks(accepted: dict, v: dict) -> list[str]:
+    """The price checks that passed on the accepted result and fail with the new version."""
+    now = {c["name"]: c for c in v.get("checks", [])}
+    return [f"{name}: pass on the accepted result, now fail ({now[name]['detail'][:200]})"
+            for name, status in accepted.items() if status == "pass" and now.get(name, {}).get("status") == "fail"]
+
+
 def _check(pipeline, spec: dict, sha: str, path: Path) -> tuple[int, float, dict]:
-    """A spec's rows, total and verdict on a stored file; a large file is read in chunks (statistics only)."""
+    """A spec's rows, total and verdict on a stored file; a large file is read in chunks (statistics only). The lines
+    are priced first (the parse's steps, the catalog, one KeyCache), so the price checks run as in a parse."""
     info = bigfile.classify(path, pipeline.store.doc_name(sha))
+    prices, cache = pipeline.catalog(), KeyCache()
+    kind = (spec.get("meta") or {}).get("kind", "cost_lines")
     if info.large:
-        scan = bigfile.scan(spec, info, bigfile.sample_doc(info, sha), full=False)
+        scan = bigfile.scan(spec, info, bigfile.sample_doc(info, sha), pipeline.s.catalog_dir, full=False, steps=True,
+                            prices=prices, cache=cache)
         return scan.rows, scan.stats.total, validate_stats(scan.stats, scan.stated_totals, scan.source_rows)
     ext = run(spec, load_bytes(path.read_bytes(), info.name))
     clean_rows(ext)
+    if kind == "cost_lines" and prices is not None and not ext.rows.empty:
+        normalize_regions(ext.rows)
+        extract_attributes(ext.rows)
+        coverage.apply(ext.rows)
+        resolve_services(ext.rows, pipeline.s.catalog_dir)
+        match_prices(ext.rows, prices, cache=cache)
     total = float(ext.rows["billed_cost"].sum()) if "billed_cost" in ext.rows else 0.0
     return len(ext.rows), total, validate(ext)
 

@@ -6,7 +6,7 @@ from typing import Any, Generic, Literal, Optional, TypeVar, cast
 
 from pydantic import BaseModel, Field
 
-SCHEMA_VERSION = "1.8"            # 1.2: database_engine, deployment_option on charges; 1.3: confidence;
+SCHEMA_VERSION = "1.9"            # 1.2: database_engine, deployment_option on charges; 1.3: confidence;
                                   # 1.4: typed list/contracted/effective cost, coverage, line_type_raw on charges,
                                   #      kind commitment_negation, cost_types and cost_basis on documents
                                   # 1.5: tenancy, license_model, resource_id, pricing_term, purchase_option,
@@ -18,6 +18,8 @@ SCHEMA_VERSION = "1.8"            # 1.2: database_engine, deployment_option on c
                                   # 1.8: price matching: price_match_level, price_missing, price_assumptions,
                                   #      implied_unit_price, price_ratio on charges; pricing on documents;
                                   #      analysis.commitment_opportunity removed
+                                  # 1.9: catalog_unit_price on charges; unmatched reasons service_not_loaded and
+                                  #      no_such_product in price_missing; price checks (validate.py)
 
 T = TypeVar("T")
 
@@ -144,6 +146,7 @@ class Charge(BaseModel):
     price_assumptions: Optional[CitedValue[str]] = None    # "tenancy=Shared (text); operating_system=Linux (request)"
     implied_unit_price: Optional[CitedValue[Decimal]] = None   # effective (else billed) cost / quantity
     price_ratio: Optional[CitedValue[Decimal]] = None          # implied unit price / list unit price
+    catalog_unit_price: Optional[CitedValue[Decimal]] = None   # the catalog's list price in the line's unit (1.9)
     resource_id: Optional[CitedValue[str]] = None
     pricing_term: Optional[CitedValue[str]] = None         # OnDemand, Reserved (as printed)
     purchase_option: Optional[CitedValue[str]] = None      # All Upfront, Partial Upfront, No Upfront
