@@ -356,3 +356,19 @@ def test_an_old_bill_with_another_price_only_warns(catalog):
     rows = _priced(catalog, sku_id=[LINUX] * 6, list_unit_price=[0.25] * 6, charge_start=["2020-01-15"] * 6)
     assert rows["price_assumptions"].str.contains("before_history").all()
     assert _both(rows)["printed_list_price"]["status"] == "warn"
+
+
+@pytest.mark.parametrize("large", [False, True])
+@pytest.mark.parametrize("sample", ["aws_cur_legacy_full.csv.gz", "aws_cur2_flat.csv.gz"])
+def test_a_wrong_region_when_the_lines_match_by_usage_type(tmp_path, monkeypatch, large, sample):
+    """The samples' rate codes and SKUs are made up: their lines match by usage type, which the region narrows. With a
+    region the catalog does not have, they are looked up by the identifier alone and the region conflicts."""
+    df = pd.read_csv(FILES / sample, dtype=str, keep_default_na=False)
+    for c in [c for c in df if c.lower().replace("/", "_") in ("product_region", "product_regioncode",
+                                                                "product_region_code")]:
+        df.loc[df[c].ne(""), c] = "eu-north-9"
+    path = tmp_path / f"region_{sample}"
+    df.to_csv(path, index=False, compression="gzip")
+    r = _parse(tmp_path, monkeypatch, path, large)
+    c = _checks(r)["catalog_grounding"]
+    assert c["status"] == "fail" and "region eu-north-9 vs us-east-1" in c["detail"], c

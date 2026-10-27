@@ -337,6 +337,7 @@ def _price(rows: pd.DataFrame, priced: pd.Series, qty: pd.Series, cost: pd.Serie
     for c in ("matched_by", "candidates", "unit_price", "unit", "sku", "effective_from", "tiered", "differs"):
         if c not in per_key:
             per_key[c] = None
+    per_key = _any_region(catalog, keys, texts, key_rows, per_key, lo, guessed, cache, stats)
     reasons = _reasons(catalog, keys, texts, per_key["matched_by"].isna().to_numpy(), cache, guessed)
     res = per_key.take(codes).set_axis(p.index)
     if split:
@@ -350,6 +351,32 @@ def _price(rows: pd.DataFrame, priced: pd.Series, qty: pd.Series, cost: pd.Serie
         res.loc[p.index[mask], per_key.columns] = rows_split.to_numpy()
     _apply(rows, p.index, keys, codes, notes.to_numpy()[codes], assumed.to_numpy()[codes], dates, res,
            qty[p.index], cost[p.index], stats, reasons)
+
+
+def _any_region(catalog: PriceCatalog, keys: pd.DataFrame, texts: list[str], key_rows: dict, per_key: pd.DataFrame,
+                lo: list, guessed: np.ndarray, cache: KeyCache, stats: PriceStats) -> pd.DataFrame:
+    """A key with a printed identifier (rate code, SKU, or a usage type the parser did not guess) that found nothing
+    with its region is looked up again by the identifier alone. When one product has it, the line is that product's
+    (matched by its identifier) and its printed region, instance type and OS are compared with the product's
+    (price_conflict, _conflicts): a wrong region column must fail catalog_grounding, not look like a catalog gap.
+    Each such key once more, in one call."""
+    todo = [c for c in range(len(texts))
+            if pd.isna(per_key.at[c, "matched_by"]) and pd.notna(keys.at[c, "region"]) and not guessed[c]
+            and keys.loc[c, ["rate_code", "sku", "usage_type"]].notna().any()]
+    if not todo:
+        return per_key
+    alt = {c: texts[c] + "\x1f(any region)" for c in todo}
+    rows = {alt[c]: dict(key_rows[texts[c]], region=None) for c in todo}
+    _lookup(catalog, [(alt[c], lo[c]) for c in todo], rows, cache, stats)
+    per_key = per_key.astype(object)
+    for c in todo:
+        got = cache.get((alt[c], lo[c]))
+        if got and got.get("matched_by") and got.get("candidates") == 1:
+            for k, v in got.items():
+                if k not in per_key:
+                    per_key[k] = None
+                per_key.at[c, k] = v
+    return per_key
 
 
 def _reasons(catalog: PriceCatalog, keys: pd.DataFrame, texts: list[str], unmatched: np.ndarray,

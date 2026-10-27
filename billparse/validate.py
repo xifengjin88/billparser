@@ -697,7 +697,8 @@ def _grounding(s: RowStats) -> Check:
                      f"has, as printed ({s.g_priced[0]:,} lines)", 0.10)
     top = ", ".join(v for v, _ in sorted(s.g_values.items(), key=lambda kv: -kv[1])[:5])
     parts = [f"{s.g_nosuch[0]:,} name products no catalog row has" if s.g_nosuch[0] else "",
-             f"{s.g_conflict[0]:,} print another region, type or OS than the product their SKU or rate code matched"
+             f"{s.g_conflict[0]:,} print another region, type or OS than the product their rate code, SKU or usage type "
+             "matched"
              if s.g_conflict[0] else ""]
     detail = (f"{share:.0%} of the {what} does not fit the catalog ({'; '.join(p for p in parts if p)}): {top}"
               + _examples(s, "catalog_grounding"))
