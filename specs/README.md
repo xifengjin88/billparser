@@ -32,7 +32,7 @@ Canonical fields: see `CANONICAL` in `billparse/transforms.py`. Cost types: `bil
 `contracted_cost`, `effective_cost`. Commitments: `coverage`, `line_type_raw` (the provider's line type, unchanged),
 `commitment_type`, `commitment_status`, `commitment_id`. Price identifiers: `sku_id` (AWS `product/sku`), `sku_price_id`
 (AWS `pricing/RateCode`: the SKU's exact price), `meter_id` (Azure). Line details from export columns: `operation`,
-`tenancy`, `license_model`, `resource_id`, `pricing_term`, `purchase_option`, and the unit prices `list_unit_price`
+`tenancy`, `license_model`, `pre_installed_sw`, `resource_id`, `pricing_term`, `purchase_option`, and the unit prices `list_unit_price`
 and `contracted_unit_price` (never added from a guessed column). One source column can feed several fields (the CUR line type
 feeds `charge_type`, `line_type_raw` and `coverage`).
 

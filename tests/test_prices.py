@@ -1,8 +1,9 @@
 """The price catalog (task 05): load the AWS price files into the price tables with history, and look prices up.
 
 The fixture is cut from the public AWS price files (tests/fixtures/prices/make_fixture.py): us-east-1 m5.xlarge
-Linux (Used, unused capacity reservation, and AWSOutposts' one), m5.xlarge Windows SQL Std, RDS MySQL db.m5.large, an S3 price with
-tiers, and the Compute Savings Plans rates of the Linux m5.xlarge.
+Linux (plain, SQL Std, Ent and Web, an unused capacity reservation), m5.xlarge Windows (license included, BYOL, license
+billed apart, SQL Std), AWSOutposts' m5.xlarge, RDS MySQL db.m5.large, an S3 price with tiers, and the Compute Savings
+Plans rates of the Linux m5.xlarge.
 """
 
 from __future__ import annotations
@@ -18,6 +19,7 @@ import pandas as pd
 import pytest
 import sqlalchemy as sa
 
+from billparse.attributes import extract
 from billparse.db import engine_for
 from prices import normalize as nz
 from prices.load import Refused, load_snapshot
@@ -74,8 +76,20 @@ def _one(found: pd.DataFrame, key_id: int = 0) -> dict:
 def test_load_counts_and_snapshot(engine):
     res = load_snapshot(engine, FIXTURE)
     assert res.status == "current" and res.snapshot_id == "2026-10-27"
-    assert res.products == 8 and res.rates == 59 and res.sp_rates == 12
+    assert res.products == 14 and res.rates == 145 and res.sp_rates == 12
     assert PriceCatalog(engine).version == "2026-10-27"
+
+
+def test_small_batches_load_the_same_rows(engine, tmp_path):
+    load_snapshot(engine, FIXTURE)
+    small = engine_for(f"sqlite:///{tmp_path / 'small.db'}")
+    load_snapshot(small, FIXTURE, block_bytes=4096)          # a product's rows over several batches
+    for table, cols in (("price_product", "sku, attr_hash, attributes"),
+                        ("price_rate", "rate_code, unit_price, effective_from"),
+                        ("price_sp_rate", "plan_sku, discounted_sku, rate")):
+        sql = f"SELECT {cols} FROM {table} ORDER BY 1, 2"
+        with engine.connect() as a, small.connect() as b:
+            assert a.exec_driver_sql(sql).all() == b.exec_driver_sql(sql).all(), table
 
 
 def test_a_second_load_of_the_same_files_writes_nothing(engine):
@@ -132,6 +146,67 @@ def test_attributes(catalog):
         assert row["candidates"] > 1 and pd.isna(row["unit_price"])
 
 
+def test_invoice_attributes_without_software_or_license_are_ambiguous(catalog):
+    found = catalog.lookup(_keys(
+        as_of=["2026-10-27"] * 2, service_code=["AmazonEC2"] * 2, instance_type=["m5.xlarge"] * 2,
+        region=["us-east-1"] * 2, operating_system=["Linux", "Windows"], tenancy=["Shared"] * 2,
+        license_model=["No License required", None], pre_installed_sw=[None, "NA"]))
+    linux, windows = _one(found, 0), _one(found, 1)
+    assert linux["candidates"] == 4 and pd.isna(linux["unit_price"])        # plain, SQL Std, SQL Ent, SQL Web
+    # included $0.376, BYOL and billed apart (:box) both $0.192: candidates counts distinct prices
+    assert windows["candidates"] == 2 and pd.isna(windows["unit_price"])
+
+
+INVOICE = [   # what an invoice or a Cost Explorer file prints: words, no SKU, no software or license column
+    ("$0.192 per On Demand Linux m5.xlarge Instance Hour", None, "5G4TA8Z4MUKE6MJB"),
+    ("$0.672 per On Demand Linux with SQL Std m5.xlarge Instance Hour", None, "EHFDZFP2EH9BD4DX"),
+    ("$0.376 per On Demand Windows m5.xlarge Instance Hour", None, "HXGQ45BFM9J2FJ3F"),
+    ("$0.192 per On Demand Windows BYOL m5.xlarge Instance Hour", None, "8AW2DYRV3M9N5RRZ"),
+    ("Amazon EC2 m5.xlarge", "RunInstances:0200", "TSKNSGPA2KR5BHCN"),             # the operation code: SQL Web
+    ("Amazon EC2 m5.xlarge", "RunInstances:0002:box", "AWJMJ73C9RDQFD5N"),         # Windows, license billed apart
+]
+
+
+def test_parsed_invoice_lines_get_a_price(catalog):
+    rows = pd.DataFrame({"description": [d for d, _, _ in INVOICE], "operation": [o for _, o, _ in INVOICE],
+                         "charge_type": "Usage"})
+    extract(rows)
+    assert rows["pre_installed_sw"].tolist() == ["NA", "SQL Std", "NA", "NA", "SQL Web", "NA"]
+    assert rows["tenancy"].tolist() == ["Shared"] * 6
+    assert rows["_how:pre_installed_sw"].tolist() == ["rule", "text", "rule", "rule", "rule", "rule"]
+    keys = rows.reindex(columns=["instance_type", "operating_system", "pre_installed_sw", "license_model", "tenancy",
+                                 "database_engine"]).assign(key_id=range(len(rows)), as_of="2026-10-27", service_code="AmazonEC2",
+                                            region="us-east-1")
+    found = catalog.lookup(keys)
+    assert [_one(found, i)["sku"] for i in range(len(INVOICE))] == [sku for _, _, sku in INVOICE]
+    assert (found["candidates"] == 1).all()
+
+
+def test_a_printed_value_is_never_replaced(catalog):
+    rows = pd.DataFrame({"description": ["$0.192 per On Demand Windows m5.xlarge Instance Hour"],
+                         "pre_installed_sw": ["SQL Std"], "tenancy": ["Dedicated"], "charge_type": ["Usage"]})
+    extract(rows)
+    assert (rows.loc[0, "pre_installed_sw"], rows.loc[0, "tenancy"]) == ("SQL Std", "Dedicated")
+
+
+def test_rds_and_other_lines_get_no_ec2_software():
+    rows = pd.DataFrame({"description": ["$0.171 per RDS db.m5.large Single-AZ instance hour running SQL Server Std",
+                                         "$0.09 per GB - Linux data transfer out"],
+                         "charge_type": ["Usage", "Usage"]})
+    extract(rows)
+    assert "pre_installed_sw" not in rows or rows["pre_installed_sw"].isna().all()
+    assert "tenancy" not in rows or rows["tenancy"].isna().all()
+
+
+def test_lookup_types_are_the_same_on_every_database(catalog):
+    found = catalog.lookup(_keys(as_of=["2025-01-01", "2026-10-27"], sku=[LINUX, "WP9ANXZGBYYSGJEA"]))
+    assert found["unit_price"].dtype == float and found["before_history"].dtype == bool
+    assert found["tiered"].dtype == bool and found["candidates"].dtype == int
+    sp = catalog.lookup_savings_plans(_keys(as_of=["2026-10-27"], discounted_sku=[LINUX]))
+    assert sp["rate"].dtype == float and sp["before_history"].dtype == bool
+    assert isinstance(2.0 * found["unit_price"].iloc[0], float)
+
+
 def test_rds(catalog):
     found = catalog.lookup(_keys(as_of=["2026-10-27"], service_code=["AmazonRDS"], instance_type=["db.m5.large"],
                                  region=["us-east-1"],
@@ -178,7 +253,7 @@ def test_a_removed_price_is_closed(engine, tmp_path):
     download = tmp_path / "download"
     shutil.copytree(FIXTURE, download)
     (gone,) = _rate_codes(download, "AmazonEC2", lambda r: r["TermType"] == "Reserved")[:1]
-    _edit(download, "AmazonEC2", lambda r: None if r["RateCode"] == gone else r)     # 1 of 44: under the 10% limit
+    _edit(download, "AmazonEC2", lambda r: None if r["RateCode"] == gone else r)     # 1 rate: under the 10% limit
     res = load_snapshot(engine, download, snapshot_id="2026-11-03", partial=True, only=["AmazonEC2"])
     assert (res.closed, res.inserted) == (1, 0)
     with engine.connect() as conn:

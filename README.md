@@ -173,7 +173,7 @@ without the unused-commitment columns), never 0; and the on-demand part by month
 every eligible line has one, else the billed cost, and says which. Each commitment shows its term, payment option
 and unused amount. billparse estimates no
 savings and assumes no discount: that belongs to its consumers. `commitment_opportunity` is deprecated (schema
-1.6) and removed in 1.7.
+1.6) and removed in 1.8.
 
 ## Learning loop
 
@@ -236,6 +236,9 @@ Measured on a laptop (Docker PostgreSQL 17), all AWS price lists of 2026-10-27:
 | AWSComputeSavingsPlan | 16.3M rates | 1 min 56 s |
 | the other 272 lists | 1.0M products, 1.6M rates, 0.2M Savings Plans rates | 2 min 56 s |
 | a second load of unchanged files (RDS, 0.6M rates) | 0 rows written | 18 s |
+
+Peak memory of a load: 1.9 GB (the EC2 files, read in 32 MB batches; 3.2 GB when each file was read whole). The
+largest file is EC2 us-east-1: 18 MB gzip, about 400k rows of 90 columns.
 
 Database size: 9.8 GB. Lookup of 10,000 distinct keys: by rate code 0.5–0.8 s, by SKU 0.3–0.4 s, by usage type
 1.9 s, by attributes 2.6 s (11 s when the OS is not given: then every key is ambiguous), Savings Plans 0.2–1.3 s.

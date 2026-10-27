@@ -56,7 +56,35 @@ UNIT_WORDS = re.compile(r"^(hrs?|hours?|gb|gb-mo|gb-month|tb|requests?|events?|i
                         r"ru|wcu|rcu|nodes?|vcpu|cpu|transitions?|count|each|mo)\b", re.I)
 
 NEW_FIELDS = ("instance_type", "database_engine", "operating_system", "deployment_option", "pricing_model",
-              "usage_type")
+              "usage_type", "pre_installed_sw", "license_model")
+# EC2 software: "Windows with SQL Server Standard", "Linux with SQL Std"; a license brought by the customer
+SQL_EDITION = re.compile(r"\bsql\s*(?:server\s*)?(std|standard|web|ent|enterprise)\b", re.I)
+SQL_NAMES = {"std": "SQL Std", "standard": "SQL Std", "web": "SQL Web", "ent": "SQL Ent", "enterprise": "SQL Ent"}
+BYOL_TEXT = re.compile(r"\bbyol\b|bring\s+your\s+own\s+licen[cs]e", re.I)
+NO_LICENSE = "No License required"        # the AWS price list's license model of EC2 Linux and license-included Windows
+# EC2 operation codes (lineItem/Operation RunInstances:<code>[:box]): operating system, pre-installed software and
+# license model, as the AWS price list pairs them
+RUN_INSTANCES = re.compile(r"^RunInstances(?::(\w{4}))?(:box)?(?::CB)?$")      # not Spot (RunInstances:SV001)
+EC2_CODES = {
+    None: ("Linux", "NA", NO_LICENSE), "0002": ("Windows", "NA", NO_LICENSE),
+    "0004": ("Linux", "SQL Std", NO_LICENSE), "0006": ("Windows", "SQL Std", NO_LICENSE),
+    "000g": ("SUSE", "NA", NO_LICENSE), "0010": ("RHEL", "NA", NO_LICENSE), "0014": ("RHEL", "SQL Std", NO_LICENSE),
+    "0100": ("Linux", "SQL Ent", NO_LICENSE), "0102": ("Windows", "SQL Ent", NO_LICENSE),
+    "0110": ("RHEL", "SQL Ent", NO_LICENSE), "0200": ("Linux", "SQL Web", NO_LICENSE),
+    "0202": ("Windows", "SQL Web", NO_LICENSE), "0210": ("RHEL", "SQL Web", NO_LICENSE),
+    "0800": ("Windows", "NA", "Bring your own license"), "0g00": ("Ubuntu Pro", "NA", NO_LICENSE),
+    "1010": ("Red Hat Enterprise Linux with HA", "NA", NO_LICENSE),
+    "1014": ("Red Hat Enterprise Linux with HA", "SQL Std", NO_LICENSE),
+    "1110": ("Red Hat Enterprise Linux with HA", "SQL Ent", NO_LICENSE),
+}
+BOX_LICENSE = "License Included - Infrastructure"       # RunInstances:0002:box: the instance, its license billed apart
+USAGE_TENANCY = [("Host", re.compile(r"(?:^|-)Host\w*Usage:")), ("Dedicated", re.compile(r"(?:^|-)Dedicated\w*:")),
+                 ("Shared", re.compile(r"(?:^|-)(?:Box|Spot)Usage:"))]
+TEXT_TENANCY = [("Host", re.compile(r"\bdedicated\s+host\b", re.I)), ("Dedicated", re.compile(r"\bdedicated\b", re.I))]
+
+
+def _first_match(pairs: list, v) -> str | None:
+    return next((name for name, rx in pairs if rx.search(v)), None) if isinstance(v, str) else None
 
 
 def _first(pairs: list[tuple[str, str]], text: str) -> str | None:
@@ -83,6 +111,10 @@ def from_text(text: str) -> dict:
         out["database_engine"] = e
     if (o := _first(OSES, text)):
         out["operating_system"] = o
+        if (sql := SQL_EDITION.search(text)):            # EC2 software: only beside an operating system (not RDS)
+            out["pre_installed_sw"] = SQL_NAMES[sql.group(1).lower()]
+    if BYOL_TEXT.search(text):
+        out["license_model"] = "Bring your own license"
     if (d := _first(DEPLOYMENT, text)):
         out["deployment_option"] = d
     if (pm := _first(PRICING, text)):
@@ -265,7 +297,69 @@ def extract(rows: pd.DataFrame, warnings: list[str] | None = None) -> list[str]:
                         rows[HOW + f] = None
                     rows.loc[empty & vals.notna(), HOW + f] = "text"
                 filled.append(f)
+    filled += [f for f in ec2_software(rows) if f not in filled]
     return filled
+
+
+def _ec2_code(op) -> tuple[str, str, str] | None:
+    m = RUN_INSTANCES.match(op.strip()) if isinstance(op, str) else None
+    if not m or m.group(1) not in EC2_CODES:
+        return None
+    os_, sw, lic = EC2_CODES[m.group(1)]
+    return os_, sw, (BOX_LICENSE if m.group(2) else lic)
+
+
+def _ec2_instance(v) -> bool:
+    m = AWS_TYPE.fullmatch(v.strip()) if isinstance(v, str) else None
+    return bool(m) and m.group(1) is None                # not db., cache., search., ...
+
+
+def ec2_software(rows: pd.DataFrame) -> list[str]:
+    """The operating system, pre-installed software, license model and tenancy of EC2 instance lines, when no column
+    gave them: from the operation code (RunInstances:0006 is Windows with SQL Server Standard) and the usage type
+    (DedicatedUsage: is Dedicated), else, for a line that names an operating system: NA software when it names no SQL
+    Server, the price list's license model for Windows without BYOL, Dedicated or Host when the text says so, else
+    Shared. Every value is a rule (inferred). The price catalog needs them: m5.xlarge Linux in one region has six
+    prices (plain and three SQL Server editions; Shared, Dedicated and Host), Windows three licenses. Returns the
+    fields filled."""
+    if rows.empty or "instance_type" not in rows:
+        return []
+    ec2 = map_unique(rows["instance_type"], _ec2_instance).astype(bool)
+    if "charge_type" in rows:
+        ec2 &= rows["charge_type"].isna() | rows["charge_type"].eq("Usage")
+    if not ec2.any():
+        return []
+    filled: list[str] = []
+
+    def fill(col: str, vals: pd.Series) -> None:
+        for c in (col, HOW + col):
+            if c not in rows:
+                rows[c] = None
+        todo = vals.notna() & rows.loc[vals.index, col].isna()
+        if todo.any():
+            idx = todo[todo].index
+            rows.loc[idx, col] = vals[todo]
+            rows.loc[idx, HOW + col] = "rule"
+            filled.append(col)
+    if "operation" in rows:
+        code = map_unique(rows.loc[ec2, "operation"], _ec2_code)
+        known = code.dropna()
+        for i, col in enumerate(("operating_system", "pre_installed_sw", "license_model")):
+            fill(col, known.map(lambda c, i=i: c[i]))
+    if "operating_system" in rows:
+        named = rows.loc[ec2, "operating_system"].notna()
+        fill("pre_installed_sw", pd.Series("NA", index=named[named].index))
+        windows = rows.loc[ec2, "operating_system"].eq("Windows")
+        fill("license_model", pd.Series(NO_LICENSE, index=windows[windows].index))
+    if "usage_type" in rows:
+        fill("tenancy", map_unique(rows.loc[ec2, "usage_type"], lambda v: _first_match(USAGE_TENANCY, v)).dropna())
+    if "operating_system" in rows:
+        named = rows.loc[ec2, "operating_system"].notna()
+        idx = named[named].index
+        text = (map_unique(rows.loc[idx, "description"], lambda v: _first_match(TEXT_TENANCY, v))
+                if "description" in rows else pd.Series(None, index=idx, dtype=object))
+        fill("tenancy", text.fillna("Shared"))
+    return list(dict.fromkeys(filled))
 
 
 def normalize_regions(rows: pd.DataFrame) -> int:

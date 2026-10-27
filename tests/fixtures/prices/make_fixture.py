@@ -3,8 +3,9 @@
     python tests/fixtures/prices/make_fixture.py ~/aws-price-files
 
 Writes tests/fixtures/prices/download/ (the layout and manifest.json of scripts/aws/fetch_aws_price_files.py) with a
-few products of us-east-1: m5.xlarge Linux (Used, unused capacity reservation, and AWSOutposts' one), m5.xlarge
-Windows SQL Std, an RDS MySQL db.m5.large, an S3 storage price with tiers, and the Compute Savings Plans rates of the Linux m5.xlarge.
+few products of us-east-1: m5.xlarge Linux (plain, SQL Std, Ent and Web, an unused capacity reservation), m5.xlarge
+Windows (license included, BYOL, license billed apart, SQL Std), AWSOutposts' m5.xlarge, an RDS MySQL db.m5.large, an
+S3 storage price with tiers, and the Compute Savings Plans rates of the Linux m5.xlarge.
 """
 
 from __future__ import annotations
@@ -17,7 +18,11 @@ from pathlib import Path
 
 OUT = Path(__file__).parent / "download"
 OFFERS = {
-    "AmazonEC2": {"5G4TA8Z4MUKE6MJB", "E9RWRGDUV5X76FUB", "7EQYX3EPSQG98BNK", "XX43P9XZN7A2HHHK"},
+    # m5.xlarge Shared Used: Linux plain and with SQL Std / Ent / Web; Windows plain, BYOL, license billed apart
+    # (:box), with SQL Std, and SQL Std :box; Linux's unused capacity reservation
+    "AmazonEC2": {"5G4TA8Z4MUKE6MJB", "EHFDZFP2EH9BD4DX", "E47BRDCTED8CBHEU", "TSKNSGPA2KR5BHCN",
+                  "HXGQ45BFM9J2FJ3F", "8AW2DYRV3M9N5RRZ", "AWJMJ73C9RDQFD5N", "XX43P9XZN7A2HHHK", "7EQYX3EPSQG98BNK",
+                  "E9RWRGDUV5X76FUB"},
     "AWSOutposts": {"WYFNYKVVU5FD662T"},                # an Outpost m5.xlarge: the usage type of EC2's
     "AmazonRDS": {"C86H957YE4QF4727", "C54NGRMKCQEBBF3B"},
     "AmazonS3": {"WP9ANXZGBYYSGJEA"},

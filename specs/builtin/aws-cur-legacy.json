@@ -173,6 +173,11 @@
     "product/licenseModel"
    ]
   },
+  "pre_installed_sw": {
+   "from": [
+    "product/preInstalledSw"
+   ]
+  },
   "list_unit_price": {
    "from": [
     "pricing/publicOnDemandRate"

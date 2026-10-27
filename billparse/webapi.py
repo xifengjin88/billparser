@@ -820,7 +820,7 @@ def charge_detail(sha256: str, charge_id: str, store: Store = Depends(get_store)
              "list_cost": c.list_cost, "contracted_cost": c.contracted_cost, "effective_cost": c.effective_cost,
              "coverage": c.coverage, "commitment_status": c.commitment_status, "line_type_raw": c.line_type_raw,
              "sku_price_id": c.sku_price_id, "resource_id": c.resource_id, "tenancy": c.tenancy,
-             "license_model": c.license_model, "pricing_term": c.pricing_term, "purchase_option": c.purchase_option,
+             "license_model": c.license_model, "pre_installed_sw": c.pre_installed_sw, "pricing_term": c.pricing_term, "purchase_option": c.purchase_option,
              "list_unit_price": c.list_unit_price, "contracted_unit_price": c.contracted_unit_price}
     fields = [FieldOut(field=k, value=str(v.value), origin=v.origin, source=v.source, confidence=v.confidence,
                        cite=_cite(v.cite)) for k, v in named.items() if v is not None]

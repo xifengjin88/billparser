@@ -262,7 +262,7 @@ def analyze(rows: pd.DataFrame, confidence: float, status: str, fields: dict) ->
         "monthly": {k: round(float(v), 2) for k, v in monthly.items()} if monthly is not None else None,
         "forecast": forecast,
         "commitment_eligible_usage": _eligible_usage(df),
-        "commitment_opportunity": commit,              # deprecated in 1.6, removed in 1.7
+        "commitment_opportunity": commit,              # deprecated in 1.6, removed in 1.8
     }
 
 
@@ -325,7 +325,7 @@ def _band(x: float, w: float) -> dict:
 
 
 def _commitments(usage: pd.DataFrame, by_cat: pd.Series) -> dict:
-    """Deprecated in 1.6, removed in 1.7: see commitment_eligible_usage. No savings, discount or coverage assumption."""
+    """Deprecated in 1.6, removed in 1.8: see commitment_eligible_usage. No savings, discount or coverage assumption."""
     eligible = float(sum(v for k, v in by_cat.items() if k in COMMITTABLE))
     return {"deprecated": True, "replaced_by": "commitment_eligible_usage", "eligible_monthly_spend": round(eligible, 2),
             "note": "Deprecated: commitment_eligible_usage gives the facts (covered, on demand, unused). billparse "

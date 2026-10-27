@@ -54,6 +54,7 @@ CANONICAL = {
     "operation": "The provider's operation (AWS lineItem/Operation: RunInstances, CreateDBInstance:0002)",
     "tenancy": "Shared, Dedicated or Host (AWS product/tenancy)",
     "license_model": "License included, bring your own license, no license required (AWS product/licenseModel)",
+    "pre_installed_sw": "Software pre-installed on the instance: NA, SQL Std, SQL Web, SQL Ent (AWS product/preInstalledSw)",
     "resource_id": "The resource the line is for (AWS lineItem/ResourceId, Azure ResourceId, FOCUS ResourceId)",
     "pricing_term": "OnDemand or Reserved, as printed (AWS pricing/term)",
     "purchase_option": "All Upfront, Partial Upfront or No Upfront, as printed (AWS pricing/PurchaseOption)",

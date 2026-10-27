@@ -18,7 +18,8 @@ TENANCIES = {"shared": "Shared", "default": "Shared", "dedicated": "Dedicated", 
 LICENSE_MODELS = {"no license required": "No License required", "license included": "License Included",
                   "bring your own license": "Bring your own license", "byol": "Bring your own license"}
 PRE_INSTALLED_SW = {"na": "NA", "none": "NA", "sql std": "SQL Std", "sql standard": "SQL Std", "sql web": "SQL Web",
-                    "sql ent": "SQL Ent", "sql enterprise": "SQL Ent"}
+                    "sql ent": "SQL Ent", "sql enterprise": "SQL Ent", "sql server standard": "SQL Std",
+                    "sql server web": "SQL Web", "sql server enterprise": "SQL Ent"}
 CAPACITY = {"used": "Used", "unusedcapacityreservation": "UnusedCapacityReservation",
             "allocatedcapacityreservation": "AllocatedCapacityReservation"}
 PRICING_MODELS = {"ondemand": "on_demand", "on_demand": "on_demand", "reserved": "reserved", "ri": "reserved",

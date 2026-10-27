@@ -36,7 +36,7 @@ STATUS = {"reconciled": "auto_accepted", "unreconciled": "auto_accepted", "auxil
 DOC_TYPE = {"price_sheet": "estimate", "recommendations": "other", "inventory": "inventory"}
 TEXT_FIELDS = ("pricing_model", "commitment_id", "commitment_type", "commitment_status", "instance_type",
                "operating_system", "database_engine", "deployment_option", "usage_type", "unit", "line_type_raw",
-               "sku_id", "sku_price_id", "meter_id", "operation", "tenancy", "license_model", "resource_id",
+               "sku_id", "sku_price_id", "meter_id", "operation", "tenancy", "license_model", "pre_installed_sw", "resource_id",
                "pricing_term", "purchase_option", "commitment_term")
 COST_FIELDS = ("list_cost", "contracted_cost", "effective_cost")    # typed beside the billed cost (Charge.cost)
 COST_TYPES = {"billed": "cost", "list": "list_cost", "contracted": "contracted_cost", "effective": "effective_cost"}
@@ -56,7 +56,7 @@ def weakest(values) -> str | None:
 ROLLUP_KEYS = ["service_code", "service_name", "service_raw", "region", "account_id", "charge_type", "pricing_model",
                "instance_type", "operating_system", "database_engine", "deployment_option", "usage_type", "unit",
                "commitment_id", "currency", "provider", "coverage", "line_type_raw", "sku_id", "sku_price_id", "meter_id",
-               "operation", "tenancy", "license_model", "pricing_term", "purchase_option",
+               "operation", "tenancy", "license_model", "pre_installed_sw", "pricing_term", "purchase_option",
                "commitment_status", "commitment_term"]   # never resource_id: one per line. commitment_status: unused apart (analysis)
 UNIT_PRICES = ("list_unit_price", "contracted_unit_price")    # kept on a rolled line when all its lines agree
 

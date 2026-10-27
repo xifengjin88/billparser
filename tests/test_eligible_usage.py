@@ -37,7 +37,7 @@ def eligible(tmp_path: Path, name: str, store: str = "store") -> dict:
 
 
 def test_schema_version():
-    assert SCHEMA_VERSION == "1.6"
+    assert SCHEMA_VERSION == "1.7"            # 1.6: the analysis change; 1.7: pre_installed_sw
 
 
 def test_covered_usage_is_under_its_commitment(tmp_path):

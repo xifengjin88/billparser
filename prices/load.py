@@ -85,18 +85,26 @@ class LoadResult:
 
 
 # ---------------------------------------------------------------- reading the files
-def read_csv(path: Path) -> pa.Table:
-    """One AWS price CSV (gzipped): the header lines skipped, every column as text, blanks as null."""
+BLOCK_BYTES = 32 << 20             # CSV text per batch: EC2 us-east-1 (about 400k rows, 90 columns) is several batches
+
+
+def read_batches(path: Path, block_bytes: int = BLOCK_BYTES) -> Iterator[pa.Table]:
+    """One AWS price CSV (gzipped), in batches: the header lines skipped, every column as text, blanks as null. A
+    product's rows may fall in two batches: the load keeps the first row of a SKU and of a rate code (SQL), so the
+    result is the same as reading the whole file at once, with a fraction of the memory."""
     with gzip.open(path, "rb") as fh:
         for _ in range(HEADER_LINES):
             fh.readline()
         names = next(csv.reader([fh.readline().decode("utf-8")]))
         unique = [n if names.count(n) == 1 else f"{n}_{i}" for i, n in enumerate(names)]
-        return pacsv.read_csv(fh, read_options=pacsv.ReadOptions(column_names=unique, block_size=16 << 20),
-                              parse_options=pacsv.ParseOptions(newlines_in_values=True),
-                              convert_options=pacsv.ConvertOptions(
-                                  column_types={n: pa.string() for n in unique}, null_values=[""],
-                                  strings_can_be_null=True, quoted_strings_can_be_null=True))
+        reader = pacsv.open_csv(fh, read_options=pacsv.ReadOptions(column_names=unique, block_size=block_bytes),
+                                parse_options=pacsv.ParseOptions(newlines_in_values=True),
+                                convert_options=pacsv.ConvertOptions(
+                                    column_types={n: pa.string() for n in unique}, null_values=[""],
+                                    strings_can_be_null=True, quoted_strings_can_be_null=True))
+        for batch in reader:
+            if batch.num_rows:
+                yield pa.Table.from_batches([batch])
 
 
 def _units(raw: pd.Series) -> tuple[pd.Series, pd.Series]:
@@ -220,7 +228,8 @@ def _copy(conn: Connection, table: str, df: pd.DataFrame) -> None:
 
 # ---------------------------------------------------------------- the load
 def load_snapshot(engine: Engine, download_dir: Path, snapshot_id: str | None = None, partial: bool = False,
-                  only: Iterable[str] | None = None, on_file: Callable[[str], None] | None = None) -> LoadResult:
+                  only: Iterable[str] | None = None, on_file: Callable[[str], None] | None = None,
+                  block_bytes: int = BLOCK_BYTES) -> LoadResult:
     """Load every file of a download (only: these price lists) as one snapshot. partial: only the price lists in it
     are compared and changed (a full load also refuses a price list that is missing); a partial load on the day of
     the current snapshot adds to it. Raises Refused when the sanity check fails."""
@@ -242,20 +251,22 @@ def load_snapshot(engine: Engine, download_dir: Path, snapshot_id: str | None = 
         for kind, offer, region, path in download_files(download_dir):
             if wanted is not None and offer not in wanted:
                 continue
-            table = read_csv(path)
-            if kind == "offers":
-                prod, rates = offer_frames(table, offer)
-                _copy(conn, "stage_product", prod)
-                _copy(conn, "stage_rate", rates)
-                res.counts[offer] = res.counts.get(offer, 0) + len(rates)
-            else:
-                plans, sp = sp_frames(table, offer)
-                _copy(conn, "stage_plan", plans)
-                _copy(conn, "stage_sp", sp)
-                res.counts[offer] = res.counts.get(offer, 0) + len(sp)
+            n = 0
+            for table in read_batches(path, block_bytes):
+                n += table.num_rows
+                if kind == "offers":
+                    prod, rates = offer_frames(table, offer)
+                    _copy(conn, "stage_product", prod)
+                    _copy(conn, "stage_rate", rates)
+                    res.counts[offer] = res.counts.get(offer, 0) + len(rates)
+                else:
+                    plans, sp = sp_frames(table, offer)
+                    _copy(conn, "stage_plan", plans)
+                    _copy(conn, "stage_sp", sp)
+                    res.counts[offer] = res.counts.get(offer, 0) + len(sp)
             conn.commit()
             if on_file:
-                on_file(f"{offer} {region}: {table.num_rows:,} rows")
+                on_file(f"{offer} {region}: {n:,} rows")
         res.seconds["read_and_stage"] = round(time.monotonic() - t0, 1)
         t1 = time.monotonic()
         try:

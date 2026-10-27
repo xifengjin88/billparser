@@ -96,6 +96,7 @@ def test_aws_fields_by_their_columns(pipe):
         assert (v(ec2.instance_type), v(ec2.pricing_term), v(ec2.license_model)) == ("m5.xlarge", "OnDemand",
                                                                                      "No License required")
         assert v(ec2.resource_id) == "i-0abc123def4567890" and v(ec2.list_unit_price) == Decimal("0.192")
+        assert v(ec2.pre_installed_sw) == "NA" and ec2.pre_installed_sw.origin == "printed"
         fee = next(c for c in doc.charges if v(c.line_type_raw) == "RIFee")
         assert v(fee.purchase_option) == "No Upfront" and v(fee.instance_type) == "db.r6g.large"
 
@@ -131,7 +132,8 @@ def test_json_get():
     assert got("VCPUs")[0] == "4"
 
 
-FIELDS = ["instance_type", "operating_system", "usage_type", "operation", "tenancy", "license_model", "sku_id",
+FIELDS = ["instance_type", "operating_system", "usage_type", "operation", "tenancy", "license_model", "pre_installed_sw",
+          "sku_id",
           "sku_price_id", "meter_id", "resource_id", "pricing_term", "purchase_option", "commitment_id",
           "list_unit_price", "contracted_unit_price", "database_engine", "meter_name"]
 

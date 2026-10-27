@@ -47,24 +47,27 @@ _TERM = ("r.term_type = k.term_type AND (k.lease_length IS NULL OR r.lease_lengt
 _TIER0 = "(r.begin_range IS NULL OR r.begin_range = 0)"
 _USED = "(p.capacity_status IS NULL OR p.capacity_status = 'Used')"
 _SERVICE = "(k.service_code IS NULL OR p.service_code = k.service_code)"
+# a product without an attribute (EC2 has no database engine) is not excluded by it; the products that match more of
+# the key's attributes exactly win
+_SCORE = "(" + " + ".join(f"CASE WHEN p.{c} = k.{c} THEN 1 ELSE 0 END" for c in OPTIONAL) + ")"
 _NOT_UNUSED = "(p.usage_type IS NULL OR p.usage_type NOT LIKE '%Unused%')"     # RDS has no capacity status
-_OUT = ("k.key_id, {prio} AS priority, '{how}' AS matched_by, {pref} AS preferred, r.id AS rate_id, r.sku, r.rate_code, r.term_type, "
+_OUT = ("k.key_id, {prio} AS priority, '{how}' AS matched_by, {pref} AS preferred, {score} AS score, r.id AS rate_id, r.sku, r.rate_code, r.term_type, "
         "r.unit, r.unit_price, r.currency, r.effective_from, r.effective_from > k.as_of AS before_history, "
         "r.begin_range, r.end_range")
 QUERY = " UNION ALL ".join([
-    f"SELECT {_OUT.format(prio=1, how='rate_code', pref='true')} FROM price_keys k JOIN price_rate r "
+    f"SELECT {_OUT.format(prio=1, how='rate_code', pref='true', score=0)} FROM price_keys k JOIN price_rate r "
     f"ON r.rate_code = k.rate_code AND {_DATE} WHERE k.rate_code IS NOT NULL",
-    f"SELECT {_OUT.format(prio=2, how='sku', pref='true')} FROM price_keys k JOIN price_rate r "
+    f"SELECT {_OUT.format(prio=2, how='sku', pref='true', score=0)} FROM price_keys k JOIN price_rate r "
     f"ON r.provider = k.provider AND r.sku = k.sku AND {_TERM} AND {_TIER0} AND {_DATE} WHERE k.sku IS NOT NULL",
-    f"SELECT {_OUT.format(prio=3, how='usage', pref=_USED)} FROM price_keys k JOIN price_product p "
+    f"SELECT {_OUT.format(prio=3, how='usage', pref=_USED, score=0)} FROM price_keys k JOIN price_product p "
     f"ON p.provider = k.provider AND p.usage_type = k.usage_type AND (k.operation IS NULL OR p.operation = k.operation) "
     f"AND (k.region IS NULL OR p.region IS NULL OR p.region = k.region) AND {_SERVICE} "
     f"JOIN price_rate r ON r.provider = p.provider AND r.sku = p.sku AND {_TERM} AND {_TIER0} AND {_DATE} "
     f"WHERE k.usage_type IS NOT NULL",
-    f"SELECT {_OUT.format(prio=4, how='attributes', pref=_NOT_UNUSED)} FROM price_keys k JOIN price_product p "
+    f"SELECT {_OUT.format(prio=4, how='attributes', pref=_NOT_UNUSED, score=_SCORE)} FROM price_keys k JOIN price_product p "
     f"ON p.provider = k.provider AND p.instance_type = k.instance_type AND p.region = k.region AND {_USED} "
     f"AND {_SERVICE} "
-    + "".join(f"AND (k.{c} IS NULL OR p.{c} = k.{c}) " for c in OPTIONAL)
+    + "".join(f"AND (k.{c} IS NULL OR p.{c} IS NULL OR p.{c} = k.{c}) " for c in OPTIONAL)
     + f"JOIN price_rate r ON r.provider = p.provider AND r.sku = p.sku AND {_TERM} AND {_TIER0} AND {_DATE} "
     f"WHERE k.instance_type IS NOT NULL AND k.region IS NOT NULL",
 ])
@@ -98,6 +101,20 @@ def _key_ids(found: pd.DataFrame, keys: pd.DataFrame) -> pd.DataFrame:
     """The key ids as the caller gave them (the keys table holds text)."""
     if not found.empty:
         found["key_id"] = found["key_id"].map(dict(zip(keys["key_id"].astype(str), keys["key_id"], strict=True)))
+    return found
+
+
+def _typed(found: pd.DataFrame) -> pd.DataFrame:
+    """The same types on every database (PostgreSQL gives Decimal and True, SQLite float and 1): prices are float,
+    flags bool, counts int, so quantity * unit_price works the same in tests and in production."""
+    for c in ("unit_price", "rate"):
+        if c in found:
+            found[c] = pd.to_numeric(found[c], errors="coerce").astype(float)
+    for c in ("before_history", "tiered"):
+        if c in found:
+            found[c] = found[c].fillna(False).astype(bool)
+    if "candidates" in found:
+        found["candidates"] = found["candidates"].astype(int)
     return found
 
 
@@ -150,17 +167,19 @@ class PriceCatalog:
         best = found[found["priority"] == found.groupby("key_id")["priority"].transform("min")]
         # a usage type that capacity reservations share (Outposts): the "Used" product, when the key has one
         best = best[best["preferred"] | ~best.groupby("key_id")["preferred"].transform("any")]
+        best = best[best["score"] == best.groupby("key_id")["score"].transform("max")]
         n = best.groupby("key_id")["unit_price"].transform("nunique")
         best = best.assign(candidates=n, tiered=best["end_range"].notna())
         out = best.drop_duplicates("key_id").copy()
         out.loc[out["candidates"] > 1, ["unit_price", "rate_code", "rate_id", "sku"]] = None
-        return out.drop(columns=["priority", "preferred", "begin_range", "end_range"]).reset_index(drop=True)
+        return _typed(out.drop(columns=["priority", "preferred", "score", "begin_range", "end_range"])
+                      .reset_index(drop=True))
 
     def lookup_savings_plans(self, keys: pd.DataFrame) -> pd.DataFrame:
         """keys: key_id, as_of, discounted_sku, and any of plan_type, lease_length, purchase_option. Returns every
         Savings Plans rate that applies (one per plan type, term and payment option the key leaves open)."""
         frame = _keys_frame(keys, SP_KEYS)
-        return _key_ids(self._run("sp_keys", SP_KEYS, frame, SP_QUERY), keys)
+        return _typed(_key_ids(self._run("sp_keys", SP_KEYS, frame, SP_QUERY), keys))
 
 
 _CATALOGS: dict[str, PriceCatalog] = {}
