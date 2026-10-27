@@ -56,3 +56,8 @@ ignore = ["E501", "E701", "E702", "E731", "E741", "B008", "B905"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["billparse", "svcres"]
+
+[dependency-groups]
+dev = [
+    "jsonschema>=4.26.0",
+]

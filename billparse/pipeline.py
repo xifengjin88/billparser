@@ -17,8 +17,10 @@ from __future__ import annotations
 
 import contextvars
 import json
+import os
 import time
 import traceback
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -38,8 +40,8 @@ from .pricing import KeyCache, PriceDefaults, PriceStats, apply_discount, drop_p
 from .settings import catalog_dir, data_dir
 from .spec import Extraction, SpecError, check_spec, detect_score, run
 from .store import Store
-from .transforms import period_of
-from .validate import PRICE_CHECKS, clean_rows, validate, validate_stats
+from .transforms import CANONICAL, period_of
+from .validate import CRITICAL, PRICE_CHECKS, clean_rows, validate, validate_stats
 
 
 @dataclass
@@ -55,6 +57,8 @@ class Settings:
     examples_k: int = 3
     use_agent: bool = field(default_factory=agent_mod.enabled)  # AGENT_ENABLED=1 and ANTHROPIC_API_KEY
     price_defaults: PriceDefaults = field(default_factory=PriceDefaults)   # what pricing may assume (none)
+    # LLM spec candidates in the first round, generated in parallel (1: one at a time, as before)
+    spec_candidates: int = field(default_factory=lambda: max(1, int(os.environ.get("BILLPARSE_SPEC_CANDIDATES") or 2)))
 
 
 @dataclass
@@ -76,6 +80,7 @@ class Attempt:
     verdict: dict = field(default_factory=dict)
     error: str | None = None
     llm_calls: int = 0
+    chosen: bool = True             # False: a spec candidate another one beat (logged, never accepted)
 
     @property
     def confidence(self) -> float:
@@ -434,13 +439,22 @@ class Pipeline:
             yield att
 
     def _llm_spec(self, doc, fp, headers, attempts):
+        """The LLM writes a spec, the interpreter runs it and the checks judge it; up to max_repairs rounds. Round 1
+        has spec_candidates candidates, generated in parallel (only the LLM calls run in threads: each candidate is
+        run and checked here, in the parse's thread, with its price context); the next rounds repair the best one."""
         if not self.llm:
             return
         preview = build_preview(doc)
         examples = self._examples(fp)
-        spec, feedback, calls = None, None, 0
-        for _ in range(self.s.max_repairs):
-            calls += 1
+        spec, feedback = None, None
+        rounds = self.s.max_repairs
+        if self.s.spec_candidates > 1 and rounds > 0:
+            best, feedback = yield from self._spec_candidates(doc, preview, examples, attempts)
+            if best is not None and self._accept(best):
+                return
+            spec = best.spec if best is not None else None
+            rounds -= 1
+        for _ in range(rounds):
             try:
                 spec = llm_mod.generate_spec(self.llm, preview, examples, feedback, spec)
                 check_spec(spec)
@@ -454,6 +468,66 @@ class Pipeline:
             if self._accept(att):
                 return
             feedback = att.verdict.get("feedback") or [att.error or "No rows extracted"]
+
+    def _spec_candidates(self, doc, preview, examples, attempts):
+        """Round 1: spec_candidates specs at once, each from another order of the examples, the later ones told to read
+        the layout on their own. Every candidate is an attempt in the log; the best (accepted; else no failed critical
+        check; else the fewest failed price checks; else the most confident) is the only one that can be accepted.
+        Two candidates that read the same rows add candidates_agree to it; where they differ, the repair is told.
+        Returns (the best attempt or None, the feedback for the next round)."""
+        n = self.s.spec_candidates
+        spent = getattr(self.llm, "spent", None)
+
+        def generate(i: int):
+            before = spent() if spent else 0.0
+            try:
+                out, err = llm_mod.generate_spec(self.llm, preview, _example_variant(examples, i),
+                                                 note=CANDIDATE_NOTE if i else None), None
+            except Exception as e:                              # noqa: BLE001  a failed candidate is an attempt
+                out, err = None, e
+            return out, err, (spent() - before) if spent else 0.0
+        with ThreadPoolExecutor(max_workers=n, thread_name_prefix="spec-candidate") as pool:
+            made = list(pool.map(generate, range(n)))
+        if hasattr(self.llm, "charge"):                         # the workers' cost belongs to this parse
+            self.llm.charge(sum(c for _, _, c in made))
+        atts: list[Attempt] = []
+        for spec, err, _ in made:
+            if err is None:
+                try:
+                    check_spec(spec)
+                except Exception as e:                          # noqa: BLE001
+                    err = e
+            if err is not None:
+                atts.append(Attempt("llm_spec", spec, error=str(err), llm_calls=1))
+                continue
+            att = self._try("llm_spec", spec, doc, extra_totals=self._printed_totals(attempts))
+            att.llm_calls = 1
+            atts.append(att)
+        ran = sorted((a for a in atts if a.ext is not None), key=self._candidate_rank)
+        best = ran[0] if ran else None
+        disagree: list[str] = []
+        with_rows = [a for a in ran if not a.ext.rows.empty]
+        if best is not None and len(with_rows) >= 2 and best in with_rows \
+                and best.verdict.get("status") != "auxiliary":
+            other = next(a for a in with_rows if a is not best)
+            disagree = _candidates_differ(best, other)
+            if not disagree:
+                best.ext.checks.append({"name": "candidates_agree", "status": "pass", "weight": 0.05,
+                                        "detail": f"{len(with_rows)} spec candidates read the same {len(best.ext.rows):,} "
+                                                  "rows, total and column values"})
+                best.verdict = validate(best.ext)
+        for a in sorted(atts, key=lambda a: a is best):        # the best last: _route stops at an accepted one
+            a.chosen = a is best
+            yield a
+        if best is None:
+            return None, [f"Spec rejected: {a.error}" for a in atts if a.error][:3] or ["No rows extracted"]
+        return best, (best.verdict.get("feedback") or [best.error or "No rows extracted"]) + disagree
+
+    def _candidate_rank(self, att: Attempt) -> tuple:
+        checks = att.verdict.get("checks", [])
+        critical = any(c["status"] == "fail" and c["name"] in CRITICAL for c in checks)
+        price_fails = sum(c["status"] == "fail" and c["name"] in PRICE_CHECKS for c in checks)
+        return (not self._accept(att), critical, price_fails, -att.confidence)
 
     def _llm_extract(self, doc, fp, headers, attempts):
         if not self.llm:
@@ -513,7 +587,7 @@ class Pipeline:
         return att
 
     def _accept(self, att: Attempt) -> bool:
-        if att.ext is None or att.verdict.get("status") in ("error", None):
+        if att.ext is None or att.verdict.get("status") in ("error", None) or not att.chosen:
             return False
         if att.verdict.get("status") == "auxiliary":
             return att.confidence > 0
@@ -649,6 +723,42 @@ def _periods_out_of_descriptions(df: pd.DataFrame) -> pd.DataFrame:
         df.loc[hit, col] = found[hit].map(lambda p, i=i: p[i])
     df.loc[hit, "description"] = None
     return df
+
+
+CANDIDATE_NOTE = ("Write your own reading of this layout: another approach may have mapped columns wrong (quantity and "
+                  "unit price, the cost column, dates, the region). Check each column mapping against the header and "
+                  "the rows of the preview.")
+AGREE_SAMPLE = 50                   # rows compared between two spec candidates
+
+
+def _example_variant(examples: list, i: int) -> list:
+    """Candidate i's examples: the same ones, in another order (the first candidate: as given)."""
+    if not examples or i == 0:
+        return examples
+    k = i % len(examples)
+    return list(reversed(examples[k:] + examples[:k]))
+
+
+def _candidates_differ(a: Attempt, b: Attempt) -> list[str]:
+    """Where two candidates' readings differ: the row count, the total (to the cent), and the values of each
+    canonical column both map, on the first AGREE_SAMPLE rows. [] when they agree."""
+    ra, rb = a.ext.rows, b.ext.rows
+    if len(ra) != len(rb):
+        return [f"the candidates disagree on the number of rows ({len(ra):,} vs {len(rb):,})"]
+    ta = round(float(pd.to_numeric(ra.get("billed_cost"), errors="coerce").sum()), 2) if "billed_cost" in ra else 0.0
+    tb = round(float(pd.to_numeric(rb.get("billed_cost"), errors="coerce").sum()), 2) if "billed_cost" in rb else 0.0
+    if ta != tb:
+        return [f"the candidates disagree on the total ({ta:,.2f} vs {tb:,.2f})"]
+    mapped = set((a.spec or {}).get("columns") or {}) & set((b.spec or {}).get("columns") or {}) & set(CANONICAL)
+    out = []
+    for col in sorted(c for c in mapped if c in ra and c in rb):
+        x, y = ra[col].head(AGREE_SAMPLE).reset_index(drop=True), rb[col].head(AGREE_SAMPLE).reset_index(drop=True)
+        nx, ny = pd.to_numeric(x, errors="coerce"), pd.to_numeric(y, errors="coerce")
+        numeric = nx.notna() & ny.notna()
+        same = (numeric & ((nx - ny).abs() <= 1e-6)) | (~numeric & (x.astype(str).str.strip() == y.astype(str).str.strip()))
+        if not same.all():
+            out.append(f"the candidates disagree on column {col}")
+    return out
 
 
 def doc_text(doc: Document, max_chars: int = 20000) -> str:

@@ -238,7 +238,8 @@ def _spec(qty: str, price: str) -> dict:
             "filters": [{"drop_if_blank": "billed_cost"}]}
 
 
-def test_the_price_checks_choose_the_route_and_steer_the_repair(tmp_path):
+def test_the_price_checks_choose_the_route_and_steer_the_repair(tmp_path, monkeypatch):
+    monkeypatch.setenv("BILLPARSE_SPEC_CANDIDATES", "1")         # one candidate per round: the repair is told
     rows = [{"c1": "AmazonEC2", "c2": LINUX, "c3": "BoxUsage:m5.xlarge", "c4": "us-east-1", "c5": 24 + i % 3,
              "c6": 0.192, "c7": round((24 + i % 3) * 0.192, 4), "c8": f"2026-10-{i + 1:02d}", "c9": "Hrs"}
             for i in range(12)]

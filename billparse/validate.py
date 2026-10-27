@@ -421,6 +421,7 @@ def validate(ext: Extraction, alt: Extraction | None = None, resolved_share: flo
     checks += _plausibility(stats)
     checks += _resolution(resolved_share)
     checks += price_checks(stats, ext.rows, text)
+    checks += [Check(**c) for c in ext.checks]                 # e.g. candidates_agree (pipeline._llm_spec)
     return _summarize(checks, _confidence(checks), reconciled)
 
 

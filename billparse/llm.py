@@ -18,6 +18,7 @@ from typing import Protocol
 
 import requests
 
+from .spec_schema import rows_json_schema, spec_json_schema
 from .transforms import CANONICAL, TRANSFORMS
 
 API_URL = "https://api.anthropic.com/v1/messages"
@@ -64,7 +65,14 @@ class LLMUnavailable(RuntimeError):
 
 
 class LLM(Protocol):
+    """complete(): text. An LLM may also have complete_json(system, user, schema, max_tokens) -> dict: the answer as a
+    whole JSON object for the schema (generate_spec and extract_rows use it when it is there)."""
     def complete(self, system: str, user: str, max_tokens: int = 4000) -> str: ...
+
+
+ANSWER_TOOL = "answer"
+ANSWER_NOTE = (f"\n\nGive your answer by calling the {ANSWER_TOOL} tool once, with the whole answer as its input; "
+               "write nothing else.")
 
 
 class AnthropicLLM:
@@ -86,17 +94,40 @@ class AnthropicLLM:
         """USD spent by this thread's calls so far."""
         return getattr(self._local, "cost", 0.0)
 
-    def complete(self, system: str, user: str, max_tokens: int = 4000) -> str:
-        body = {"model": self.model, "max_tokens": max(max_tokens, self.max_tokens), "system": system,
-                "messages": [{"role": "user", "content": user}]}
+    def charge(self, usd: float) -> None:
+        """Count cost spent in another thread (a spec candidate generated in parallel) as this thread's."""
+        self._local.cost = self.spent() + usd
+
+    def _post(self, body: dict) -> dict:
         if self.effort:
             body["output_config"] = {"effort": self.effort}
         r = requests.post(API_URL, timeout=self.timeout, json=body, headers={
             "x-api-key": self.api_key, "anthropic-version": "2023-06-01", "content-type": "application/json"})
         r.raise_for_status()
         out = r.json()
-        self._local.cost = self.spent() + cost_of(out.get("usage") or {}, out.get("model") or self.model)
+        self.charge(cost_of(out.get("usage") or {}, out.get("model") or self.model))
+        return out
+
+    def complete(self, system: str, user: str, max_tokens: int = 4000) -> str:
+        out = self._post({"model": self.model, "max_tokens": max(max_tokens, self.max_tokens), "system": system,
+                          "messages": [{"role": "user", "content": user}]})
         return "".join(b.get("text", "") for b in out["content"] if b.get("type") == "text")
+
+    def complete_json(self, system: str, user: str, schema: dict, max_tokens: int = 4000) -> dict:
+        """The answer as one tool's input: a whole JSON object, shaped by schema. tool_choice is "auto" and the prompt
+        names the tool (the current Opus and Sonnet models refuse a forced tool_choice, and output_config.format
+        needs additionalProperties false on every object, which a spec's free-form options cannot have). An answer
+        in text instead is read as before; one cut off by max_tokens raises ValueError (a repair round)."""
+        out = self._post({"model": self.model, "max_tokens": max(max_tokens, self.max_tokens),
+                          "system": system + ANSWER_NOTE, "messages": [{"role": "user", "content": user}],
+                          "tools": [{"name": ANSWER_TOOL, "description": "Your answer.", "input_schema": schema}],
+                          "tool_choice": {"type": "auto"}})
+        if out.get("stop_reason") == "max_tokens":
+            raise ValueError("The answer was cut off (max_tokens)")
+        for b in out["content"]:
+            if b.get("type") == "tool_use" and b.get("name") == ANSWER_TOOL and isinstance(b.get("input"), dict):
+                return b["input"]
+        return _json_from("".join(b.get("text", "") for b in out["content"] if b.get("type") == "text"))
 
 
 def default_llm() -> LLM | None:
@@ -168,8 +199,16 @@ def _json_from(text: str) -> dict:
     return json.loads(text[start:end + 1])
 
 
+def _ask(llm: LLM, system: str, user: str, schema: dict, max_tokens: int = 4000) -> dict:
+    """The answer as JSON: schema-shaped when the LLM has complete_json, else read from its text."""
+    if hasattr(llm, "complete_json"):
+        return llm.complete_json(system, user, schema, max_tokens=max_tokens)
+    return _json_from(llm.complete(system, user, max_tokens=max_tokens))
+
+
 def generate_spec(llm: LLM, preview: dict, examples: list[tuple[str, dict]],
-                  feedback: list[str] | None = None, previous: dict | None = None) -> dict:
+                  feedback: list[str] | None = None, previous: dict | None = None, note: str | None = None) -> dict:
+    """note: a word to this candidate only (parallel candidates are told to try another reading)."""
     parts = []
     for i, (ex_preview, ex_spec) in enumerate(examples, 1):
         parts.append(f"<example {i}>\nPREVIEW:\n{ex_preview}\nSPEC:\n{json.dumps(ex_spec)}\n</example {i}>")
@@ -177,8 +216,10 @@ def generate_spec(llm: LLM, preview: dict, examples: list[tuple[str, dict]],
     if previous and feedback:
         parts.append("Your previous spec:\n" + json.dumps(previous))
         parts.append("Validation problems to fix:\n- " + "\n- ".join(feedback))
+    if note:
+        parts.append(note)
     parts.append("Write the spec.")
-    return _json_from(llm.complete(SPEC_GUIDE, "\n\n".join(parts)))
+    return _ask(llm, SPEC_GUIDE, "\n\n".join(parts), spec_json_schema())
 
 
 # ---------------------------------------------------------------- direct extraction
@@ -194,4 +235,4 @@ Return ONLY JSON."""
 
 
 def extract_rows(llm: LLM, preview: dict) -> dict:
-    return _json_from(llm.complete(EXTRACT_GUIDE, render_preview(preview), max_tokens=8000))
+    return _ask(llm, EXTRACT_GUIDE, render_preview(preview), rows_json_schema(), max_tokens=8000)

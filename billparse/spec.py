@@ -41,6 +41,7 @@ class Extraction:
     spec_id: str = ""
     evidence: dict = field(default_factory=dict)     # tree source: subtotals, views, unexplained amounts
     unmapped: dict = field(default_factory=dict)     # the fields guessed for columns the spec does not name
+    checks: list = field(default_factory=list)       # more checks validate() adds (candidates_agree), as dicts
 
 
 # ---------------------------------------------------------------- validation of spec shape
