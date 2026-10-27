@@ -1,7 +1,8 @@
 """Validation produces evidence, not a single pass/fail.
 
 Checks: row presence, line math, stated totals (found anywhere), hidden total rows,
-row coverage, dual-extraction agreement, plausibility, service resolution.
+row coverage, dual-extraction agreement, plausibility, service resolution, and the price checks: the catalog's list
+prices (pricing.py) as an independent reference that a parse which adds up but read the wrong column or unit fails.
 Each check adds or removes confidence. Files without totals are still accepted,
 marked "unreconciled", with wider forecast ranges downstream.
 """
@@ -13,6 +14,8 @@ from dataclasses import asdict, dataclass, field
 
 import numpy as np
 import pandas as pd
+
+from prices.units import normalize as unit_of
 
 from .spec import Extraction
 from .transforms import map_unique, parse_number
@@ -110,6 +113,49 @@ def _label_series(df: pd.DataFrame) -> pd.Series:
 
 
 # ---------------------------------------------------------------- what the checks read from the rows
+PRICED = ("exact", "attributes", "assumed")
+# a price ratio near one of these: a unit or column mix-up (GB vs MB, seconds vs hours, days vs hours, months vs hours,
+# days vs months)
+MIXUPS = (1000.0, 1 / 1000, 3600.0, 1 / 3600, 24.0, 1 / 24, 730.0, 1 / 730, 730 / 24, 24 / 730)
+_LOG_MIXUPS = np.log(np.array(MIXUPS))
+
+
+def _nearest_mixup(r: pd.Series) -> pd.Series:
+    """Each ratio's nearest mix-up factor (in log scale): a line counts for one factor only."""
+    logs = np.log(r.clip(lower=1e-12).to_numpy(dtype=float))
+    return pd.Series(np.array(MIXUPS)[np.abs(logs[:, None] - _LOG_MIXUPS[None, :]).argmin(axis=1)], index=r.index)
+MAX_EXAMPLES = 5
+FAR = 10.0      # a price more than 10x off the list price: no discount explains it (quantity and price swapped)
+MIN_GROUNDED = 5   # catalog_grounding skips with fewer lines tested (one guessed line must not fail a file)
+
+
+def _col(df: pd.DataFrame, name: str) -> pd.Series:
+    return df[name] if name in df else pd.Series(None, index=df.index, dtype=object)
+
+
+def _usage(df: pd.DataFrame) -> pd.Series:
+    ct = _col(df, "charge_type")
+    return ct.isna() | ct.eq("Usage")
+
+
+def _flag(df: pd.DataFrame, name: str | None) -> pd.Series:
+    """A flag column of pricing (True, 1, "True", 1.0) as bool; absent: False."""
+    if not name or name not in df:
+        return pd.Series(False, index=df.index)
+    return df[name].map(lambda v: v is True or (isinstance(v, (int, float)) and not pd.isna(v) and v != 0)
+                        or (isinstance(v, str) and v.lower() in ("true", "1", "1.0"))).astype(bool)
+
+
+def _product_label(df: pd.DataFrame) -> pd.Series:
+    """What a line named as its product: "m5.xlarge in eu-west-9", a usage type, or a SKU."""
+    it, region = _col(df, "instance_type").astype(object), _col(df, "region").astype(object)
+    ut, sku = _col(df, "usage_type").astype(object), _col(df, "sku_id").astype(object)
+    out = ut.where(ut.notna(), sku).astype(object)
+    named = it.notna()
+    out[named] = it[named].astype(str) + " in " + region[named].astype(str)
+    return out.fillna("?").astype(str)
+
+
 @dataclass
 class RowStats:
     """Everything the row-based checks read, as sums and counts: built from a whole frame, or chunk by chunk and
@@ -132,6 +178,22 @@ class RowStats:
     currencies: set = field(default_factory=set)
     charge_types: bool = False      # the rows have a charge type
     negatives: int = 0              # negative lines not marked credit, refund, adjustment or negation
+    # the price checks (pricing.py ran on the rows): the catalog was asked for this many AWS usage lines
+    catalog_lines: int = 0
+    g_priced: list = field(default_factory=lambda: [0, 0.0])       # catalog_grounding: [lines, cost] priced
+    g_nosuch: list = field(default_factory=lambda: [0, 0.0])       # ... and no_such_product
+    g_conflict: list = field(default_factory=lambda: [0, 0.0])     # ... and exact matches whose printed region, type
+    #                                                                or OS is not the product's (price_conflict)
+    g_values: dict = field(default_factory=dict)                   # the values not found -> cost (at most 50)
+    pl: list = field(default_factory=lambda: [0, 0.0, 0.0])        # printed_list_price: [lines, weight, agreeing]
+    pl_mix: dict = field(default_factory=dict)                     # a mix-up factor -> weight
+    ip: list = field(default_factory=lambda: [0, 0.0, 0.0, 0.0])   # implied_unit_price: [lines, cost, in 0.5-1.05,
+    #                                                                 more than 10x off the list price]
+    ip_mix: dict = field(default_factory=dict)
+    pu: list = field(default_factory=lambda: [0.0, 0.0])           # price_units: [cost, at unit_mismatch]
+    uh: list = field(default_factory=lambda: [0, 0])               # usage_hours: [lines tested, over the window]
+    co: list = field(default_factory=lambda: [0, 0])               # cost_order: [lines tested, out of order]
+    examples: dict = field(default_factory=dict)                   # check -> up to 5 example rows
 
     @classmethod
     def of(cls, df: pd.DataFrame) -> RowStats:
@@ -169,7 +231,7 @@ class RowStats:
             self.ratio_sq += float((ratio * ratio).sum())
         if "charge_start" in df and df["charge_start"].notna().any():
             self.dates = True
-            d = pd.to_datetime(df["charge_start"], errors="coerce")
+            d = pd.to_datetime(df["charge_start"], errors="coerce", utc=True).dt.tz_localize(None)
             self.bad_dates += int((d.notna() & ((d < "2006-01-01")
                                                 | (d > pd.Timestamp.now() + pd.Timedelta(days=62)))).sum())
         if "currency" in df:
@@ -179,11 +241,159 @@ class RowStats:
             neg = df["billed_cost"] < 0
             self.negatives += int((neg & ~df["charge_type"].fillna("").isin(
                 ["Credit", "Refund", "Adjustment", "Negation"])).sum())
+        if "price_match_level" in df:
+            self._prices(df)
+        if {"resource_id", "charge_start", "charge_end", "quantity", "unit"} <= set(df.columns):
+            self._hours(df)
+        if sum(c in df for c in ("list_cost", "contracted_cost", "effective_cost")) >= 2:
+            self._order(df)
+
+    def _example(self, check: str, df: pd.DataFrame, mask: pd.Series, what) -> None:
+        """Up to 5 example rows per check, from the first chunks: never more."""
+        got = self.examples.setdefault(check, [])
+        if len(got) >= MAX_EXAMPLES or not mask.any():
+            return
+        for i in mask[mask].index[: MAX_EXAMPLES - len(got)]:
+            got.append({"src": str(df.at[i, "_src"]) if "_src" in df else str(i), "values": what(df.loc[i])})
+
+    def _prices(self, df: pd.DataFrame) -> None:
+        level = df["price_match_level"].astype(object)
+        usage = _usage(df) & _col(df, "provider").astype(str).str.lower().eq("aws")
+        asked = usage & level.notna() & level.astype(str).ne("") & level.ne("no_catalog")
+        self.catalog_lines += int(asked.sum())
+        if not asked.any():
+            return
+        cost = pd.to_numeric(df["billed_cost"], errors="coerce").abs().fillna(0.0)
+        priced = asked & level.isin(PRICED)
+        notes = _col(df, "price_assumptions").astype(str)
+        # catalog_grounding: priced against no_such_product
+        nosuch = asked & level.eq("unmatched") & _col(df, "price_missing").eq("no_such_product")
+        conflict = priced & _col(df, "price_conflict").notna() & _col(df, "price_conflict").astype(str).ne("")
+        for acc, m in ((self.g_priced, priced), (self.g_nosuch, nosuch), (self.g_conflict, conflict)):
+            acc[0] += int(m.sum())
+            acc[1] += float(cost[m].sum())
+        if conflict.any():
+            for v, c in cost[conflict].groupby(_col(df, "price_conflict")[conflict].astype(str)).sum().items():
+                if v in self.g_values or len(self.g_values) < 50:
+                    self.g_values[v] = self.g_values.get(v, 0.0) + float(c)
+            self._example("catalog_grounding", df, conflict, lambda r: str(r["price_conflict"]))
+        if nosuch.any():
+            for v, c in cost[nosuch].groupby(_product_label(df.loc[nosuch])).sum().items():
+                if v in self.g_values or len(self.g_values) < 50:
+                    self.g_values[v] = self.g_values.get(v, 0.0) + float(c)
+            self._example("catalog_grounding", df, nosuch, lambda r: _product_label(r.to_frame().T).iloc[0])
+        # printed_list_price: the file's own list unit price against the catalog's (exact matches only)
+        printed = pd.to_numeric(_col(df, "list_unit_price"), errors="coerce")
+        cat = pd.to_numeric(_col(df, "catalog_unit_price"), errors="coerce")
+        qty = pd.to_numeric(_col(df, "quantity"), errors="coerce")
+        own = printed.notna() & ~_flag(df, "_list_unit_price_inferred")
+        # dates before the catalog's history count too (its history starts at the first import): a price never
+        # changes by a mix-up factor, so only those fail; another difference warns (the price may have changed)
+        m = asked & level.eq("exact") & own & (cat > 0) & ~notes.str.contains("tiered")
+        if m.any():
+            r = printed[m] / cat[m]
+            w = (qty[m] * printed[m]).abs().fillna(0.0)
+            w = w.where(w > 0, 1e-9)
+            self.pl[0] += int(m.sum())
+            self.pl[1] += float(w.sum())
+            self.pl[2] += float(w[(r - 1).abs() <= 0.01].sum())
+            near = _nearest_mixup(r)
+            hit = (r / near - 1).abs() <= 0.02
+            for f, x in w[hit].groupby(near[hit]).sum().items():
+                self.pl_mix[float(f)] = self.pl_mix.get(float(f), 0.0) + float(x)
+            off = pd.Series(False, index=df.index)
+            off[m] = (r - 1).abs() > 0.01
+            self._example("printed_list_price", df, off,
+                          lambda row: f"printed {row['list_unit_price']} vs catalog {row['catalog_unit_price']} "
+                                      f"per {row.get('unit')}")
+        # implied_unit_price: what the line paid per unit against the catalog's price (never the printed list price:
+        # printed_list_price compares that one, so each failure points at its own column)
+        implied = pd.to_numeric(_col(df, "implied_unit_price"), errors="coerce")
+        ratio = implied / cat.where(cat > 0)
+        cov = _col(df, "coverage")
+        first_tier = ~notes.str.contains("tiered")
+        m = priced & cov.isin(("on_demand", "unknown")) & first_tier & ratio.notna()
+        if m.any():
+            r, w = ratio[m], cost[m]
+            self.ip[0] += int(m.sum())
+            self.ip[1] += float(w.sum())
+            self.ip[2] += float(w[(r >= 0.5) & (r <= 1.05)].sum())
+            self.ip[3] += float(w[(r > FAR) | (r < 1 / FAR)].sum())
+            near = _nearest_mixup(r)
+            hit = (r / near >= 0.5) & (r / near <= 1.05)
+            for f, x in w[hit].groupby(near[hit]).sum().items():
+                self.ip_mix[float(f)] = self.ip_mix.get(float(f), 0.0) + float(x)
+            off = pd.Series(False, index=df.index)
+            off[m] = (r < 0.5) | (r > 1.05)
+            self._example("implied_unit_price", df, off,
+                          lambda row: f"ratio {float(row['implied_unit_price']) / float(row['catalog_unit_price']):.4g}"
+                                      f": paid {row.get('billed_cost')} for {row.get('quantity')} {row.get('unit')}, "
+                                      f"catalog {row.get('catalog_unit_price')}")
+        # price_units: lines whose unit the price's cannot be converted to
+        self.pu[0] += float(cost[asked].sum())
+        bad = asked & level.eq("unit_mismatch")
+        self.pu[1] += float(cost[bad].sum())
+        self._example("price_units", df, bad, lambda row: f"unit {row.get('unit')!r}, {row.get('usage_type') or ''}")
+
+    def _hours(self, df: pd.DataFrame) -> None:
+        """usage_hours: hourly usage of one resource within its line's window."""
+        factor = map_unique(df["unit"], lambda u: (n[1] if (n := unit_of(u)) and n[0] == "hour" else None)
+                            if isinstance(u, str) else None)
+        start = pd.to_datetime(df["charge_start"], errors="coerce", utc=True)
+        end = pd.to_datetime(df["charge_end"], errors="coerce", utc=True)
+        hours = (end - start).dt.total_seconds() / 3600
+        qty = pd.to_numeric(df["quantity"], errors="coerce")
+        m = (_usage(df) & factor.notna() & df["resource_id"].notna() & df["resource_id"].astype(str).ne("")
+             & hours.gt(0) & qty.notna())
+        if not m.any():
+            return
+        used = qty[m] * factor[m].astype(float)
+        over = pd.Series(False, index=df.index)
+        over[m] = used > hours[m] * 1.01
+        self.uh[0] += int(m.sum())
+        self.uh[1] += int(over.sum())
+        self._example("usage_hours", df, over, lambda row: f"{row['resource_id']}: {row['quantity']} {row['unit']} "
+                                                           f"from {row['charge_start']} to {row['charge_end']}")
+
+    def _order(self, df: pd.DataFrame) -> None:
+        """cost_order: list >= contracted >= effective on usage lines that print at least two of them."""
+        vals = {}
+        for c, flag in (("list_cost", "_list_cost_inferred"), ("contracted_cost", "_contracted_cost_inferred"),
+                        ("effective_cost", None)):
+            v = pd.to_numeric(_col(df, c), errors="coerce")
+            v = v.where(v != 0)                                      # 0: not priced in that column, not swapped
+            vals[c] = v.where(~_flag(df, flag)) if flag else v       # a cost pricing filled is not the file's
+        frame = pd.DataFrame(vals)
+        m = _usage(df) & frame.notna().sum(axis=1).ge(2) & (frame.fillna(0) >= 0).all(axis=1)
+        if not m.any():
+            return
+        f = frame[m]
+        bad = pd.Series(False, index=f.index)
+        for hi, lo in (("list_cost", "contracted_cost"), ("contracted_cost", "effective_cost"),
+                       ("list_cost", "effective_cost")):
+            bad |= f[hi].notna() & f[lo].notna() & (f[hi] < f[lo] * 0.99 - 0.005)
+        self.co[0] += int(m.sum())
+        self.co[1] += int(bad.sum())
+        out = pd.Series(False, index=df.index)
+        out[bad.index] = bad
+        self._example("cost_order", df, out, lambda row: f"list {row.get('list_cost')}, contracted "
+                                                         f"{row.get('contracted_cost')}, effective {row.get('effective_cost')}")
 
     def merge(self, o: RowStats) -> None:
         for f in ("rows", "cost_rows", "total", "non_tax", "label_cost", "label_rows", "abs_cost", "lm_n", "lm_ok", "ratio_n",
-                  "ratio_sum", "ratio_sq", "bad_dates", "negatives"):
+                  "ratio_sum", "ratio_sq", "bad_dates", "negatives", "catalog_lines"):
             setattr(self, f, getattr(self, f) + getattr(o, f))
+        for f in ("g_priced", "g_nosuch", "g_conflict", "pl", "ip", "pu", "uh", "co"):
+            setattr(self, f, [a + b for a, b in zip(getattr(self, f), getattr(o, f), strict=True)])
+        for mine, theirs in ((self.pl_mix, o.pl_mix), (self.ip_mix, o.ip_mix)):
+            for k, v in theirs.items():
+                mine[k] = mine.get(k, 0.0) + v
+        for k, v in o.g_values.items():
+            if k in self.g_values or len(self.g_values) < 50:
+                self.g_values[k] = self.g_values.get(k, 0.0) + v
+        for k, v in o.examples.items():
+            got = self.examples.setdefault(k, [])
+            got.extend(v[: MAX_EXAMPLES - len(got)])
         self.line_math |= o.line_math
         self.dates |= o.dates
         self.charge_types |= o.charge_types
@@ -192,7 +402,9 @@ class RowStats:
 
 # ---------------------------------------------------------------- checks
 def validate(ext: Extraction, alt: Extraction | None = None, resolved_share: float | None = None,
-             kind: str = "cost_lines") -> dict:
+             kind: str = "cost_lines", text: str | None = None) -> dict:
+    """text: the document's text, for rows an LLM wrote itself (route llm_extract_direct): their instance types and
+    regions must be printed there (grounding_values)."""
     stats = RowStats.of(ext.rows)
     if not stats.cost_rows:
         return _summarize([Check("rows", "fail", "No cost rows extracted", -1.0)], 0.0, reconciled=False)
@@ -208,6 +420,7 @@ def validate(ext: Extraction, alt: Extraction | None = None, resolved_share: flo
         checks.append(cur)
     checks += _plausibility(stats)
     checks += _resolution(resolved_share)
+    checks += price_checks(stats, ext.rows, text)
     return _summarize(checks, _confidence(checks), reconciled)
 
 
@@ -229,6 +442,7 @@ def validate_stats(stats: RowStats, stated_totals: list[dict], source_rows: int,
         checks.append(_coverage(None, source_rows, stats.rows, stated_totals))
     checks += _plausibility(stats)
     checks += _resolution(resolved_share)
+    checks += price_checks(stats)
     return _summarize(checks, _confidence(checks), reconciled)
 
 
@@ -432,8 +646,162 @@ def _plausibility(s: RowStats) -> list[Check]:
     return out
 
 
+# ---------------------------------------------------------------- the price checks
+PRICE_CHECKS = ("catalog_grounding", "printed_list_price", "implied_unit_price", "price_units", "usage_hours",
+                "cost_order", "grounding_values")
+
+
+def price_checks(s: RowStats, rows: pd.DataFrame | None = None, text: str | None = None) -> list[Check]:
+    """The catalog's list prices as an independent reference: a parse that maps real products, pays sane prices and
+    agrees with the printed list prices is almost certainly right. Every check skips (weight 0) unless the catalog was
+    asked for some line of the file (no catalog, or Azure and GCP only: today's verdict). Catalog-filled values never
+    check themselves: printed_list_price reads printed prices only, implied_unit_price the file's costs."""
+    if not s.catalog_lines:
+        why = "No line was priced against the catalog (no catalog, or no AWS usage lines)"
+        return [Check(n, "skip", why) for n in PRICE_CHECKS]
+    return [_grounding(s), _printed_list(s), _implied(s), _units(s), _hours(s), _order(s), _grounded(rows, text)]
+
+
+def _examples(s: RowStats, check: str) -> str:
+    got = s.examples.get(check) or []
+    return ("; rows: " + "; ".join(f"{e['src']} ({e['values']})" for e in got)) if got else ""
+
+
+def _mixup(mix: dict, base: float, share: float) -> float | None:
+    """The mix-up factor carrying more than share of base, or None."""
+    if not mix or base <= 0:
+        return None
+    f, w = max(mix.items(), key=lambda kv: kv[1])
+    return f if w > share * base else None
+
+
+def _times(f: float) -> str:
+    return f"×{f:.4g}" if f >= 1 else f"×1/{1 / f:.4g}"
+
+
+def _grounding(s: RowStats) -> Check:
+    """catalog_grounding: of the AWS usage cost whose service the catalog has, the share whose product no catalog
+    row has (no_such_product), or whose exact match prints another region, instance type or OS than the product
+    (price_conflict): a value read from a wrong column. At least MIN_GROUNDED lines, else skip."""
+    lines = s.g_priced[0] + s.g_nosuch[0]
+    if lines < MIN_GROUNDED:
+        return Check("catalog_grounding", "skip", f"{lines} line(s) tested against the catalog's products: too few")
+    use_cost = (s.g_priced[1] + s.g_nosuch[1]) > 0
+    i = 1 if use_cost else 0
+    base = s.g_priced[i] + s.g_nosuch[i]
+    bad = s.g_nosuch[i] + s.g_conflict[i]
+    share = bad / base
+    what = "cost" if use_cost else "lines"
+    if share < 0.02:
+        return Check("catalog_grounding", "pass", f"{1 - share:.0%} of the priced {what} name products the catalog "
+                     f"has, as printed ({s.g_priced[0]:,} lines)", 0.10)
+    top = ", ".join(v for v, _ in sorted(s.g_values.items(), key=lambda kv: -kv[1])[:5])
+    parts = [f"{s.g_nosuch[0]:,} name products no catalog row has" if s.g_nosuch[0] else "",
+             f"{s.g_conflict[0]:,} print another region, type or OS than the product their rate code, SKU or usage type "
+             "matched"
+             if s.g_conflict[0] else ""]
+    detail = (f"{share:.0%} of the {what} does not fit the catalog ({'; '.join(p for p in parts if p)}): {top}"
+              + _examples(s, "catalog_grounding"))
+    if share <= 0.10:
+        return Check("catalog_grounding", "warn", detail, 0.0)
+    return Check("catalog_grounding", "fail", detail + " (an instance type, region or usage type may be read from "
+                 "a wrong column)", -0.15)
+
+
+def _printed_list(s: RowStats) -> Check:
+    """printed_list_price: the file's own list unit prices agree with the catalog's (exact matches, first tiers)."""
+    n, w, agree = s.pl
+    if not n:
+        return Check("printed_list_price", "skip", "The file prints no list unit price on an exactly matched line")
+    share = agree / w if w else 0.0
+    if share >= 0.95:
+        return Check("printed_list_price", "pass", f"{share:.0%} of {n:,} printed list prices agree with the catalog "
+                     "within 1%", 0.10)
+    if (f := _mixup(s.pl_mix, w - agree, 0.5)) is not None:
+        return Check("printed_list_price", "fail", f"printed list prices disagree with the catalog by {_times(f)}: "
+                     f"unit or column mix-up ({1 - share:.0%} of {n:,} lines)" + _examples(s, "printed_list_price"),
+                     -0.20)
+    return Check("printed_list_price", "warn", f"{1 - share:.0%} of {n:,} printed list prices differ from the "
+                 "catalog by more than 1%" + _examples(s, "printed_list_price"), -0.05)
+
+
+def _implied(s: RowStats) -> Check:
+    """implied_unit_price: what on-demand lines paid per unit is 0.5 to 1.05 times the list price; a cluster near
+    a mix-up ratio (×1000, ×3600, ×24, ×730) is a wrong unit or column."""
+    n, w, ok, far = s.ip
+    if not n or not w:
+        return Check("implied_unit_price", "skip", "No priced on-demand line with a cost and a quantity")
+    share = ok / w
+    if share >= 0.90:
+        return Check("implied_unit_price", "pass", f"{share:.0%} of the on-demand cost ({n:,} lines) is paid at 0.5 "
+                     "to 1.05 times the catalog's list price", 0.10)
+    if (f := _mixup(s.ip_mix, w, 0.05)) is not None:
+        return Check("implied_unit_price", "fail", f"unit or column mix-up: ratio ≈ {_times(f)} on "
+                     f"{s.ip_mix[f] / w:.0%} of the on-demand cost" + _examples(s, "implied_unit_price"), -0.20)
+    if far > 0.05 * w:
+        return Check("implied_unit_price", "fail", f"column mix-up: {far / w:.0%} of the on-demand cost is paid more "
+                     f"than {FAR:g} times above or below the list price (quantity, unit price or cost read from the "
+                     "wrong column)" + _examples(s, "implied_unit_price"), -0.20)
+    return Check("implied_unit_price", "warn", f"{1 - share:.0%} of the on-demand cost is paid outside 0.5 to 1.05 "
+                 "times the list price (a large negotiated discount explains it; see pricing.inferred_discount)"
+                 + _examples(s, "implied_unit_price"), 0.0)
+
+
+def _units(s: RowStats) -> Check:
+    cost, bad = s.pu
+    if not cost:
+        return Check("price_units", "skip", "No priced cost")
+    share = bad / cost
+    if share > 0.05:
+        return Check("price_units", "warn", f"{share:.0%} of the AWS usage cost has a unit the list price's cannot "
+                     "be converted to: the unit column may be wrong" + _examples(s, "price_units"), -0.05)
+    return Check("price_units", "pass", f"{1 - share:.0%} of the AWS usage cost has a unit the list price's converts "
+                 "to", 0.0)
+
+
+def _hours(s: RowStats) -> Check:
+    n, over = s.uh
+    if not n:
+        return Check("usage_hours", "skip", "No hourly line with a resource and its start and end")
+    if over:
+        return Check("usage_hours", "fail", f"{over:,} of {n:,} hourly lines use one resource for more hours than "
+                     "their window has" + _examples(s, "usage_hours"), -0.10)
+    return Check("usage_hours", "pass", f"{n:,} hourly lines fit their window", 0.0)
+
+
+def _order(s: RowStats) -> Check:
+    n, bad = s.co
+    if not n:
+        return Check("cost_order", "skip", "No usage line prints two of list, contracted and effective cost")
+    if bad > 0.02 * n:
+        return Check("cost_order", "warn", f"{bad:,} of {n:,} lines are not list >= contracted >= effective: cost "
+                     "columns may be swapped" + _examples(s, "cost_order"), -0.05)
+    return Check("cost_order", "pass", f"{n - bad:,} of {n:,} lines have list >= contracted >= effective", 0.0)
+
+
+def _grounded(rows: pd.DataFrame | None, text: str | None) -> Check:
+    """grounding_values: rows an LLM wrote itself name only instance types and regions the document prints."""
+    if rows is None or text is None:
+        return Check("grounding_values", "skip", "Not rows an LLM wrote itself")
+    low = text.lower()
+    missing = []
+    for col in ("instance_type", "region"):
+        if col not in rows:
+            continue
+        shown = rows["region_name"].where(rows["region_name"].notna(), rows[col]) \
+            if col == "region" and "region_name" in rows else rows[col]
+        for v in shown.dropna().astype(str).unique():
+            if v.strip() and v.strip().lower() not in low:
+                missing.append(f"{col} {v}")
+    if missing:
+        return Check("grounding_values", "fail", f"{len(missing)} value(s) are not printed in the document: "
+                     + ", ".join(missing[:8]), -0.15)
+    return Check("grounding_values", "pass", "Every instance type and region is printed in the document", 0.0)
+
+
 CRITICAL = ("rows", "stated_total", "row_coverage", "labels", "subtotals", "amounts_explained")
-INTERNAL = ("subtotals", "line_math", "row_coverage", "dual_extraction", "amounts_explained", "views_agree")
+INTERNAL = ("subtotals", "line_math", "row_coverage", "dual_extraction", "amounts_explained", "views_agree",
+            "catalog_grounding", "printed_list_price", "implied_unit_price", "usage_hours")
 
 
 def completeness(checks: list[Check], reconciled: bool) -> str:

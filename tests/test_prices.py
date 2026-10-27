@@ -76,7 +76,7 @@ def _one(found: pd.DataFrame, key_id: int = 0) -> dict:
 def test_load_counts_and_snapshot(engine):
     res = load_snapshot(engine, FIXTURE)
     assert res.status == "current" and res.snapshot_id == "2026-10-27"
-    assert res.products == 14 and res.rates == 145 and res.sp_rates == 12
+    assert res.products == 18 and res.rates == 178 and res.sp_rates == 12
     assert PriceCatalog(engine).version == "2026-10-27"
 
 

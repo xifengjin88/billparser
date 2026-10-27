@@ -51,16 +51,19 @@ _SERVICE = "(k.service_code IS NULL OR p.service_code = k.service_code)"
 # the key's attributes exactly win
 _SCORE = "(" + " + ".join(f"CASE WHEN p.{c} = k.{c} THEN 1 ELSE 0 END" for c in OPTIONAL) + ")"
 _NOT_UNUSED = "(p.usage_type IS NULL OR p.usage_type NOT LIKE '%Unused%')"     # RDS has no capacity status
-_ATTRS = ", ".join(f"p.{c} AS p_{c}" for c in OPTIONAL)            # what tells the candidates apart
-_NO_ATTRS = ", ".join(f"NULL AS p_{c}" for c in OPTIONAL)
+# the matched product's attributes: what tells the candidates apart, and what a line's printed values must agree with
+PRODUCT_COLUMNS = [*OPTIONAL, "region", "instance_type"]
+_ATTRS = ", ".join(f"p.{c} AS p_{c}" for c in PRODUCT_COLUMNS)
 _OUT = ("k.key_id, {prio} AS priority, '{how}' AS matched_by, {pref} AS preferred, {score} AS score, r.id AS rate_id, r.sku, r.rate_code, r.term_type, "
         "r.unit, r.unit_price, r.currency, r.effective_from, r.effective_from > k.as_of AS before_history, "
         "r.begin_range, r.end_range, {attrs}")
 QUERY = " UNION ALL ".join([
-    f"SELECT {_OUT.format(prio=1, how='rate_code', pref='true', score=0, attrs=_NO_ATTRS)} FROM price_keys k JOIN price_rate r "
-    f"ON r.rate_code = k.rate_code AND {_DATE} WHERE k.rate_code IS NOT NULL",
-    f"SELECT {_OUT.format(prio=2, how='sku', pref='true', score=0, attrs=_NO_ATTRS)} FROM price_keys k JOIN price_rate r "
-    f"ON r.provider = k.provider AND r.sku = k.sku AND {_TERM} AND {_TIER0} AND {_DATE} WHERE k.sku IS NOT NULL",
+    f"SELECT {_OUT.format(prio=1, how='rate_code', pref='true', score=0, attrs=_ATTRS)} FROM price_keys k JOIN price_rate r "
+    f"ON r.rate_code = k.rate_code AND {_DATE} "
+    f"LEFT JOIN price_product p ON p.provider = r.provider AND p.sku = r.sku WHERE k.rate_code IS NOT NULL",
+    f"SELECT {_OUT.format(prio=2, how='sku', pref='true', score=0, attrs=_ATTRS)} FROM price_keys k JOIN price_rate r "
+    f"ON r.provider = k.provider AND r.sku = k.sku AND {_TERM} AND {_TIER0} AND {_DATE} "
+    f"LEFT JOIN price_product p ON p.provider = r.provider AND p.sku = r.sku WHERE k.sku IS NOT NULL",
     *(f"SELECT {_OUT.format(prio=3, how='usage', pref=_USED, score=_SCORE, attrs=_ATTRS)} FROM price_keys k "
       f"JOIN price_product p ON p.provider = k.provider AND p.usage_type = k.{col} "
       f"AND (k.operation IS NULL OR p.operation = k.operation) "
@@ -75,6 +78,18 @@ QUERY = " UNION ALL ".join([
     + "".join(f"AND (k.{c} IS NULL OR p.{c} IS NULL OR p.{c} = k.{c}) " for c in OPTIONAL)
     + f"JOIN price_rate r ON r.provider = p.provider AND r.sku = p.sku AND {_TERM} AND {_TIER0} AND {_DATE} "
     f"WHERE k.instance_type IS NOT NULL AND k.region IS NOT NULL",
+])
+# exists(): does any product have this SKU, usage type, or instance type in this region (any OS, any tenancy)
+EXIST_KEYS = ["key_id", "provider", "sku", "service_code", "usage_type", "usage_alt", "instance_type", "region", "as_of"]
+EXIST_QUERY = " UNION ".join([
+    "SELECT k.key_id FROM exist_keys k JOIN price_product p ON p.provider = k.provider AND p.sku = k.sku "
+    "WHERE k.sku IS NOT NULL",
+    *(f"SELECT k.key_id FROM exist_keys k JOIN price_product p ON p.provider = k.provider AND p.usage_type = k.{col} "
+      f"WHERE k.{col} IS NOT NULL" for col in ("usage_type", "usage_alt")),
+    "SELECT k.key_id FROM exist_keys k JOIN price_product p ON p.provider = k.provider "
+    "AND p.instance_type = k.instance_type AND p.region = k.region "
+    "AND (k.service_code IS NULL OR p.service_code = k.service_code) "
+    "WHERE k.instance_type IS NOT NULL AND k.region IS NOT NULL",
 ])
 SP_KEYS = ["key_id", "as_of", "discounted_sku", "plan_type", "lease_length", "purchase_option"]
 SP_QUERY = ("SELECT k.key_id, r.id AS sp_rate_id, p.sku AS plan_sku, p.plan_type, p.lease_length, p.purchase_option, "
@@ -130,6 +145,7 @@ def _typed(found: pd.DataFrame) -> pd.DataFrame:
 class PriceCatalog:
     def __init__(self, engine: Engine):
         self.engine = engine
+        self._services: tuple[str | None, set[str]] | None = None     # (version, service codes)
 
     @classmethod
     def load(cls, url: str | None = None) -> PriceCatalog:
@@ -167,7 +183,8 @@ class PriceCatalog:
         Returns one row per key that found a price: key_id, matched_by, candidates, unit_price (None when
         candidates > 1), unit, currency, sku, rate_code, rate_id, effective_from, before_history (the date is before
         the oldest price the catalog knows: the price is that oldest one), tiered (the price has more tiers),
-        differs (candidates > 1: the attributes that tell the candidates apart, "operating_system, license_model").
+        differs (candidates > 1: the attributes that tell the candidates apart, "operating_system, license_model"),
+        product_region, product_instance_type, product_operating_system (the matched product's, one candidate).
         Keys that found nothing are absent."""
         frame = _keys_frame(keys, KEY_COLUMNS)
         found = _key_ids(self._run("price_keys", KEY_COLUMNS, frame, QUERY), keys)
@@ -185,8 +202,37 @@ class PriceCatalog:
         out = best.drop_duplicates("key_id").copy()
         out.loc[out["candidates"] > 1, ["unit_price", "rate_code", "rate_id", "sku"]] = None
         out.loc[out["candidates"] <= 1, "differs"] = None
+        # the matched product's region, instance type and OS: a line's printed values must agree (one candidate)
+        out = out.rename(columns={f"p_{c}": f"product_{c}" for c in ("region", "instance_type", "operating_system")})
+        out.loc[out["candidates"] > 1, ["product_region", "product_instance_type", "product_operating_system"]] = None
         return _typed(out.drop(columns=["priority", "preferred", "score", "begin_range", "end_range",
-                                        *(f"p_{c}" for c in OPTIONAL)]).reset_index(drop=True))
+                                        *(f"p_{c}" for c in PRODUCT_COLUMNS
+                                          if c not in ("region", "instance_type", "operating_system"))])
+                      .reset_index(drop=True))
+
+    def services(self, provider: str = "aws") -> set[str]:
+        """The service codes the catalog has products for (cached per snapshot version): a line of another service is
+        a catalog gap, not a parse error."""
+        version = self.version
+        if self._services is None or self._services[0] != version:
+            with self.engine.connect() as conn:
+                got = conn.execute(sa.text("SELECT DISTINCT service_code FROM price_product WHERE provider = :p"),
+                                   {"p": provider}).scalars().all()
+            self._services = (version, {str(s) for s in got if s})
+        return set(self._services[1])
+
+    def exists(self, keys: pd.DataFrame) -> set:
+        """The key_ids of keys that some product has: its SKU, its usage type, or its instance type in its region (any
+        OS, tenancy or price). One query for many keys; a key that none has was read from a wrong column, or names a
+        product that does not exist."""
+        if keys.empty:
+            return set()
+        frame = _keys_frame(keys.assign(as_of=keys.get("as_of", "2000-01-01")), EXIST_KEYS)
+        found = self._run("exist_keys", EXIST_KEYS, frame, EXIST_QUERY)
+        if found.empty:
+            return set()
+        ids = dict(zip(keys["key_id"].astype(str), keys["key_id"], strict=True))
+        return {ids[str(k)] for k in found["key_id"]}
 
     def lookup_savings_plans(self, keys: pd.DataFrame) -> pd.DataFrame:
         """keys: key_id, as_of, discounted_sku, and any of plan_type, lease_length, purchase_option. Returns every

@@ -434,7 +434,7 @@ def stored_doc(store, sha: str) -> Document | None:
 # columns the steps add to a spec's canonical fields (spec._keep_unmapped, attributes, coverage, resolve_services)
 STEP_COLUMNS = ["service", "service_name", "service_code", "category", "resolved_by", "region_name", "price_per",
                 "commitment_status", "meter_name", HOW + "coverage", "_extra", "_src", "_group", *PRICE_COLUMNS]
-PRICE_NUMBERS = {"implied_unit_price", "price_ratio", *PRICE_FLAGS}     # Parquet numbers (a flag: 1.0 or 0.0)
+PRICE_NUMBERS = {"implied_unit_price", "price_ratio", "catalog_unit_price", *PRICE_FLAGS}     # Parquet numbers (a flag: 1.0 or 0.0)
 ROLL_KEYS = [*contract.ROLLUP_KEYS, "service", "category", "_month"]
 HOW_RANK = contract.HOW_RANK                  # a rolled-up line keeps its lines' least certain way
 
@@ -475,14 +475,16 @@ class Scan:
 
 def scan(spec: dict, info: FileInfo, sample: Document, catalog_dir: Path | None = None, out: Path | None = None,
          full: bool = True, on_progress: Callable[[str], None] | None = None, unmapped: dict | None = None,
-         cost_basis: str | None = None, prices=None, price_defaults: PriceDefaults | None = None) -> Scan:
+         cost_basis: str | None = None, prices=None, price_defaults: PriceDefaults | None = None,
+         cache: KeyCache | None = None, steps: bool | None = None) -> Scan:
     """Read the whole file in chunks with the spec. full: the steps of a parse (attributes, coverage, services, the
     rows to `out` as Parquet, the rolled-up lines); else only the spec, the cleaning and the statistics (the
     regression gate). unmapped: the fields guessed on the sample for columns the spec does not name, used for every
     chunk (else each chunk would guess from its own first rows). Raises TooLarge when the file grows past
     MAX_UNCOMPRESSED_GB. cost_basis: the export's basis told from the sample (Azure actual or amortized), for chunks
     whose own rows cannot tell it. prices: the price catalog (pricing.py): each chunk's usage lines are priced, the
-    keys looked up once for the file (a KeyCache)."""
+    keys looked up once for the file (cache: the parse's KeyCache, else a new one). steps: run the parse's steps
+    (attributes, coverage, services, prices) without writing rows (full=False: the regression gate); default: full."""
     spec = dict(spec, _no_extra=True, _cost_basis=cost_basis,
                 **({"_unmapped": unmapped} if unmapped is not None else {}))
     pa.set_cpu_count(max(1, int(setting("LARGE_IO_THREADS", 2))))
@@ -498,7 +500,8 @@ def scan(spec: dict, info: FileInfo, sample: Document, catalog_dir: Path | None 
     schema: pa.Schema | None = None
     pending: list[pd.DataFrame] = []
     kind = (spec.get("meta") or {}).get("kind", "cost_lines")
-    cache = KeyCache()
+    cache = cache or KeyCache()
+    steps = full if steps is None else steps
     base = rss()
     try:
         for chunk in src.frames(lambda: size["rows"], columns):
@@ -509,7 +512,7 @@ def scan(spec: dict, info: FileInfo, sample: Document, catalog_dir: Path | None 
             del chunk, region
             clean_rows(ext, chunk=True)
             rows = ext.rows
-            if full:
+            if steps:
                 normalize_regions(rows)
                 extract_attributes(rows, ext.warnings)
                 coverage.apply(rows)

@@ -142,6 +142,22 @@ printed at the on-demand rate) is its own kind, `commitment_negation`: not usage
 | dual extraction | learned or LLM spec vs an independent rule-based extraction |
 | plausibility | dates, mixed currencies, unexplained negatives |
 | service resolution | share of usage cost mapped to a known service |
+| catalog grounding | AWS usage naming products no catalog row has (`no_such_product`): a type, region or usage type read from a wrong column. Pass < 2% of the cost (+0.10), warn 2–10%, fail > 10% (−0.15) |
+| printed list price | the file's own list unit prices against the catalog's (exact matches, first tier, inside the catalog's history): ≥ 95% within 1% pass (+0.10); clustered near a mix-up ratio fail (−0.20); else warn (−0.05) |
+| implied unit price | what on-demand lines paid per unit against the list price: ≥ 90% of the cost at 0.5–1.05 pass (+0.10); > 5% near a mix-up ratio (×1000, ×3600, ×24, ×730, ×30.4 and the inverses) or more than 10× off fail (−0.20); else warn (a negotiated discount) |
+| price units | > 5% of the AWS usage cost in a unit the price's cannot be converted to: warn (−0.05) |
+| usage hours | one resource used more hours than its line's window has: fail (−0.10) |
+| cost order | list ≥ contracted ≥ effective broken on > 2% of the lines that print two of them: warn (−0.05) |
+| grounding values | rows an LLM wrote itself name an instance type or region the document does not print: fail (−0.15) |
+
+The seven price checks read the catalog's list prices (`pricing.py`) and skip when no line was priced against it (no
+catalog, Azure or GCP only): such a file gets the verdict it got before. A catalog value never checks itself: the
+checks compare printed list prices and the file's own costs. None is critical yet; `catalog_grounding`,
+`printed_list_price`, `implied_unit_price` and `usage_hours` count as internal checks (a pass can make a file
+`consistent`). The attempts of a parse are priced too (one key cache per parse), so a failure lowers a wrong route,
+goes to the LLM's repair and the agent, and a learned spec's attempt that fails one is not accepted at once (the most
+confident attempt wins; a built-in spec is). The regression gate prices too and rejects a new spec version that fails
+a price check the accepted result passed.
 
 Status: `reconciled` (total matched), `unreconciled` (no total, other checks fine; forecast
 ranges widen), `needs_review` (goes to the review queue), `auxiliary` (price sheets,

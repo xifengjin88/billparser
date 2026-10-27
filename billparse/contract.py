@@ -17,7 +17,7 @@ import pandas as pd
 
 from .docmodel import Document as FileDoc
 from .docmodel import Region
-from .pricing import flagged, recompute
+from .pricing import flagged, is_flag, recompute
 from .schema import (
     Charge,
     Cite,
@@ -73,7 +73,8 @@ ROLLUP_KEYS = ["service_code", "service_name", "service_raw", "region", "account
                "operation", "tenancy", "license_model", "pre_installed_sw", "pricing_term", "purchase_option",
                "commitment_status", "commitment_term",
                "price_match_level", "price_assumptions"]   # never resource_id: one per line. commitment_status: unused apart (analysis)
-UNIT_PRICES = ("list_unit_price", "contracted_unit_price")    # kept on a rolled line when all its lines agree
+UNIT_PRICES = ("list_unit_price", "contracted_unit_price", "catalog_unit_price")   # kept on a rolled line when all
+#                                                                                       its lines agree
 SHARED_TEXT = ("price_missing", "catalog_sku_id")             # the same: text kept when all the lines agree
 PRICE_FLAGS = ("_list_cost_inferred", "_contracted_cost_inferred", "_list_unit_price_inferred")   # any line
 
@@ -404,12 +405,12 @@ def _prices(c: Charge, r: dict, cite: Cite) -> None:
     for f in ("price_match_level", "price_missing", "price_assumptions", "catalog_sku_id"):
         if (v := _str(r.get(f))):
             setattr(c, f, cv(v, cite, "inferred", None, "price_catalog"))
-    for f in ("implied_unit_price", "price_ratio"):
+    for f in ("implied_unit_price", "price_ratio", "catalog_unit_price"):
         if (d := _dec(r.get(f))) is not None:
             setattr(c, f, cv(round(d, 6), cite, "inferred", None, "price_catalog"))
     for flag, f in (("_list_cost_inferred", "list_cost"), ("_contracted_cost_inferred", "contracted_cost"),
                     ("_list_unit_price_inferred", "list_unit_price")):
-        if getattr(c, f) is not None and flagged(pd.Series([r.get(flag)])).iloc[0]:
+        if getattr(c, f) is not None and is_flag(r.get(flag)):
             setattr(c, f, cv(getattr(c, f).value, cite, "inferred", None, "price_catalog"))
 
 

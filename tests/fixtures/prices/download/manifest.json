@@ -3,7 +3,7 @@
   "files": {
     "AmazonEC2 20261023221355": {
       "us-east-1": {
-        "rows": 130
+        "rows": 153
       }
     },
     "AWSOutposts 20260831092324": {
@@ -13,7 +13,7 @@
     },
     "AmazonRDS 20261026214716": {
       "us-east-1": {
-        "rows": 11
+        "rows": 21
       }
     },
     "AmazonS3 20261015173540": {

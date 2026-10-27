@@ -77,6 +77,7 @@ class SpecDocRow(SQLModel, table=True):
     rows: int
     total: float
     confidence: float
+    checks: dict[str, Any] | None = Field(default=None, sa_type=JSON)   # the price checks' statuses (task 07)
 
 
 class SpecFingerprintRow(SQLModel, table=True):

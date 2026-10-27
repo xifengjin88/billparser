@@ -272,6 +272,15 @@ function PricesTab({ view }: { view: DocumentView }) {
           { key: 'what', header: 'What it means', width: 'minmax(240px, 1fr)', render: ([k]) => <span className="text-muted-foreground">{LEVEL_HINT[k] ?? ''}</span> },
         ]} />
       </Section>
+      <Section title="Price checks">
+        <DataTable rows={view.price_checks ?? []} rowKey={(c) => c.name} height="auto" rowHeight={52}
+          empty="No price checks (parse the file again)." columns={[
+          { key: 'name', header: 'Check', width: '170px', render: (c) => <span className="font-mono text-xs">{c.name}</span> },
+          { key: 'status', header: 'Status', width: '80px', render: (c) => <span className={c.status === 'fail' ? 'text-red-700 dark:text-red-400' : c.status === 'warn' ? 'text-amber-700 dark:text-amber-400' : c.status === 'pass' ? 'text-emerald-700 dark:text-emerald-400' : 'text-muted-foreground'}>{c.status}</span> },
+          { key: 'weight', header: 'Weight', width: '80px', align: 'right', render: (c) => (c.weight ? c.weight.toFixed(2) : '—') },
+          { key: 'detail', header: 'Detail and example rows', width: 'minmax(320px, 1fr)', render: (c) => <span className="whitespace-normal text-xs leading-snug" title={c.detail}>{c.detail}</span> },
+        ]} />
+      </Section>
       <Section title="Most common missing key columns">
         <DataTable rows={p.missing ?? []} rowKey={(m) => m.field} height="auto" empty="Nothing missing." columns={[
           { key: 'field', header: 'Field', width: '200px', render: (m) => <span className="font-mono text-xs">{m.field}</span> },

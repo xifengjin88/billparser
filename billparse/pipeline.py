@@ -15,6 +15,7 @@ it, and a proved spec is saved and the file is read again with it. Callers see o
 
 from __future__ import annotations
 
+import contextvars
 import json
 import time
 import traceback
@@ -33,12 +34,12 @@ from .docmodel import Document, load_bytes
 from .fingerprint import fingerprint, similarity, table_headers
 from .induce import derive_spec
 from .mapper import propose, propose_all
-from .pricing import PriceDefaults, PriceStats, apply_discount, drop_prices, infer_discount, match_prices
+from .pricing import KeyCache, PriceDefaults, PriceStats, apply_discount, drop_prices, infer_discount, match_prices
 from .settings import catalog_dir, data_dir
 from .spec import Extraction, SpecError, check_spec, detect_score, run
 from .store import Store
 from .transforms import period_of
-from .validate import clean_rows, validate, validate_stats
+from .validate import PRICE_CHECKS, clean_rows, validate, validate_stats
 
 
 @dataclass
@@ -54,6 +55,17 @@ class Settings:
     examples_k: int = 3
     use_agent: bool = field(default_factory=agent_mod.enabled)  # AGENT_ENABLED=1 and ANTHROPIC_API_KEY
     price_defaults: PriceDefaults = field(default_factory=PriceDefaults)   # what pricing may assume (none)
+
+
+@dataclass
+class _PriceContext:
+    """What pricing uses during one parse: the catalog, the parse's key cache and the request's defaults."""
+    catalog: object
+    cache: KeyCache
+    defaults: PriceDefaults
+
+
+_PRICING: contextvars.ContextVar[_PriceContext | None] = contextvars.ContextVar("billparse_pricing", default=None)
 
 
 @dataclass
@@ -170,24 +182,30 @@ class Pipeline:
                                                 "feedback": ["Scanned PDF: needs OCR (not in this prototype)"]},
                                 {}, None, t0)
 
-        fp = fingerprint(doc)
-        attempts, best = self._route(doc, fp)
-        if best is None:
-            verdict = {"status": "needs_review", "confidence": 0.0, "checks": [],
-                       "feedback": ["No route produced rows"]}
-            return self._finish(doc, None, attempts, verdict, fp, None, t0)
+        # the attempts and the final pass are priced with one key cache (each key looked up once per parse)
+        token = _PRICING.set(_PriceContext(self.catalog(), KeyCache(), price_defaults or self.s.price_defaults))
+        try:
+            fp = fingerprint(doc)
+            attempts, best = self._route(doc, fp)
+            if best is None:
+                verdict = {"status": "needs_review", "confidence": 0.0, "checks": [],
+                           "feedback": ["No route produced rows"]}
+                return self._finish(doc, None, attempts, verdict, fp, None, t0)
 
-        # final pass: resolve services, re-validate with resolution share, analyze
-        rows = best.ext.rows
-        share = resolve_services(rows, self.s.catalog_dir)
-        if best.verdict.get("status") == "auxiliary":           # an inventory, a price sheet: not cost lines
-            return self._finish(doc, best, attempts, dict(best.verdict, completeness="consistent"), fp, share, t0)
-        pricing = self._price(rows, best.ext.fields, price_defaults)
-        alt = self._alt_extraction(doc, best)
-        verdict = validate(best.ext, alt=alt, resolved_share=share)
-        if best.route == "llm_extract_direct" and verdict.get("completeness") == "consistent":
-            verdict["completeness"] = "unchecked"           # rows the LLM wrote, no printed total tested them
-        return self._finish(doc, best, attempts, verdict, fp, share, t0, pricing=pricing)
+            # final pass: resolve services, re-validate with resolution share, analyze
+            rows = best.ext.rows
+            share = resolve_services(rows, self.s.catalog_dir)
+            if best.verdict.get("status") == "auxiliary":           # an inventory, a price sheet: not cost lines
+                return self._finish(doc, best, attempts, dict(best.verdict, completeness="consistent"), fp, share, t0)
+            pricing = self._price(rows, best.ext.fields, price_defaults)
+            alt = self._alt_extraction(doc, best)
+            verdict = validate(best.ext, alt=alt, resolved_share=share,
+                               text=doc_text(doc) if best.route == "llm_extract_direct" else None)
+            if best.route == "llm_extract_direct" and verdict.get("completeness") == "consistent":
+                verdict["completeness"] = "unchecked"           # rows the LLM wrote, no printed total tested them
+            return self._finish(doc, best, attempts, verdict, fp, share, t0, pricing=pricing)
+        finally:
+            _PRICING.reset(token)
 
     # ------------------------------------------------------------ prices
     def catalog(self):
@@ -201,9 +219,23 @@ class Pipeline:
     def _price(self, rows: pd.DataFrame, fields: dict, defaults: PriceDefaults | None) -> dict:
         """Price the usage lines (pricing.py) in place; returns the document's pricing summary."""
         period = contract.printed_period({k: v.get("value") for k, v in (fields or {}).items()})
-        stats = match_prices(rows, self.catalog(), defaults or self.s.price_defaults,
-                             period_start=period[0] if period else None)
+        ctx = _PRICING.get()
+        stats = match_prices(rows, ctx.catalog if ctx else self.catalog(), defaults or self.s.price_defaults,
+                             cache=ctx.cache if ctx else None, period_start=period[0] if period else None)
         return self._price_summary(stats, rows)
+
+    @staticmethod
+    def _price_attempt(ext: Extraction) -> None:
+        """An attempt's lines priced (the parse's cache), so the price checks steer which route wins and what the
+        LLM repairs. Lines without a provider yet (a mapper or LLM spec) are priced in the final pass."""
+        ctx = _PRICING.get()
+        if ctx is None or ctx.catalog is None or ext.rows.empty:
+            return
+        period = contract.printed_period({k: v.get("value") for k, v in (ext.fields or {}).items()})
+        try:
+            match_prices(ext.rows, ctx.catalog, ctx.defaults, ctx.cache, period[0] if period else None)
+        except Exception:                                       # noqa: BLE001  pricing never fails an attempt
+            pass
 
     def reprice(self, sha: str, price_defaults: PriceDefaults | None = None) -> dict:
         """Price a stored result again with the current catalog, never parsing the file again: the stored rows (a
@@ -274,7 +306,17 @@ class Pipeline:
 
     def _parse_large(self, info: bigfile.FileInfo, force: bool, on_step, move: bool, sha: str | None,
                      price_defaults: PriceDefaults | None = None) -> dict:
-        """A large file: the routes on its sample, then the accepted spec over the whole file in chunks."""
+        """A large file: the routes on its sample, then the accepted spec over the whole file in chunks. The attempts
+        and the chunks are priced with one key cache."""
+        token = _PRICING.set(_PriceContext(self.catalog(), KeyCache(), price_defaults or self.s.price_defaults))
+        try:
+            return self._read_large(info, force, on_step, move, sha)
+        finally:
+            _PRICING.reset(token)
+
+    def _read_large(self, info: bigfile.FileInfo, force: bool, on_step, move: bool, sha: str | None) -> dict:
+        ctx = _PRICING.get()
+        assert ctx is not None
         t0 = time.perf_counter()
         sha = sha or bigfile.sha256_of(info.path)
         if not force and (cached := self.store.get_result(sha)):
@@ -310,7 +352,7 @@ class Pipeline:
                                 unmapped=best.ext.unmapped if best.ext is not None else None,
                                 cost_basis=((best.ext.fields if best.ext is not None else {}).get("cost_basis")
                                             or {}).get("value"),
-                                prices=self.catalog(), price_defaults=price_defaults or self.s.price_defaults)
+                                prices=ctx.catalog, price_defaults=ctx.defaults, cache=ctx.cache)
         except bigfile.TooLarge as e:
             out_path.unlink(missing_ok=True)
             return unsupported(Document(info.name, info.fmt, sha, []), str(e))
@@ -440,7 +482,8 @@ class Pipeline:
             clean_rows(ext)
             coverage.apply(ext.rows)
             att = Attempt("llm_extract_direct", None, ext=ext, llm_calls=1)
-            att.verdict = validate(ext)
+            self._price_attempt(ext)
+            att.verdict = validate(ext, text=doc_text(doc))
             att.verdict["confidence"] = min(att.verdict["confidence"], 0.65)   # never auto-accept
             yield att
 
@@ -460,6 +503,7 @@ class Pipeline:
                 att.verdict = {"status": "auxiliary", "confidence": 1.0 if not att.ext.rows.empty else 0.0,
                                "checks": [], "feedback": [], "kind": kind}
             else:
+                self._price_attempt(att.ext)
                 att.verdict = validate(att.ext)
         except (SpecError, Exception) as e:                     # noqa: BLE001
             att.error = f"{type(e).__name__}: {e}"
@@ -476,6 +520,13 @@ class Pipeline:
         if att.verdict.get("status") == "needs_review":
             return False
         floor = self.s.builtin_accept if att.route == "builtin" else self.s.accept_confidence
+        # a failed price check (a unit or column mix-up, products that do not exist) is not accepted at once: the next
+        # routes run, and the most confident attempt wins (a wrong reading that adds up must not stop the search). Not
+        # for a built-in spec: it reads a known export, so the failure is the data's, and the next routes (an LLM)
+        # would cost money on every parse of the file
+        if att.route != "builtin" and any(c["status"] == "fail" and c["name"] in PRICE_CHECKS
+                                          for c in att.verdict.get("checks", [])):
+            return False
         return att.confidence >= floor
 
     def _alt_extraction(self, doc: Document, best: Attempt) -> Extraction | None:
@@ -535,8 +586,11 @@ class Pipeline:
                          "route": best.route, "format": (spec.get("meta") or {}).get("format")}
             if accepted and spec.get("id"):
                 total = float(rows["billed_cost"].sum()) if "billed_cost" in rows else 0.0
+                # the price checks' statuses: the regression gate rejects a version that fails one this one passed
+                checks = {c["name"]: c["status"] for c in verdict.get("checks", []) if c["name"] in PRICE_CHECKS}
                 self.store.link(spec["id"], doc.sha256, fp,
-                                {"rows": n_rows, "total": round(total, 2), "confidence": verdict["confidence"]})
+                                {"rows": n_rows, "total": round(total, 2), "confidence": verdict["confidence"],
+                                 "checks": checks})
 
         kind = verdict.get("kind") or ((best.spec or {}).get("meta") or {}).get("kind", "cost_lines") if best else None
         analysis = {}

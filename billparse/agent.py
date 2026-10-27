@@ -35,10 +35,11 @@ from . import bigfile, coverage
 from .attributes import extract as extract_attributes
 from .docmodel import Document
 from .llm import PRICES, SPEC_GUIDE, cost_of, redact  # noqa: F401  PRICES: the web API lists them
+from .pricing import KeyCache, match_prices
 from .spec import Extraction, SpecError, check_spec, run
 from .store import Store
 from .tree import money_in
-from .validate import clean_rows, validate
+from .validate import PRICE_CHECKS, clean_rows, validate
 
 MODEL = "claude-opus-5-5"
 MAX_TOOL_TEXT = 12000
@@ -120,9 +121,10 @@ TOOLS = [
 
 
 class Workspace:
-    def __init__(self, doc: Document, catalog_dir: Path | None):
+    def __init__(self, doc: Document, catalog_dir: Path | None, prices=None):
         self.doc = doc
         self.catalog_dir = catalog_dir
+        self.prices, self.cache = prices, KeyCache()     # the price catalog: the price checks, one cache per job
         self.text_rows = [(reg.name, i, row) for reg in doc.regions if not reg.is_frame for i, row in enumerate(reg.rows)]
 
     def call(self, name: str, args: dict) -> tuple[str, bool]:
@@ -186,20 +188,24 @@ class Workspace:
         return [{"key": k, **res.cat.services.get(k, {}), "how": r.method} for k in keys[:8]]
 
     def t_check_spec(self, spec: dict) -> dict:
-        return check(spec, self.doc, self.catalog_dir)[0]
+        return check(spec, self.doc, self.catalog_dir, self.prices, self.cache)[0]
 
     def t_submit_spec(self, spec: dict, note: str) -> str:
         return "received"
 
 
-def check(spec: dict, doc: Document, catalog_dir: Path | None) -> tuple[dict, Extraction | None, dict]:
-    """Run a spec on the whole file with every check: (a short report for the agent, the extraction, the verdict)."""
+def check(spec: dict, doc: Document, catalog_dir: Path | None, prices=None,
+          cache: KeyCache | None = None) -> tuple[dict, Extraction | None, dict]:
+    """Run a spec on the whole file with every check: (a short report for the agent, the extraction, the verdict).
+    prices: the price catalog, so the price checks (a unit or column mix-up, products that do not exist) run too."""
     check_spec(spec)
     ext = run(spec, doc, catalog_dir)
     clean_rows(ext)
     extract_attributes(ext.rows)
     coverage.apply(ext.rows)
     kind = (spec.get("meta") or {}).get("kind", "cost_lines")
+    if prices is not None and kind == "cost_lines":
+        match_prices(ext.rows, prices, cache=cache)
     verdict = validate(ext) if kind == "cost_lines" else {"status": "auxiliary", "confidence": 1.0, "checks": [],
                                                            "completeness": "consistent", "feedback": []}
     rows = ext.rows
@@ -227,6 +233,11 @@ def evidence_report(doc: Document, summary: dict) -> str:
     failed = [c for c in summary.get("checks", []) if c["status"] in ("fail", "warn")]
     if failed:
         parts.append("Checks that failed or warned:\n" + "\n".join(f"- {c['name']}: {c['detail']}" for c in failed))
+    priced = [c for c in summary.get("checks", []) if c["name"] in PRICE_CHECKS and c["status"] != "skip"]
+    if priced:
+        parts.append("Price checks (the catalog's list prices against the lines: a ratio near x1000, x3600, x24 or x730 "
+                     "is a unit or column mix-up; a product no catalog row has was read from a wrong column):\n"
+                     + "\n".join(f"- {c['name']} {c['status']}: {c['detail']}" for c in priced))
     ev = summary.get("evidence") or {}
     if ev.get("unexplained"):
         parts.append("Amounts nothing explains: " + json.dumps(ev["unexplained"][:10]))
@@ -284,10 +295,11 @@ class Outcome:
 
 
 def author(doc: Document, summary: dict, llm: AgentLLM, limits: Limits, catalog_dir: Path | None,
-           examples: list[dict], start_spec: dict | None = None, trace=None, should_stop=None) -> Outcome:
-    """Run the agent on one file until a spec proves it or a limit stops it. Nothing is saved here."""
+           examples: list[dict], start_spec: dict | None = None, trace=None, should_stop=None, prices=None) -> Outcome:
+    """Run the agent on one file until a spec proves it or a limit stops it. Nothing is saved here. prices: the
+    price catalog for the price checks."""
     t0 = time.time()
-    ws = Workspace(doc, catalog_dir)
+    ws = Workspace(doc, catalog_dir, prices)
     out = Outcome("unproved")
     log = trace or (lambda **e: out.trace.append(e))
     best: tuple[int, dict, dict] | None = None              # (score, spec, report)
@@ -347,7 +359,7 @@ def author(doc: Document, summary: dict, llm: AgentLLM, limits: Limits, catalog_
             continue
         # verify: only the code's own checks decide
         try:
-            report, _, verdict = check(submitted, doc, catalog_dir)
+            report, _, verdict = check(submitted, doc, catalog_dir, ws.prices, ws.cache)
         except (SpecError, ValueError, KeyError, re.error) as e:
             report, verdict = {"error": str(e)}, {"completeness": None, "status": "error", "confidence": 0.0}
         gates = [{"gate": c["name"], "ok": c["status"] != "fail"} for c in report.get("checks", [])] \
@@ -435,7 +447,7 @@ def run_job(pipeline, job_id: int, llm: AgentLLM | None = None, limits: Limits |
             limits={k: getattr(limits, k) for k in ("rounds", "tool_calls", "max_cost_usd", "max_seconds", "max_tokens")},
             examples=len(examples), start_spec=start_spec, evidence=evidence_report(doc, summary))
         out = author(doc, summary, llm, limits, pipeline.s.catalog_dir, examples, start_spec, trace=log,
-                     should_stop=should_stop)
+                     should_stop=should_stop, prices=pipeline.catalog())
     except Exception as e:  # noqa: BLE001  a job never takes the API down; the error is kept on the job
         log(event="error", error=f"{type(e).__name__}: {e}")
         store.update_agent_job(job_id, status="error", error=f"{type(e).__name__}: {e}", seconds=time.time() - t0)

@@ -36,6 +36,7 @@ from .review import CHECKLIST, apply_edits, approve, charge_rows, drop_gaps
 from .schema import DOC_TYPES, KINDS, Cite, Document, Pricing, cv
 from .settings import catalog_dir, data_dir
 from .store import Store
+from .validate import PRICE_CHECKS
 
 router = APIRouter()
 MAX_UPLOAD_MB = int(os.environ.get("MAX_UPLOAD_MB", "2048"))
@@ -194,6 +195,13 @@ class GapRow(BaseModel):
     cite: CiteOut | None = None
 
 
+class CheckRow(BaseModel):
+    name: str
+    status: str                             # pass | fail | warn | skip
+    detail: str
+    weight: float = 0.0
+
+
 class NoteRow(BaseModel):
     message: str
     where: str | None = None
@@ -266,6 +274,7 @@ class DocumentView(BaseModel):
     cost_types: list[str] = []              # billed, list, contracted, effective: the cost types the file gives
     cost_basis: str | None = None           # actual | amortized | unknown (Azure exports)
     pricing: Pricing | None = None          # how the usage lines matched the public list prices (1.8)
+    price_checks: list[CheckRow] = []       # the price checks of the last parse (1.9)
     counted_total: str
     money_at_risk: str
     charges: list[ChargeRow]
@@ -562,7 +571,7 @@ def charge_row(c, gap_refs: set) -> ChargeRow:
 
 
 def view_of(doc: Document, row: dict, meta: dict, *, showing_reviewed: bool = False,
-            runs: list[dict] | None = None) -> DocumentView:
+            runs: list[dict] | None = None, checks: list[dict] | None = None) -> DocumentView:
     gap_refs = {g.ref for g in doc.gaps if g.ref}
     return DocumentView(
         sha256=doc.sha256, name=row.get("name") or doc.source_name, fmt=row.get("fmt"), status=row.get("status") or "",
@@ -575,6 +584,8 @@ def view_of(doc: Document, row: dict, meta: dict, *, showing_reviewed: bool = Fa
         page_count=doc.page_count, completeness=doc.completeness,
         confidence=ConfidenceOut(**doc.confidence.model_dump()) if doc.confidence else None,
         cost_types=list(doc.cost_types), cost_basis=doc.cost_basis, pricing=doc.pricing,
+        price_checks=[CheckRow(**{k: c.get(k) for k in ("name", "status", "detail", "weight")})
+                      for c in checks or [] if c.get("name") in PRICE_CHECKS],
         counted_total=str(doc.counted_total()), money_at_risk=str(contract.money_at_risk(doc)),
         charges=[charge_row(c, gap_refs) for c in doc.charges],
         totals=[TotalRow(id=t.id, label=str(t.label.value), printed=str(t.amount.value),
@@ -859,7 +870,8 @@ def document_view(sha256: str, store: Store = Depends(get_store)) -> DocumentVie
     """Everything the result page shows, with every charge (the browser pages and filters them)."""
     row = _row(store, sha256)
     doc, gold = _load(store, sha256)
-    return view_of(doc, row, _meta(store, sha256), showing_reviewed=gold, runs=store.runs(sha256))
+    return view_of(doc, row, _meta(store, sha256), showing_reviewed=gold, runs=store.runs(sha256),
+                   checks=(store.get_result(sha256) or {}).get("checks"))
 
 
 @router.get("/documents/{sha256}/charges/{charge_id}", response_model=ChargeDetail, tags=["web"])
@@ -883,7 +895,8 @@ def charge_detail(sha256: str, charge_id: str, store: Store = Depends(get_store)
              "list_unit_price": c.list_unit_price, "contracted_unit_price": c.contracted_unit_price,
              "price_match_level": c.price_match_level, "price_assumptions": c.price_assumptions,
              "price_missing": c.price_missing, "catalog_sku_id": c.catalog_sku_id,
-             "implied_unit_price": c.implied_unit_price, "price_ratio": c.price_ratio}
+             "implied_unit_price": c.implied_unit_price, "price_ratio": c.price_ratio,
+             "catalog_unit_price": c.catalog_unit_price}
     fields = [FieldOut(field=k, value=str(v.value), origin=v.origin, source=v.source, confidence=v.confidence,
                        cite=_cite(v.cite)) for k, v in named.items() if v is not None]
     return ChargeDetail(id=c.id, description=str(c.description.value), cite=_cite(c.cite), fields=fields,
