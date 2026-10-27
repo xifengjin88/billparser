@@ -227,6 +227,78 @@
        ],
        "title": "Fallback"
       }
+     },
+     {
+      "name": "assume_os",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "description": "price lines that name no operating system as this one (Linux)",
+       "title": "Assume Os"
+      },
+      "description": "price lines that name no operating system as this one (Linux)"
+     },
+     {
+      "name": "assume_tenancy",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "description": "price lines that name no tenancy as this one (Shared)",
+       "title": "Assume Tenancy"
+      },
+      "description": "price lines that name no tenancy as this one (Shared)"
+     },
+     {
+      "name": "assume_software",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "description": "price lines that name no pre-installed software as this (NA)",
+       "title": "Assume Software"
+      },
+      "description": "price lines that name no pre-installed software as this (NA)"
+     },
+     {
+      "name": "assume_license",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "description": "price lines that name no license model as this one",
+       "title": "Assume License"
+      },
+      "description": "price lines that name no license model as this one"
      }
     ],
     "requestBody": {
@@ -349,6 +421,66 @@
       }
      }
     ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ParseTask"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/documents/{sha256}/reprice": {
+   "post": {
+    "tags": [
+     "web"
+    ],
+    "summary": "Reprice",
+    "description": "Price the stored result again with the current price catalog, in the background: the stored rows are priced\nagain, never the file parsed again (free, no model request). body: new defaults (else the earlier ones).",
+    "operationId": "reprice_documents__sha256__reprice_post",
+    "parameters": [
+     {
+      "name": "sha256",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "title": "Sha256"
+      }
+     }
+    ],
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "anyOf": [
+         {
+          "$ref": "#/components/schemas/PriceDefaultsIn"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "title": "Body"
+       }
+      }
+     }
+    },
     "responses": {
      "200": {
       "description": "Successful Response",
@@ -1438,6 +1570,78 @@
        "title": "Force"
       },
       "description": "parse again a file seen before; a learning or improving job of the file that ended without a spec runs again"
+     },
+     {
+      "name": "assume_os",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "description": "price lines that name no operating system as this one (Linux)",
+       "title": "Assume Os"
+      },
+      "description": "price lines that name no operating system as this one (Linux)"
+     },
+     {
+      "name": "assume_tenancy",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "description": "price lines that name no tenancy as this one (Shared)",
+       "title": "Assume Tenancy"
+      },
+      "description": "price lines that name no tenancy as this one (Shared)"
+     },
+     {
+      "name": "assume_software",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "description": "price lines that name no pre-installed software as this (NA)",
+       "title": "Assume Software"
+      },
+      "description": "price lines that name no pre-installed software as this (NA)"
+     },
+     {
+      "name": "assume_license",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "description": "price lines that name no license model as this one",
+       "title": "Assume License"
+      },
+      "description": "price lines that name no license model as this one"
      }
     ],
     "requestBody": {
@@ -2533,6 +2737,17 @@
       ],
       "title": "Contracted Unit Price"
      },
+     "price_match_level": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Price Match Level"
+     },
      "section": {
       "anyOf": [
        {
@@ -3152,6 +3367,16 @@
       ],
       "title": "Cost Basis"
      },
+     "pricing": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/Pricing"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
      "counted_total": {
       "type": "string",
       "title": "Counted Total"
@@ -3580,6 +3805,29 @@
     },
     "type": "object",
     "title": "HeaderEdit"
+   },
+   "InferredDiscount": {
+    "properties": {
+     "value": {
+      "type": "number",
+      "title": "Value"
+     },
+     "estimate": {
+      "type": "boolean",
+      "title": "Estimate",
+      "default": true
+     },
+     "note": {
+      "type": "string",
+      "title": "Note",
+      "default": ""
+     }
+    },
+    "type": "object",
+    "required": [
+     "value"
+    ],
+    "title": "InferredDiscount"
    },
    "InviteIn": {
     "properties": {
@@ -4038,6 +4286,168 @@
      "started"
     ],
     "title": "ParseTask"
+   },
+   "PriceDefaultsIn": {
+    "properties": {
+     "operating_system": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Operating System"
+     },
+     "tenancy": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Tenancy"
+     },
+     "pre_installed_sw": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Pre Installed Sw"
+     },
+     "license_model": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "License Model"
+     }
+    },
+    "type": "object",
+    "title": "PriceDefaultsIn",
+    "description": "What pricing may assume for lines that do not say it (each recorded in price_assumptions); empty: nothing."
+   },
+   "Pricing": {
+    "properties": {
+     "catalog_version": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Catalog Version"
+     },
+     "defaults": {
+      "additionalProperties": {
+       "type": "string"
+      },
+      "type": "object",
+      "title": "Defaults"
+     },
+     "match_rate": {
+      "additionalProperties": {
+       "anyOf": [
+        {
+         "type": "number"
+        },
+        {
+         "type": "null"
+        }
+       ]
+      },
+      "type": "object",
+      "title": "Match Rate"
+     },
+     "levels": {
+      "additionalProperties": {
+       "$ref": "#/components/schemas/PricingLevel"
+      },
+      "type": "object",
+      "title": "Levels"
+     },
+     "missing": {
+      "items": {
+       "$ref": "#/components/schemas/PricingMissing"
+      },
+      "type": "array",
+      "title": "Missing"
+     },
+     "inferred_discount": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/InferredDiscount"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "warnings": {
+      "items": {
+       "type": "string"
+      },
+      "type": "array",
+      "title": "Warnings"
+     }
+    },
+    "type": "object",
+    "title": "Pricing",
+    "description": "How the usage lines matched the public list prices (pricing.py)."
+   },
+   "PricingLevel": {
+    "properties": {
+     "lines": {
+      "type": "integer",
+      "title": "Lines"
+     },
+     "cost": {
+      "type": "number",
+      "title": "Cost"
+     }
+    },
+    "type": "object",
+    "required": [
+     "lines",
+     "cost"
+    ],
+    "title": "PricingLevel"
+   },
+   "PricingMissing": {
+    "properties": {
+     "field": {
+      "type": "string",
+      "title": "Field"
+     },
+     "lines": {
+      "type": "integer",
+      "title": "Lines"
+     },
+     "cost": {
+      "type": "number",
+      "title": "Cost"
+     }
+    },
+    "type": "object",
+    "required": [
+     "field",
+     "lines",
+     "cost"
+    ],
+    "title": "PricingMissing"
    },
    "Resolution": {
     "properties": {

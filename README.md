@@ -172,8 +172,8 @@ unused part of AWS RI and Savings Plan fees), `null` with a note when the file d
 without the unused-commitment columns), never 0; and the on-demand part by month. It uses the effective cost when
 every eligible line has one, else the billed cost, and says which. Each commitment shows its term, payment option
 and unused amount. billparse estimates no
-savings and assumes no discount: that belongs to its consumers. `commitment_opportunity` is deprecated (schema
-1.6) and removed in 1.8.
+savings and assumes no discount: that belongs to its consumers. `commitment_opportunity` was deprecated in schema
+1.6 and is removed in 1.8.
 
 ## Learning loop
 
@@ -240,8 +240,53 @@ Measured on a laptop (Docker PostgreSQL 17), all AWS price lists of 2026-10-27:
 Peak memory of a load: 1.9 GB (the EC2 files, read in 32 MB batches; 3.2 GB when each file was read whole). The
 largest file is EC2 us-east-1: 18 MB gzip, about 400k rows of 90 columns.
 
-Database size: 9.8 GB. Lookup of 10,000 distinct keys: by rate code 0.5–0.8 s, by SKU 0.3–0.4 s, by usage type
-1.9 s, by attributes 2.6 s (11 s when the OS is not given: then every key is ambiguous), Savings Plans 0.2–1.3 s.
+Database size: 9.8 GB. Lookup of 10,000 distinct keys: by rate code 0.5–0.8 s, by SKU 0.3–0.4 s, by usage type and
+operation 1.3–5.3 s (15 s without the operation: an EC2 usage type then fits every OS, and most keys are ambiguous), by
+attributes 2.6 s (11 s when the OS is not given: then every key is ambiguous), Savings Plans 0.2–1.3 s. A usage type
+with the `USE1-` prefix also matches the price list's us-east-1 form without it.
+
+## Price matching
+
+After a parse, `billparse/pricing.py` looks every AWS usage line up in the price catalog at the public on-demand
+list price, as of the line's date (else the printed billing period, else today, with a warning). It runs on the
+normal path after the service resolution, and on the large path per chunk, with one key cache for the file. The
+catalog is called once per file with the distinct keys, never per line: 500,000 lines with 2,000 keys take about
+2–3 s. Covered usage gets its list price too (the consumer's on-demand baseline); `coverage` and `effective_cost` are
+never changed, and no savings are estimated.
+
+Each line gets `price_match_level`:
+
+| Level | When |
+|---|---|
+| `exact` | rate code (`pricing/RateCode`), SKU, or usage type + operation: one price |
+| `attributes` | instance type, region, OS, tenancy, license, software, engine, deployment: one price |
+| `assumed` | as `attributes`, with an assumption in `price_assumptions` |
+| `ambiguous` | several prices fit; `price_missing` names the empty columns that tell them apart |
+| `unmatched` | no price; `price_missing` names what is missing (`instance_type`, `region`, or `catalog_row`) |
+| `unit_mismatch` | the line's unit cannot be converted to the price's unit |
+| `no_catalog` | an Azure or GCP line: the catalog has no prices for them yet |
+
+- **No silent assumptions.** An EC2 invoice line (no operation, no SKU) that names an OS and no SQL Server is looked
+  up with `pre_installed_sw=NA (text)`; one that does not say Dedicated or Host with `tenancy=Shared (text)`. The
+  request can add defaults (`assume_os`, `assume_tenancy`, `assume_software`, `assume_license` on `POST /parse` and
+  `/parse/start`): `operating_system=Linux (request)`. Each is in `price_assumptions`; the line's own columns stay
+  as parsed. A first-tier price (`tiered`) and a date before the catalog's oldest price (`before_history`) are noted
+  there too.
+- **R1.** `list_unit_price` and `list_cost` are filled only where the file printed none (inferred, source
+  `price_catalog`); `Document.cost_types` still lists only what the file gives.
+- **R2.** When at least 20 on-demand lines matched `exact` or `attributes`, across at least 3 services, have the same
+  ratio r of paid to list price (within 1%, 0.5 ≤ r < 0.99), `contracted_cost = list_cost × r` is filled where empty
+  and `pricing.inferred_discount` is 1 − r, labeled an estimate.
+- **R3.** Usage with unknown coverage far below list price (ratio < 0.5, or cost 0) gives one warning.
+- `implied_unit_price` (effective, else billed cost / quantity) and `price_ratio` (/ list unit price) are on each
+  priced line, recomputed from the sums on rolled-up lines.
+
+`Document.pricing` has the catalog version, the match rate (share of priced AWS usage cost at `exact` and
+`attributes`, and at `assumed`; also by lines), the lines and cost per level, the most common missing columns, the
+inferred discount and warnings. No catalog, an empty one or a database error: the parse goes on, unpriced, with a
+warning. `POST /documents/{sha256}/reprice` (the web app's "Price again") prices a stored result again with the
+current catalog, never parsing the file again (a large file: its stored rows, in batches); its optional body gives new
+defaults, else the earlier ones stay.
 
 ## Storage
 

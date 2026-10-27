@@ -167,19 +167,19 @@ INVOICE = [   # what an invoice or a Cost Explorer file prints: words, no SKU, n
 ]
 
 
-def test_parsed_invoice_lines_get_a_price(catalog):
+def test_the_parser_fills_only_what_the_line_proves():
+    """Software, license and tenancy from the operation code and the words; nothing assumed (pricing.py assumes NA
+    software and Shared tenancy for its lookup, and says so in price_assumptions)."""
     rows = pd.DataFrame({"description": [d for d, _, _ in INVOICE], "operation": [o for _, o, _ in INVOICE],
                          "charge_type": "Usage"})
     extract(rows)
-    assert rows["pre_installed_sw"].tolist() == ["NA", "SQL Std", "NA", "NA", "SQL Web", "NA"]
-    assert rows["tenancy"].tolist() == ["Shared"] * 6
-    assert rows["_how:pre_installed_sw"].tolist() == ["rule", "text", "rule", "rule", "rule", "rule"]
-    keys = rows.reindex(columns=["instance_type", "operating_system", "pre_installed_sw", "license_model", "tenancy",
-                                 "database_engine"]).assign(key_id=range(len(rows)), as_of="2026-10-27", service_code="AmazonEC2",
-                                            region="us-east-1")
-    found = catalog.lookup(keys)
-    assert [_one(found, i)["sku"] for i in range(len(INVOICE))] == [sku for _, _, sku in INVOICE]
-    assert (found["candidates"] == 1).all()
+
+    def values(col: str) -> list:
+        return [None if pd.isna(v) else v for v in rows.reindex(columns=[col])[col]]
+    assert values("pre_installed_sw") == [None, "SQL Std", None, None, "SQL Web", "NA"]
+    assert values("license_model") == [None, None, None, "Bring your own license", "No License required",
+                                       "License Included - Infrastructure"]
+    assert values("tenancy") == [None] * 6
 
 
 def test_a_printed_value_is_never_replaced(catalog):

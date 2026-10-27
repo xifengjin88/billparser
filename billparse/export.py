@@ -102,6 +102,11 @@ class Charge(_Strict):
     contracted_unit_price: Optional[CitedValue[Decimal]] = None  # FOCUS ContractedUnitPrice
     commitment_term: Optional[CitedValue[str]] = None
     pre_installed_sw: Optional[CitedValue[str]] = None
+    price_match_level: Optional[CitedValue[str]] = None
+    price_missing: Optional[CitedValue[str]] = None
+    price_assumptions: Optional[CitedValue[str]] = None
+    implied_unit_price: Optional[CitedValue[Decimal]] = None
+    price_ratio: Optional[CitedValue[Decimal]] = None
     attributes: dict[str, Any] = Field(default_factory=dict)
 
 
@@ -141,6 +146,33 @@ class Confidence(_Strict):
     reasons: list[str] = Field(default_factory=list)
 
 
+class PricingLevel(_Strict):
+    lines: int
+    cost: float
+
+
+class PricingMissing(_Strict):
+    field: str
+    lines: int
+    cost: float
+
+
+class InferredDiscount(_Strict):
+    value: float
+    estimate: bool = True
+    note: str = ""
+
+
+class Pricing(_Strict):
+    catalog_version: Optional[str] = None
+    defaults: dict[str, str] = Field(default_factory=dict)
+    match_rate: dict[str, Optional[float]] = Field(default_factory=dict)
+    levels: dict[str, PricingLevel] = Field(default_factory=dict)
+    missing: list[PricingMissing] = Field(default_factory=list)
+    inferred_discount: Optional[InferredDiscount] = None
+    warnings: list[str] = Field(default_factory=list)
+
+
 class Document(_Strict):
     schema_version: str
     source_name: str
@@ -162,6 +194,7 @@ class Document(_Strict):
     confidence: Optional[Confidence] = None
     cost_types: list[Literal["billed", "list", "contracted", "effective"]] = Field(default_factory=list)
     cost_basis: Optional[Literal["actual", "amortized", "unknown"]] = None
+    pricing: Optional[Pricing] = None
 
 
 # ---------------------------------------------------------------- projection
@@ -206,7 +239,8 @@ def to_schema(doc: internal.Document) -> Document:
                 "operation", "quantity", "unit", "unit_price", "sku_id", "catalog_sku_id", "sku_price_id", "meter_id",
                 "list_cost", "contracted_cost", "effective_cost", "coverage", "line_type_raw", "tenancy", "license_model",
                 "resource_id", "pricing_term", "purchase_option", "list_unit_price", "contracted_unit_price",
-                "commitment_term", "pre_installed_sw")},
+                "commitment_term", "pre_installed_sw", "price_match_level", "price_missing", "price_assumptions",
+                "implied_unit_price", "price_ratio")},
             attributes=_jsonable(c.attributes),
         ))
     out = dict(
@@ -229,6 +263,7 @@ def to_schema(doc: internal.Document) -> Document:
               for g in doc.gaps],
         confidence=doc.confidence.model_dump() if doc.confidence else None,
         cost_types=doc.cost_types, cost_basis=doc.cost_basis,
+        pricing=doc.pricing.model_dump() if doc.pricing else None,
     )
     return Document.model_validate(out)
 

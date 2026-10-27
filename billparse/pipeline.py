@@ -33,6 +33,7 @@ from .docmodel import Document, load_bytes
 from .fingerprint import fingerprint, similarity, table_headers
 from .induce import derive_spec
 from .mapper import propose, propose_all
+from .pricing import PriceDefaults, PriceStats, apply_discount, drop_prices, infer_discount, match_prices
 from .settings import catalog_dir, data_dir
 from .spec import Extraction, SpecError, check_spec, detect_score, run
 from .store import Store
@@ -52,6 +53,7 @@ class Settings:
     retain_docs: bool = True
     examples_k: int = 3
     use_agent: bool = field(default_factory=agent_mod.enabled)  # AGENT_ENABLED=1 and ANTHROPIC_API_KEY
+    price_defaults: PriceDefaults = field(default_factory=PriceDefaults)   # what pricing may assume (none)
 
 
 @dataclass
@@ -89,19 +91,20 @@ class Pipeline:
 
     def parse_path(self, path: str | Path, name: str | None = None, force: bool = False, on_step=None,
                    agent: bool = True, user: str | None = None, run: bool = True, move: bool = False,
-                   sha: str | None = None, info: bigfile.FileInfo | None = None) -> dict:
+                   sha: str | None = None, info: bigfile.FileInfo | None = None,
+                   price_defaults: PriceDefaults | None = None) -> dict:
         """Parse a file on disk. A small file is read into memory (parse_bytes); a large one (more than LARGE_FILE_MB
         uncompressed) is read in chunks (bigfile.py), and its agent job, when it needs one, is queued, never run here.
         move: the file is a temporary upload, moved into the store when kept. info: the file's classify() result, when
-        the caller has it."""
+        the caller has it. price_defaults: what pricing may assume for this request (else Settings.price_defaults)."""
         p = Path(path)
         name = name or p.name
         info = info or bigfile.classify(p, name)
         if not info.large:
             return self.parse_bytes(p.read_bytes(), name, force=force, on_step=on_step, agent=agent, user=user,
-                                    run=run)
+                                    run=run, price_defaults=price_defaults)
         t0 = time.perf_counter()
-        result = self._parse_large(info, force, on_step, move, sha)
+        result = self._parse_large(info, force, on_step, move, sha, price_defaults)
         if agent and self.s.use_agent and not result.get("cached") and agent_mod.needs_agent(result):
             agent_mod.enqueue_for(self, result)          # run later on the sample (cli: jobs drain), never inline
         if run and not result.get("cached"):
@@ -109,14 +112,14 @@ class Pipeline:
         return result
 
     def parse_bytes(self, data: bytes, name: str, force: bool = False, on_step=None, agent: bool = True,
-                    user: str | None = None, run: bool = True) -> dict:
+                    user: str | None = None, run: bool = True, price_defaults: PriceDefaults | None = None) -> dict:
         """Parse one file and return its result. on_step(name) is told when the parse starts a step that can be
         long ("learning": the agent writes a spec for the layout). agent=False: never run the agent step.
         run=False: no run is recorded (the agent's own parse of the file it proved)."""
         t0 = time.perf_counter()
         spent = getattr(self.llm, "spent", None)         # what this thread's LLM calls cost, before and after
         before = spent() if spent else 0.0
-        result = self._parse(data, name, force)
+        result = self._parse(data, name, force, price_defaults)
         if spent and spent() > before:
             result["claude_cost_usd"] = round(spent() - before, 6)
         job = None
@@ -155,7 +158,7 @@ class Pipeline:
             "learn_cost_usd": job["cost_usd"] if job else None, "learn_job_id": job["id"] if job else None,
             "parsed_by": user})
 
-    def _parse(self, data: bytes, name: str, force: bool) -> dict:
+    def _parse(self, data: bytes, name: str, force: bool, price_defaults: PriceDefaults | None = None) -> dict:
         t0 = time.perf_counter()
         doc = load_bytes(data, name)
         if not force and (cached := self.store.get_result(doc.sha256)):
@@ -179,11 +182,78 @@ class Pipeline:
         share = resolve_services(rows, self.s.catalog_dir)
         if best.verdict.get("status") == "auxiliary":           # an inventory, a price sheet: not cost lines
             return self._finish(doc, best, attempts, dict(best.verdict, completeness="consistent"), fp, share, t0)
+        pricing = self._price(rows, best.ext.fields, price_defaults)
         alt = self._alt_extraction(doc, best)
         verdict = validate(best.ext, alt=alt, resolved_share=share)
         if best.route == "llm_extract_direct" and verdict.get("completeness") == "consistent":
             verdict["completeness"] = "unchecked"           # rows the LLM wrote, no printed total tested them
-        return self._finish(doc, best, attempts, verdict, fp, share, t0)
+        return self._finish(doc, best, attempts, verdict, fp, share, t0, pricing=pricing)
+
+    # ------------------------------------------------------------ prices
+    def catalog(self):
+        """The price catalog in the store's database (prices.store), or None when it cannot be opened."""
+        from prices.store import get_catalog
+        try:
+            return get_catalog(self.store.url)
+        except Exception:                                       # noqa: BLE001  pricing never fails a parse
+            return None
+
+    def _price(self, rows: pd.DataFrame, fields: dict, defaults: PriceDefaults | None) -> dict:
+        """Price the usage lines (pricing.py) in place; returns the document's pricing summary."""
+        period = contract.printed_period({k: v.get("value") for k, v in (fields or {}).items()})
+        stats = match_prices(rows, self.catalog(), defaults or self.s.price_defaults,
+                             period_start=period[0] if period else None)
+        return self._price_summary(stats, rows)
+
+    def reprice(self, sha: str, price_defaults: PriceDefaults | None = None) -> dict:
+        """Price a stored result again with the current catalog, never parsing the file again: the stored rows (a
+        large file: its Parquet rows, in batches) without the values pricing filled, priced, then the analysis and
+        the contract rebuilt and saved. The route, the rows and the checks stay as they were (pricing changes no
+        billed cost). price_defaults: None keeps the ones the result was priced with. Returns the new summary."""
+        t0 = time.perf_counter()
+        summary = self.store.get_result(sha)
+        if summary is None:
+            raise KeyError(sha)
+        if summary.get("kind") not in (None, "cost_lines"):
+            return summary                                  # an inventory or a price sheet: no cost lines
+        defaults = price_defaults or PriceDefaults(**((summary.get("pricing") or {}).get("defaults") or {}))
+        header = summary.get("header_fields") or {}
+        period = contract.printed_period(header)
+        start = period[0] if period else None
+        doc = bigfile.stored_doc(self.store, sha) or Document(summary.get("file") or "", "csv", sha, [])
+        rows_path = None
+        if summary.get("large"):
+            src = self.store.root / "results" / f"{sha}.parquet"
+            if not src.exists():
+                return summary
+            rows_path = self.store.temp_path(".parquet")
+            scan = bigfile.reprice(src, rows_path, self.catalog(), defaults, start)
+            rows = scan.rolled
+            pricing = self._price_summary(scan.pricing, rows) if scan.pricing is not None else None
+        else:
+            stored = self.store.get_rows(sha)
+            if stored is None or stored.empty:
+                return summary
+            rows = drop_prices(stored)
+            stats = match_prices(rows, self.catalog(), defaults, period_start=start)
+            pricing = self._price_summary(stats, rows)
+        if summary.get("analysis"):
+            fields = {k: {"value": v, "src": None} for k, v in header.items()}
+            summary["analysis"] = analyze(rows, summary.get("confidence") or 0.0, summary["status"], fields)
+        summary["pricing"] = pricing
+        summary["repriced"] = {"at": time.time(), "seconds": round(time.perf_counter() - t0, 3)}
+        summary["contract"] = self._save_contract(doc, summary, rows)
+        self.store.save_result(sha, summary, rows, rows_path=rows_path)
+        if rows_path is not None:
+            self.store.save_rolled(sha, rows)
+        return summary
+
+    @staticmethod
+    def _price_summary(stats: PriceStats, rows: pd.DataFrame) -> dict:
+        """R2 over the whole file (a large file: its rolled-up lines), then the summary."""
+        discount = infer_discount(stats)
+        apply_discount(rows, discount)
+        return stats.summary(discount)
 
     def _route(self, doc: Document, fp: dict) -> tuple[list[Attempt], Attempt | None]:
         """Every route, cheapest first, until one is accepted; else the most confident attempt with rows."""
@@ -197,7 +267,8 @@ class Pipeline:
         ok = [a for a in attempts if a.ext is not None and not a.ext.rows.empty]
         return attempts, (max(ok, key=lambda a: a.confidence) if ok else None)
 
-    def _parse_large(self, info: bigfile.FileInfo, force: bool, on_step, move: bool, sha: str | None) -> dict:
+    def _parse_large(self, info: bigfile.FileInfo, force: bool, on_step, move: bool, sha: str | None,
+                     price_defaults: PriceDefaults | None = None) -> dict:
         """A large file: the routes on its sample, then the accepted spec over the whole file in chunks."""
         t0 = time.perf_counter()
         sha = sha or bigfile.sha256_of(info.path)
@@ -233,7 +304,8 @@ class Pipeline:
             scan = bigfile.scan(best.spec, info, sample, self.s.catalog_dir, out_path, on_progress=on_step,
                                 unmapped=best.ext.unmapped if best.ext is not None else None,
                                 cost_basis=((best.ext.fields if best.ext is not None else {}).get("cost_basis")
-                                            or {}).get("value"))
+                                            or {}).get("value"),
+                                prices=self.catalog(), price_defaults=price_defaults or self.s.price_defaults)
         except bigfile.TooLarge as e:
             out_path.unlink(missing_ok=True)
             return unsupported(Document(info.name, info.fmt, sha, []), str(e))
@@ -250,8 +322,9 @@ class Pipeline:
                 scan.note(f"The first {len(sample.regions[0].df):,} rows passed the checks with {best.route} spec "
                           f"{best.spec.get('id') or ''}; the whole file did not: "
                           + "; ".join(verdict.get("feedback") or [])[:300])
+        pricing = self._price_summary(scan.pricing, scan.rolled) if scan.pricing is not None else None
         out = self._finish(sample, best, attempts, verdict, fp, scan.share if kind == "cost_lines" else None, t0,
-                           big=scan)
+                           big=scan, pricing=pricing)
         self._keep(info, sha, move)
         return out
 
@@ -434,7 +507,8 @@ class Pipeline:
         return out
 
     def _finish(self, doc: Document, best: Attempt | None, attempts: list[Attempt], verdict: dict,
-                fp: dict, share: float | None, t0: float, big: bigfile.Scan | None = None) -> dict:
+                fp: dict, share: float | None, t0: float, big: bigfile.Scan | None = None,
+                pricing: dict | None = None) -> dict:
         """Save the spec, the result and its contract. big: a large file read in chunks; doc is its sample, and the
         lines are the scan's rolled-up lines (the rows are in its Parquet file)."""
         rows = best.ext.rows if best and best.ext is not None else pd.DataFrame()
@@ -476,6 +550,7 @@ class Pipeline:
             "checks": verdict.get("checks", []),
             "warnings": _warnings(best, big),
             "analysis": analysis,
+            "pricing": pricing,
             "attempts": [a.log() for a in attempts],
             "llm_calls": sum(a.llm_calls for a in attempts),
             "seconds": round(time.perf_counter() - t0, 3),

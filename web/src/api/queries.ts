@@ -149,6 +149,14 @@ export function useReparse() {
   })
 }
 
+export function useReprice() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (sha: string) => api.post<ParseTask>(`/documents/${sha}/reprice`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: keys.tasks }),
+  })
+}
+
 export function useParseCurrent() {
   const qc = useQueryClient()
   return useMutation({
