@@ -74,7 +74,8 @@ curl localhost:8010/documents/<sha256> # the document
   https only (http://localhost in development). The worker POSTs `{"event", "job_id", "sha256", "state", "summary",
   "result_url", "sent_at"}` (never the rows) with `X-Billparse-Signature: sha256=<HMAC-SHA256 of the body with
   CALLBACK_SECRET>`, `X-Billparse-Event` and `X-Billparse-Job`; 10 s timeout, no redirects. Events: `parse.done`,
-  `parse.error`, `parse.stopped`, and `result.updated` (learning proved a spec and the stored result changed). A
+  `parse.error`, `parse.stopped`, and `result.updated` (learning proved a spec and the stored result changed), always
+  after the job's `parse.*` event, never instead of it. A
   non-2xx answer is tried again after 30 s, 2 min, 10 min, 1 h and 6 h, then the callback is `failed`.
 - `POST /nightly` queues the nightly loop (202); `GET /jobs/{id}` shows any job with its result (the nightly report,
   the price load). `GET /jobs/schedules`: each schedule's next run and last job. `GET /jobs/stats`: jobs per queue

@@ -294,6 +294,32 @@ def test_post_parse_answers_202_when_the_parse_is_slow(client, monkeypatch):
         gate.set()
 
 
+def test_waiting_post_parse_calls_never_block_the_api(store, monkeypatch):
+    """60 callers wait on POST /parse with no worker running: the waits hold no request thread (the server has 40),
+    so /health answers. One event loop for every request, as in uvicorn (`with TestClient`)."""
+    monkeypatch.setenv("PARSE_WAIT_SECONDS", "6")
+    api.app.dependency_overrides[webapi.get_store] = lambda: store
+    answers: list[int] = []
+
+    def call(i: int) -> None:
+        r = client.post("/parse", files={"file": (f"bill-{i}.txt", f"{BILL}\nref {i}\n".encode())})
+        answers.append(r.status_code)
+    try:
+        with TestClient(api.app) as client:
+            callers = [threading.Thread(target=call, args=(i,)) for i in range(60)]
+            for t in callers:
+                t.start()
+            time.sleep(2)                               # every caller is in its wait
+            t0 = time.monotonic()
+            assert client.get("/health").status_code == 200
+            assert time.monotonic() - t0 < 1
+            for t in callers:
+                t.join(30)
+    finally:
+        api.app.dependency_overrides.clear()
+    assert answers == [202] * 60                        # still queued: each one gets its job to poll
+
+
 # ---------------------------------------------------------------- webhooks
 def test_a_callback_url_off_the_allowlist_is_refused(client, monkeypatch):
     assert _upload(client, "azure_actual.csv", "/parse/jobs", callback_url="https://x.test/").status_code == 400
@@ -334,6 +360,35 @@ def test_a_webhook_is_signed_and_retried(store, monkeypatch):
     assert body["event"] == "parse.done" and body["summary"] == {"status": "auto_accepted"} and "rows" not in body
     assert headers["X-Billparse-Signature"] == "sha256=" + hmac.new(b"s3cret", data, hashlib.sha256).hexdigest()
     assert (headers["X-Billparse-Event"], headers["X-Billparse-Job"]) == ("parse.done", str(job["id"]))
+
+
+def test_result_updated_never_replaces_an_undelivered_parse_done(store, monkeypatch):
+    monkeypatch.setenv("CALLBACK_ALLOWLIST", "https://hooks.test/")
+    post = _Post([500, 500, 200, 200])                  # the receiver is down for two tries
+    monkeypatch.setattr(worker.requests, "post", post)
+    job = _finished_with_callback(store)
+    assert worker.deliver_one(store) == "pending"
+    assert jobs.fire(store, job["id"], "result.updated")             # learning proved a spec meanwhile
+    assert jobs.fire(store, job["id"], "result.updated")             # once is enough
+    for _ in range(3):
+        _set(store, job["id"], callback_next=time.time())
+        worker.deliver_one(store)
+    assert worker.deliver_one(store) is None
+    assert [json.loads(d)["event"] for _, d, _ in post.sent] == ["parse.done"] * 3 + ["result.updated"]
+    assert jobs.get(store, job["id"])["callback_state"] == "sent"
+
+
+def test_an_event_fired_before_the_parse_ends_is_sent_after_parse_done(store, monkeypatch):
+    monkeypatch.setenv("CALLBACK_ALLOWLIST", "https://hooks.test/")
+    post = _Post([200, 200])
+    monkeypatch.setattr(worker.requests, "post", post)
+    job, _ = jobs.enqueue(store, "parse", "small", name="x", sha256="a" * 64, callback_url="https://hooks.test/a")
+    jobs.claim(store, ["small"], "w")
+    jobs.fire(store, job["id"], "result.updated")                    # a fast learning run, before the parse ends
+    assert worker.deliver_one(store) is None                         # not before parse.done
+    jobs.finish(store, job["id"], "w", "done", {})
+    assert worker.deliver_one(store) == "sent" and worker.deliver_one(store) == "sent"
+    assert [json.loads(d)["event"] for _, d, _ in post.sent] == ["parse.done", "result.updated"]
 
 
 def test_a_webhook_that_keeps_failing_ends_failed(store, monkeypatch):

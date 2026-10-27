@@ -662,6 +662,7 @@ export interface paths {
          * @description Parse one file (CSV, TSV, xlsx, JSON, YAML, Terraform, PDF, pptx, docx, text, zip): a worker parses it while
          *     this request waits, up to PARSE_WAIT_SECONDS (300). Longer (a large export): 202 with the job, to poll at
          *     GET /parse/jobs/{id}. The result is the first pass: a learning run, when the file needs one, runs after it.
+         *     The wait holds no request thread (async): many callers waiting never block the other endpoints.
          */
         post: operations["parse_parse_post"];
         delete?: never;

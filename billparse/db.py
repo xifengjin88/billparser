@@ -160,6 +160,7 @@ class JobRow(SQLModel, table=True):
     callback_url: str | None = None
     callback_state: str | None = Field(default=None, index=True)        # pending | sent | failed
     callback_event: str | None = None                # the event to send: parse.done, result.updated, ...
+    callback_then: str | None = None                 # the event to send after it (result.updated after parse.done)
     callback_attempts: int = 0
     callback_next: float | None = None
     parent_id: int | None = Field(default=None, sa_type=sa.BigInteger().with_variant(sa.Integer, "sqlite"))

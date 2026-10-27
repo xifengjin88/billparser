@@ -1933,7 +1933,7 @@
   "/parse": {
    "post": {
     "summary": "Parse",
-    "description": "Parse one file (CSV, TSV, xlsx, JSON, YAML, Terraform, PDF, pptx, docx, text, zip): a worker parses it while\nthis request waits, up to PARSE_WAIT_SECONDS (300). Longer (a large export): 202 with the job, to poll at\nGET /parse/jobs/{id}. The result is the first pass: a learning run, when the file needs one, runs after it.",
+    "description": "Parse one file (CSV, TSV, xlsx, JSON, YAML, Terraform, PDF, pptx, docx, text, zip): a worker parses it while\nthis request waits, up to PARSE_WAIT_SECONDS (300). Longer (a large export): 202 with the job, to poll at\nGET /parse/jobs/{id}. The result is the first pass: a learning run, when the file needs one, runs after it.\nThe wait holds no request thread (async): many callers waiting never block the other endpoints.",
     "operationId": "parse_parse_post",
     "parameters": [
      {

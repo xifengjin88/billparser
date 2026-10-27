@@ -258,18 +258,32 @@ EVENTS = {"done": "parse.done", "error": "parse.error", "stopped": "parse.stoppe
 
 
 def _callback(job: dict, state: str, now: float) -> dict:
-    """The callback columns of a job that ends in state: pending, when it has a URL."""
+    """The callback columns of a job that ends in state: pending, when it has a URL. An event fired before the job
+    ended (result.updated) is sent after this one."""
     if not job.get("callback_url") or job.get("kind") not in FILE_KINDS:
         return {}
-    return {"callback_state": "pending", "callback_event": EVENTS[state], "callback_attempts": 0, "callback_next": now}
+    early = job.get("callback_event") if job.get("callback_state") == "pending" else None
+    return {"callback_state": "pending", "callback_event": EVENTS[state], "callback_then": early,
+            "callback_attempts": 0, "callback_next": now}
 
 
 def fire(store, job_id: int, event: str) -> bool:
-    """Send this job's callback again with another event (result.updated: learning replaced the stored result)."""
+    """Send this job's callback again with another event (result.updated: learning replaced the stored result). An
+    event not yet delivered is never replaced: the new one is sent after it (parse.done, then result.updated)."""
     with store.engine.begin() as c:
-        n = c.execute(T.update().where((T.c.id == job_id) & T.c.callback_url.isnot(None)).values(
-            callback_state="pending", callback_event=event, callback_attempts=0, callback_next=time.time())).rowcount
-    return bool(n)
+        q = sa.select(T.c.callback_url, T.c.callback_state, T.c.callback_event, T.c.callback_then).where(
+            T.c.id == job_id)
+        r = c.execute(q.with_for_update() if _pg(store) else q).first()
+        if r is None or not r.callback_url:
+            return False
+        if r.callback_state == "pending":
+            if event not in (r.callback_event, r.callback_then):
+                c.execute(T.update().where(T.c.id == job_id).values(callback_then=event))
+            return True
+        c.execute(T.update().where(T.c.id == job_id).values(
+            callback_state="pending", callback_event=event, callback_then=None, callback_attempts=0,
+            callback_next=time.time()))
+    return True
 
 
 def claim_callback(store) -> dict | None:
@@ -281,7 +295,8 @@ def claim_callback(store) -> dict | None:
         lock.acquire()
     try:
         with store.engine.begin() as c:
-            q = (sa.select(T).where((T.c.callback_state == "pending") & (T.c.callback_next <= now))
+            q = (sa.select(T).where((T.c.callback_state == "pending") & (T.c.callback_next <= now)
+                                    & T.c.state.in_(FINAL))                 # parse.done goes first
                  .order_by(T.c.callback_next).limit(1))
             if pg:
                 q = q.with_for_update(skip_locked=True)
@@ -296,9 +311,11 @@ def claim_callback(store) -> dict | None:
 
 
 def callback_result(store, job_id: int, ok: bool) -> str:
-    """After a delivery: sent; else retried with backoff (30 s, 2 min, 10 min, 1 h, 6 h), then failed."""
+    """After a delivery: sent; else retried with backoff (30 s, 2 min, 10 min, 1 h, 6 h), then failed. Returns what
+    became of this event. An event that waits behind it (callback_then) is pending from now on."""
     with store.engine.begin() as c:
-        r = c.execute(sa.select(T.c.callback_attempts).where(T.c.id == job_id)).first()
+        q = sa.select(T.c.callback_attempts, T.c.callback_then).where(T.c.id == job_id)
+        r = c.execute(q.with_for_update() if _pg(store) else q).first()
         attempts = (r.callback_attempts if r else 0) + 1
         if ok:
             values = {"callback_state": "sent", "callback_attempts": attempts}
@@ -307,8 +324,12 @@ def callback_result(store, job_id: int, ok: bool) -> str:
         else:
             values = {"callback_state": "pending", "callback_attempts": attempts,
                       "callback_next": time.time() + CALLBACK_BACKOFF[attempts - 1]}
+        outcome = values["callback_state"]
+        if outcome != "pending" and r is not None and r.callback_then:
+            values = {"callback_state": "pending", "callback_event": r.callback_then, "callback_then": None,
+                      "callback_attempts": 0, "callback_next": time.time()}
         c.execute(T.update().where(T.c.id == job_id).values(**values))
-    return values["callback_state"]
+    return outcome
 
 
 def allowlist() -> list[str]:

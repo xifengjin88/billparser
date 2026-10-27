@@ -22,12 +22,14 @@ from .settings import configure_logging, load_env
 load_env()               # before the modules below read their settings from os.environ
 configure_logging()
 
+import asyncio  # noqa: E402
 import json  # noqa: E402
 import os  # noqa: E402
 import time  # noqa: E402
 from typing import Any, Literal  # noqa: E402
 
 from fastapi import Depends, FastAPI, File, Form, HTTPException, Query, Request, UploadFile  # noqa: E402
+from fastapi.concurrency import run_in_threadpool  # noqa: E402
 from fastapi.middleware.gzip import GZipMiddleware  # noqa: E402
 from fastapi.responses import JSONResponse  # noqa: E402
 from pydantic import BaseModel  # noqa: E402
@@ -193,23 +195,29 @@ def parse_wait() -> float:
 
 @app.post("/parse", response_model=ParseResult,
           responses={202: {"model": JobOut, "description": "not done within PARSE_WAIT_SECONDS: the job, to poll"}})
-def parse(request: Request, file: UploadFile = File(...), force: bool = FORCE,
+async def parse(request: Request, file: UploadFile = File(...), force: bool = FORCE,
           assume_os: str | None = webapi.ASSUME_OS, assume_tenancy: str | None = webapi.ASSUME_TENANCY,
           assume_software: str | None = webapi.ASSUME_SOFTWARE, assume_license: str | None = webapi.ASSUME_LICENSE,
           assume_region: str | None = webapi.ASSUME_REGION, store: Store = Depends(get_store)) -> Any:
     """Parse one file (CSV, TSV, xlsx, JSON, YAML, Terraform, PDF, pptx, docx, text, zip): a worker parses it while
     this request waits, up to PARSE_WAIT_SECONDS (300). Longer (a large export): 202 with the job, to poll at
-    GET /parse/jobs/{id}. The result is the first pass: a learning run, when the file needs one, runs after it."""
-    job, _ = _queue_parse(request, file, store, force, webapi.price_defaults(
+    GET /parse/jobs/{id}. The result is the first pass: a learning run, when the file needs one, runs after it.
+    The wait holds no request thread (async): many callers waiting never block the other endpoints."""
+    job, _ = await run_in_threadpool(_queue_parse, request, file, store, force, webapi.price_defaults(
         assume_os, assume_tenancy, assume_software, assume_license, assume_region), None)
     end = time.monotonic() + parse_wait()
     while job["state"] in jobs.ACTIVE and time.monotonic() < end:
-        time.sleep(0.5)
-        job = jobs.get(store, job["id"]) or job
+        await asyncio.sleep(0.5)
+        job = await run_in_threadpool(jobs.get, store, job["id"]) or job
     if job["state"] in jobs.ACTIVE:
-        return JSONResponse(job_out(store, job).model_dump(), status_code=202)
+        return JSONResponse((await run_in_threadpool(job_out, store, job)).model_dump(), status_code=202)
     if job["state"] != "done":
         raise HTTPException(500 if job["state"] == "error" else 409, job.get("error") or job["state"])
+    return await run_in_threadpool(_parse_result, store, job)
+
+
+def _parse_result(store: Store, job: dict) -> ParseResult:
+    """A done parse job as POST /parse's answer (it reads the stored document: in a thread, never the event loop)."""
     t = job.get("result") or {}
     row = store.document(job["sha256"])
     if row is None:
