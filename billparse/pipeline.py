@@ -449,10 +449,9 @@ class Pipeline:
         spec, feedback = None, None
         rounds = self.s.max_repairs
         if self.s.spec_candidates > 1 and rounds > 0:
-            best, feedback = yield from self._spec_candidates(doc, preview, examples, attempts)
+            best, feedback, spec = yield from self._spec_candidates(doc, preview, examples, attempts)
             if best is not None and self._accept(best):
                 return
-            spec = best.spec if best is not None else None
             rounds -= 1
         for _ in range(rounds):
             try:
@@ -474,7 +473,9 @@ class Pipeline:
         the layout on their own. Every candidate is an attempt in the log; the best (accepted; else no failed critical
         check; else the fewest failed price checks; else the most confident) is the only one that can be accepted.
         Two candidates that read the same rows add candidates_agree to it; where they differ, the repair is told.
-        Returns (the best attempt or None, the feedback for the next round)."""
+        Returns (the best attempt or None, the feedback for the next round, the spec it repairs). When no candidate
+        ran (each failed to parse or check_spec), the next round repairs the first one that has a spec, told why it was
+        rejected, as a single candidate's next round is."""
         n = self.s.spec_candidates
         spent = getattr(self.llm, "spent", None)
 
@@ -520,8 +521,11 @@ class Pipeline:
             a.chosen = a is best
             yield a
         if best is None:
-            return None, [f"Spec rejected: {a.error}" for a in atts if a.error][:3] or ["No rows extracted"]
-        return best, (best.verdict.get("feedback") or [best.error or "No rows extracted"]) + disagree
+            first = next((a for a in atts if a.spec is not None), None)
+            rejected = [f"Spec rejected: {a.error}" for a in ([first] if first else []) + [a for a in atts if a is not first]
+                        if a.error]
+            return None, rejected[:3] or ["No rows extracted"], first.spec if first else None
+        return best, (best.verdict.get("feedback") or [best.error or "No rows extracted"]) + disagree, best.spec
 
     def _candidate_rank(self, att: Attempt) -> tuple:
         checks = att.verdict.get("checks", [])

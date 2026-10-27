@@ -256,3 +256,20 @@ def test_a_large_file_gets_two_candidates_on_its_sample_and_the_chosen_spec_read
     assert r.get("large") and len(_spec_attempts(r)) == 2 and len(llm.calls) == 2
     assert r["spec"]["route"] == "llm_spec" and r["rows"] == 40
     assert {c["name"]: c["status"] for c in r["checks"]}["implied_unit_price"] == "pass"
+
+
+def test_two_rejected_candidates_are_repaired_with_the_spec_and_the_errors(tmp_path):
+    """Both candidates fail check_spec: round 2 repairs the first one, told why, as a single candidate's next round
+    is (not a fresh start that can make the same mistake again)."""
+    bad_transform = json.loads(json.dumps(GOOD))
+    bad_transform["columns"]["billed_cost"]["t"] = ["no_such_transform"]
+    bad_field = json.loads(json.dumps(GOOD))
+    bad_field["derive"] = {"no_such_field": "c5 * c6"}
+    llm = JsonLLM(bad_transform, bad_field, repair=GOOD)
+    r = _pipe(tmp_path, llm).parse_file(_opaque_csv(tmp_path))
+    assert len(llm.calls) == 3
+    repair = llm.calls[2]
+    assert "Your previous spec" in repair and "Validation problems to fix" in repair
+    assert "no_such_transform" in repair and "Spec rejected: Unknown transform" in repair
+    assert r["spec"]["route"] == "llm_spec" and r["status"] in ("reconciled", "unreconciled")
+    assert [a["error"] is not None for a in _spec_attempts(r)] == [True, True, False]
