@@ -193,7 +193,7 @@ function DocumentBody({ view }: { view: DocumentView }) {
               hint="Share of priced AWS usage cost matched to a public list price: sure (exact or by attributes), and with assumptions" />
       </div>
 
-      <Tabs value={tab} onValueChange={(t) => setParams({ tab: String(t) }, { replace: true })}>
+      <Tabs value={tab} onValueChange={(t) => setParams((p) => { const next = new URLSearchParams(p); next.set('tab', String(t)); return next }, { replace: true })}>
         <TabsList className="flex-wrap">
           <TabsTrigger value="charges">Charges ({v.charges.length.toLocaleString()})</TabsTrigger>
           <TabsTrigger value="totals">Totals ({v.totals.length})</TabsTrigger>
