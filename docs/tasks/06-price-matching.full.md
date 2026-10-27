@@ -95,8 +95,8 @@ recorded in `price_assumptions`.
 3. **Do not change existing samples or `EXPECTED`.** Pricing never changes `billed_cost`, the route or the status of
    an existing sample.
 4. **Every schema change goes into `schema.py`, `export.py` (model and the field list in `to_schema`) and
-   `webapi.py`** where the web app shows it. Bump `SCHEMA_VERSION` to `"1.7"`, and in the same bump remove the
-   deprecated `analysis.commitment_opportunity` (promised in task 04).
+   `webapi.py`** where the web app shows it. Bump `SCHEMA_VERSION` to `"1.8" (task 05 used 1.7 for `pre_installed_sw`)`, and in the same bump remove the
+   deprecated `analysis.commitment_opportunity` (task 05 moved this removal to 1.8).
 5. **Large path:** everything here must give the same result on the large path (`LARGE_FILE_MB` set very low in a
    test) as on the normal path. Per-row Python only as a mapping over unique values.
 6. **Bulk only:** the catalog is called with unique keys, once per file (or once per chunk with a cache), never per
@@ -235,7 +235,7 @@ New row columns: `price_match_level`, `price_missing`, `price_assumptions`, `imp
   - `list_cost` and `contracted_cost` are summed (they already are).
   - `implied_unit_price` and `price_ratio` are recomputed from the rolled sums.
   - Add them to `bigfile.STEP_COLUMNS` so the Parquet rows keep them.
-- `SCHEMA_VERSION = "1.7"`. Remove `analysis.commitment_opportunity`.
+- `SCHEMA_VERSION = "1.8"`. Remove `analysis.commitment_opportunity`.
 
 ### 8. Pipeline wiring
 
@@ -303,7 +303,7 @@ test).
       are never touched.
 - [ ] The same results on the normal path, the large path and after roll-ups.
 - [ ] Reprice works without re-parsing, on both paths.
-- [ ] Schema 1.7 in `schema.py`, `export.py` and the web types; `commitment_opportunity` removed.
+- [ ] Schema 1.8 in `schema.py`, `export.py` and the web types; `commitment_opportunity` removed.
 - [ ] README "Price matching" section.
 - [ ] **Stop and report to the user:** the `pricing` summary (match rate, levels, top missing fields) of every
       sample file. The user will check match rates on real files before task 07.
