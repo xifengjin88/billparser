@@ -95,7 +95,7 @@ recorded in `price_assumptions`.
 3. **Do not change existing samples or `EXPECTED`.** Pricing never changes `billed_cost`, the route or the status of
    an existing sample.
 4. **Every schema change goes into `schema.py`, `export.py` (model and the field list in `to_schema`) and
-   `webapi.py`** where the web app shows it. Bump `SCHEMA_VERSION` to `"1.8" (task 05 used 1.7 for `pre_installed_sw`)`, and in the same bump remove the
+   `webapi.py`** where the web app shows it. Bump `SCHEMA_VERSION` to `"1.8"` (task 05 used 1.7 for `pre_installed_sw`), and in the same bump remove the
    deprecated `analysis.commitment_opportunity` (task 05 moved this removal to 1.8).
 5. **Large path:** everything here must give the same result on the large path (`LARGE_FILE_MB` set very low in a
    test) as on the normal path. Per-row Python only as a mapping over unique values.
