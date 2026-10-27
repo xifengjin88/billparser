@@ -375,12 +375,14 @@ class PriceDefaultsIn(BaseModel):
     tenancy: str | None = None             # Shared
     pre_installed_sw: str | None = None    # NA
     license_model: str | None = None
+    region: str | None = None              # us-east-1
 
 
 def price_defaults(assume_os: str | None, assume_tenancy: str | None, assume_software: str | None,
-                   assume_license: str | None) -> PriceDefaults | None:
+                   assume_license: str | None, assume_region: str | None = None) -> PriceDefaults | None:
     d = PriceDefaults(operating_system=assume_os or None, tenancy=assume_tenancy or None,
-                      pre_installed_sw=assume_software or None, license_model=assume_license or None)
+                      pre_installed_sw=assume_software or None, license_model=assume_license or None,
+                      region=assume_region or None)
     return d if d.given() else None
 
 
@@ -388,6 +390,7 @@ ASSUME_OS = Query(None, description="price lines that name no operating system a
 ASSUME_TENANCY = Query(None, description="price lines that name no tenancy as this one (Shared)")
 ASSUME_SOFTWARE = Query(None, description="price lines that name no pre-installed software as this (NA)")
 ASSUME_LICENSE = Query(None, description="price lines that name no license model as this one")
+ASSUME_REGION = Query(None, description="price lines that name no region as this one (us-east-1)")
 
 
 class HeaderEdit(BaseModel):
@@ -756,7 +759,7 @@ def parse_start(request: Request, file: UploadFile = File(...), force: bool = Qu
                 backend: str | None = Query(None), fallback: str | None = Query(None),
                 assume_os: str | None = ASSUME_OS, assume_tenancy: str | None = ASSUME_TENANCY,
                 assume_software: str | None = ASSUME_SOFTWARE, assume_license: str | None = ASSUME_LICENSE,
-                store: Store = Depends(get_store)) -> ParseTask:
+                assume_region: str | None = ASSUME_REGION, store: Store = Depends(get_store)) -> ParseTask:
     """Start parsing a file and return at once; GET /parse/tasks/{sha256} says how it goes."""
     for choice in (backend, fallback):
         if choice and choice not in ("claude", "none") and llm_mod.parse_choice(choice) is None:
@@ -765,7 +768,8 @@ def parse_start(request: Request, file: UploadFile = File(...), force: bool = Qu
     path, sha, _ = save_upload(file, store)
     sha = start_parse(store, file.filename or "upload", path, sha, force, _use_llm(backend), auth.current_user(request),
                       agent_step=fallback != "none", backend=backend, fallback=fallback, temp=True,
-                      defaults=price_defaults(assume_os, assume_tenancy, assume_software, assume_license))
+                      defaults=price_defaults(assume_os, assume_tenancy, assume_software, assume_license,
+                                              assume_region))
     return _task_out(store, sha, _tasks[sha])
 
 

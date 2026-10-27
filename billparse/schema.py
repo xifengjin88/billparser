@@ -215,6 +215,7 @@ class Pricing(BaseModel):
     """How the usage lines matched the public list prices (pricing.py)."""
     catalog_version: Optional[str] = None
     defaults: dict[str, str] = Field(default_factory=dict)          # what the request said to assume
+    undated_as_of: Optional[str] = None     # the date of lines without one: kept, so a reprice uses it again
     match_rate: dict[str, Optional[float]] = Field(default_factory=dict)   # sure, assumed (by cost); *_lines
     levels: dict[str, PricingLevel] = Field(default_factory=dict)
     missing: list[PricingMissing] = Field(default_factory=list)

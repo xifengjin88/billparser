@@ -1495,6 +1495,8 @@ export interface components {
             pre_installed_sw?: string | null;
             /** License Model */
             license_model?: string | null;
+            /** Region */
+            region?: string | null;
         };
         /**
          * Pricing
@@ -1507,6 +1509,8 @@ export interface components {
             defaults?: {
                 [key: string]: string;
             };
+            /** Undated As Of */
+            undated_as_of?: string | null;
             /** Match Rate */
             match_rate?: {
                 [key: string]: number | null;
@@ -1926,6 +1930,8 @@ export interface operations {
                 assume_software?: string | null;
                 /** @description price lines that name no license model as this one */
                 assume_license?: string | null;
+                /** @description price lines that name no region as this one (us-east-1) */
+                assume_region?: string | null;
             };
             header?: never;
             path?: never;
@@ -2761,6 +2767,8 @@ export interface operations {
                 assume_software?: string | null;
                 /** @description price lines that name no license model as this one */
                 assume_license?: string | null;
+                /** @description price lines that name no region as this one (us-east-1) */
+                assume_region?: string | null;
             };
             header?: never;
             path?: never;

@@ -250,8 +250,8 @@ with the `USE1-` prefix also matches the price list's us-east-1 form without it.
 After a parse, `billparse/pricing.py` looks every AWS usage line up in the price catalog at the public on-demand
 list price, as of the line's date (else the printed billing period, else today, with a warning). It runs on the
 normal path after the service resolution, and on the large path per chunk, with one key cache for the file. The
-catalog is called once per file with the distinct keys, never per line: 500,000 lines with 2,000 keys take about
-2–3 s. Covered usage gets its list price too (the consumer's on-demand baseline); `coverage` and `effective_cost` are
+catalog is called once per file with the distinct keys, never per line, and the work that depends only on the key
+(cleaning, assumptions, what is missing) is done once per key: 500,000 lines with 2,000 keys take about 1.5 s. Covered usage gets its list price too (the consumer's on-demand baseline); `coverage` and `effective_cost` are
 never changed, and no savings are estimated.
 
 Each line gets `price_match_level`:
@@ -268,8 +268,9 @@ Each line gets `price_match_level`:
 
 - **No silent assumptions.** An EC2 invoice line (no operation, no SKU) that names an OS and no SQL Server is looked
   up with `pre_installed_sw=NA (text)`; one that does not say Dedicated or Host with `tenancy=Shared (text)`. The
-  request can add defaults (`assume_os`, `assume_tenancy`, `assume_software`, `assume_license` on `POST /parse` and
-  `/parse/start`): `operating_system=Linux (request)`. Each is in `price_assumptions`; the line's own columns stay
+  request can add defaults (`assume_os`, `assume_tenancy`, `assume_software`, `assume_license`, `assume_region` on
+  `POST /parse` and `/parse/start`): `operating_system=Linux (request)`, `region=us-east-1 (request)` (reseller
+  invoices often print no region). Each is in `price_assumptions`; the line's own columns stay
   as parsed. A first-tier price (`tiered`) and a date before the catalog's oldest price (`before_history`) are noted
   there too.
 - **R1.** `list_unit_price` and `list_cost` are filled only where the file printed none (inferred, source
@@ -283,7 +284,8 @@ Each line gets `price_match_level`:
 
 `Document.pricing` has the catalog version, the match rate (share of priced AWS usage cost at `exact` and
 `attributes`, and at `assumed`; also by lines), the lines and cost per level, the most common missing columns, the
-inferred discount and warnings. No catalog, an empty one or a database error: the parse goes on, unpriced, with a
+inferred discount and warnings, and `undated_as_of`: the date of lines that have none (the printed billing period,
+else the day of the first pricing; a reprice uses it again, so it gives the same prices on any day). No catalog, an empty one or a database error: the parse goes on, unpriced, with a
 warning. `POST /documents/{sha256}/reprice` (the web app's "Price again") prices a stored result again with the
 current catalog, never parsing the file again (a large file: its stored rows, in batches); its optional body gives new
 defaults, else the earlier ones stay.

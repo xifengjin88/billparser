@@ -219,7 +219,10 @@ class Pipeline:
         defaults = price_defaults or PriceDefaults(**((summary.get("pricing") or {}).get("defaults") or {}))
         header = summary.get("header_fields") or {}
         period = contract.printed_period(header)
-        start = period[0] if period else None
+        # lines without a date: the date the first pricing used (else a reprice on another day would price them
+        # differently)
+        kept = (summary.get("pricing") or {}).get("undated_as_of")
+        start = period[0] if period else kept
         doc = bigfile.stored_doc(self.store, sha) or Document(summary.get("file") or "", "csv", sha, [])
         rows_path = None
         if summary.get("large"):
@@ -237,6 +240,8 @@ class Pipeline:
             rows = drop_prices(stored)
             stats = match_prices(rows, self.catalog(), defaults, period_start=start)
             pricing = self._price_summary(stats, rows)
+        if pricing is not None and kept and not period and pricing.get("undated_as_of"):
+            pricing["warnings"].append(f"Lines without a date are priced as of {kept}, the date of the first pricing")
         if summary.get("analysis"):
             fields = {k: {"value": v, "src": None} for k, v in header.items()}
             summary["analysis"] = analyze(rows, summary.get("confidence") or 0.0, summary["status"], fields)

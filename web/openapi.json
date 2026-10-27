@@ -299,6 +299,24 @@
        "title": "Assume License"
       },
       "description": "price lines that name no license model as this one"
+     },
+     {
+      "name": "assume_region",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "description": "price lines that name no region as this one (us-east-1)",
+       "title": "Assume Region"
+      },
+      "description": "price lines that name no region as this one (us-east-1)"
      }
     ],
     "requestBody": {
@@ -1642,6 +1660,24 @@
        "title": "Assume License"
       },
       "description": "price lines that name no license model as this one"
+     },
+     {
+      "name": "assume_region",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "description": "price lines that name no region as this one (us-east-1)",
+       "title": "Assume Region"
+      },
+      "description": "price lines that name no region as this one (us-east-1)"
      }
     ],
     "requestBody": {
@@ -4332,6 +4368,17 @@
        }
       ],
       "title": "License Model"
+     },
+     "region": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Region"
      }
     },
     "type": "object",
@@ -4357,6 +4404,17 @@
       },
       "type": "object",
       "title": "Defaults"
+     },
+     "undated_as_of": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Undated As Of"
      },
      "match_rate": {
       "additionalProperties": {

@@ -64,6 +64,7 @@ class PriceDefaults:
     tenancy: str | None = None             # "Shared"
     pre_installed_sw: str | None = None    # "NA"
     license_model: str | None = None
+    region: str | None = None              # "us-east-1": invoices that print no region (resellers)
 
     def given(self) -> dict[str, str]:
         return {k: v for k, v in asdict(self).items() if v}
@@ -96,6 +97,7 @@ class PriceStats:
     below_list: int = 0                               # R3: coverage unknown, far below list price
     warnings: list = field(default_factory=list)
     lookups: int = 0                                  # keys sent to the catalog
+    undated_as_of: str | None = None                  # the date of lines without one (period start, or the day priced)
 
     def note(self, msg: str) -> None:
         if msg not in self.warnings:
@@ -116,6 +118,7 @@ class PriceStats:
             got[2] |= svc
         self.below_list += other.below_list
         self.lookups += other.lookups
+        self.undated_as_of = self.undated_as_of or other.undated_as_of
         for w in other.warnings:
             self.note(w)
 
@@ -136,6 +139,7 @@ class PriceStats:
         return {
             "catalog_version": self.catalog_version,
             "defaults": self.defaults,
+            "undated_as_of": self.undated_as_of,
             "match_rate": {"sure": share(("exact", "attributes"), 1, cost), "assumed": share(("assumed",), 1, cost),
                            "sure_lines": share(("exact", "attributes"), 0, lines),
                            "assumed_lines": share(("assumed",), 0, lines)},
@@ -181,7 +185,7 @@ def match_prices(rows: pd.DataFrame, catalog: PriceCatalog | None, defaults: Pri
     _blank(rows)
     ct = _col(rows, "charge_type")
     usage = ct.isna() | ct.eq("Usage")
-    provider = _col(rows, "provider").astype(object).map(lambda v: str(v).lower() if isinstance(v, str) else None)
+    provider = map_unique(_col(rows, "provider"), lambda v: v.lower() if isinstance(v, str) else None)
     cost = pd.to_numeric(_col(rows, "billed_cost"), errors="coerce").fillna(0.0).abs()
     other = usage & provider.isin(NO_CATALOG)
     if other.any():
@@ -245,14 +249,20 @@ def _keys(p: pd.DataFrame, defaults: PriceDefaults) -> tuple[pd.DataFrame, pd.Se
 
 
 def _dates(p: pd.DataFrame, period_start: str | None, stats: PriceStats) -> pd.Series:
-    d = pd.to_datetime(_col(p, "charge_start"), errors="coerce", utc=True)
-    out = d.dt.strftime("%Y-%m-%d").astype(object).where(d.notna(), None)
+    """The date each line is priced as of: its start, else the printed billing period, else today (a warning; the
+    summary keeps the date, so a reprice uses the same one). Converted once per distinct value."""
+    codes, uniques = pd.factorize(_col(p, "charge_start"), use_na_sentinel=True)
+    d = pd.to_datetime(pd.Series(uniques, dtype=object), errors="coerce", utc=True)
+    text = d.dt.strftime("%Y-%m-%d").astype(object).where(d.notna(), None).to_numpy()
+    out = pd.Series(np.where(codes >= 0, text[np.maximum(codes, 0)] if len(text) else None, None), index=p.index,
+                    dtype=object)
     if out.isna().any():
         fallback = period_start
         if fallback is None:
             fallback = dt.date.today().isoformat()
             stats.note(f"{int(out.isna().sum()):,} priced lines have no date and the file prints no billing period: "
                        f"priced as of today ({fallback})")
+        stats.undated_as_of = fallback
         out = out.fillna(fallback)
     return out
 
@@ -279,51 +289,60 @@ def _same(a: dict | None, b: dict | None) -> bool:
                                                                          b.get("unit_price"))
 
 
+SOURCE_COLUMNS = ["sku_price_id", "sku_id", "product_code", "service_code", "usage_type", "operation", "region",
+                  "instance_type", *ATTRIBUTES]       # the line columns a key is made of
+
+
 def _price(rows: pd.DataFrame, priced: pd.Series, qty: pd.Series, cost: pd.Series, catalog: PriceCatalog,
            defaults: PriceDefaults, cache: KeyCache, stats: PriceStats, period_start: str | None) -> None:
     p = rows.loc[priced]
-    keys, notes, assumed = _keys(p, defaults)
+    # the distinct keys, from the line columns as they are: everything that depends only on the key (cleaning, the
+    # line's words, the request's defaults, what is missing) is done once per key and spread back by arrays
+    raw = pd.DataFrame({c: _col(p, c) for c in SOURCE_COLUMNS}, index=p.index).astype(object)
+    codes = raw.groupby(SOURCE_COLUMNS, dropna=False, sort=False).ngroup().to_numpy()
+    first = pd.Series(np.arange(len(raw))).groupby(codes).first().to_numpy()
+    keys, notes, assumed = _keys(raw.iloc[first].reset_index(drop=True), defaults)
     dates = _dates(p, period_start, stats)
-    # the distinct keys; each looked up at its first and last date, and at every date in between only when those two
-    # differ (a price changed inside the file's period). Everything per key, mapped back to the lines by arrays.
-    codes = keys.groupby(KEY_COLUMNS, dropna=False, sort=False).ngroup().to_numpy()
-    first = pd.Series(np.arange(len(keys))).groupby(codes).first().to_numpy()
-    uniq = keys.iloc[first].reset_index(drop=True)
-    texts = uniq.astype(object).where(uniq.notna(), "").astype(str).agg("\x1f".join, axis=1).tolist()
+    # each key looked up at its first and last date, and at every date in between only when those two differ (a
+    # price changed inside the file's period)
+    texts = keys[KEY_COLUMNS].astype(object).where(keys[KEY_COLUMNS].notna(), "").astype(str).agg(
+        "\x1f".join, axis=1).tolist()
     key_rows = {t: {c: (None if pd.isna(v) else v) for c, v in r.items()}
-                for t, r in zip(texts, uniq.to_dict("records"), strict=True)}
+                for t, r in zip(texts, keys[KEY_COLUMNS].to_dict("records"), strict=True)}
     pairs = pd.DataFrame({"code": codes, "date": dates.to_numpy()})
-    span = pairs.groupby("code")["date"].agg(["min", "max"])
-    _lookup(catalog, [(texts[c], d) for c in span.index for d in (span.at[c, "min"], span.at[c, "max"])],
-            key_rows, cache, stats)
-    split = [c for c in span.index
-             if not _same(cache.get((texts[c], span.at[c, "min"])), cache.get((texts[c], span.at[c, "max"])))]
-    per_key = pd.DataFrame([cache.get((texts[c], span.at[c, "min"])) or {} for c in range(len(texts))])
-    res = per_key.reindex(codes).set_axis(p.index)
+    span = pairs.groupby("code")["date"].agg(["min", "max"]).reindex(range(len(texts)))
+    lo, hi = span["min"].tolist(), span["max"].tolist()
+    _lookup(catalog, [(texts[c], d) for c in range(len(texts)) for d in (lo[c], hi[c])], key_rows, cache, stats)
+    split = [c for c in range(len(texts)) if not _same(cache.get((texts[c], lo[c])), cache.get((texts[c], hi[c])))]
+    per_key = pd.DataFrame([cache.get((texts[c], lo[c])) or {} for c in range(len(texts))])
+    for c in ("matched_by", "candidates", "unit_price", "unit", "sku", "effective_from", "tiered", "differs"):
+        if c not in per_key:
+            per_key[c] = None
+    res = per_key.take(codes).set_axis(p.index)
     if split:
         mask = pairs["code"].isin(split).to_numpy()
         both = pairs[mask].drop_duplicates()
         _lookup(catalog, [(texts[c], d) for c, d in both.itertuples(index=False)], key_rows, cache, stats)
         got = pd.DataFrame([{**(cache.get((texts[c], d)) or {}), "code": c, "date": d}
                             for c, d in both.itertuples(index=False)])
-        rows_split = pairs[mask].merge(got, on=["code", "date"], how="left").drop(columns=["code", "date"])
+        rows_split = pairs[mask].merge(got, on=["code", "date"], how="left").reindex(columns=per_key.columns)
         res = res.astype(object)
-        res.loc[p.index[mask], rows_split.columns] = rows_split.to_numpy()
-    _apply(rows, p.index, keys, codes, notes, assumed, dates, res, qty[p.index], cost[p.index], stats)
+        res.loc[p.index[mask], per_key.columns] = rows_split.to_numpy()
+    _apply(rows, p.index, keys, codes, notes.to_numpy()[codes], assumed.to_numpy()[codes], dates, res,
+           qty[p.index], cost[p.index], stats)
 
 
-def _apply(rows: pd.DataFrame, idx: pd.Index, keys: pd.DataFrame, codes: np.ndarray, notes: pd.Series,
-           assumed: pd.Series, dates: pd.Series, res: pd.DataFrame, qty: pd.Series, cost: pd.Series,
+def _apply(rows: pd.DataFrame, idx: pd.Index, keys: pd.DataFrame, codes: np.ndarray, notes: np.ndarray,
+           assumed: np.ndarray, dates: pd.Series, res: pd.DataFrame, qty: pd.Series, cost: pd.Series,
            stats: PriceStats) -> None:
-    for c in ("matched_by", "candidates", "unit_price", "unit", "sku", "effective_from", "tiered", "differs"):
-        if c not in res:
-            res[c] = None
     found = res["matched_by"].notna()
     cand = pd.to_numeric(res["candidates"], errors="coerce").fillna(0)
     one = found & cand.eq(1)
+    assumed = pd.Series(assumed.astype(bool), index=idx)
     # the line's unit in the price's: (normalized unit, factor), an unknown unit as printed (lower case)
-    line_unit = map_unique(_text(_col(rows.loc[idx], "unit")),
-                           lambda u: (unit_of(u) or (str(u).strip().lower(), 1.0)) if isinstance(u, str) else None)
+    line_unit = map_unique(_col(rows.loc[idx], "unit"),
+                           lambda u: (unit_of(u) or (str(u).strip().lower(), 1.0))
+                           if isinstance(u, str) and u.strip() else None)
     exact_by = res["matched_by"].isin(EXACT_BY)
     no_unit = line_unit.isna()
     norm = map_unique(line_unit, lambda t: t[0] if t else None)
@@ -350,11 +369,12 @@ def _apply(rows: pd.DataFrame, idx: pd.Index, keys: pd.DataFrame, codes: np.ndar
     rows.loc[fill_list[fill_list].index, "list_cost"] = (qty * price)[fill_list]
     rows.loc[fill_list[fill_list].index, "_list_cost_inferred"] = True
     # notes: the line's words and the request's defaults, a first-tier price, a date before the catalog's history
-    tiered = res["tiered"].map(lambda v: v is True or v == 1) & ok
+    tiered = (res["tiered"].eq(True) | res["tiered"].eq(1)) & ok
     before = ok & res["effective_from"].notna() & (dates.astype(str) < res["effective_from"].astype(str))
-    extra = pd.Series(np.where(tiered, "tiered", ""), index=idx)
-    extra = extra.str.cat(pd.Series(np.where(before, "before_history", ""), index=idx), sep="; ").str.strip("; ")
-    text = notes.str.cat(extra, sep="; ").str.strip("; ")
+    extra = np.where(tiered & before, "tiered; before_history",
+                     np.where(tiered, "tiered", np.where(before, "before_history", "")))
+    text = np.where((notes != "") & (extra != ""), np.char.add(np.char.add(notes.astype(str), "; "),
+                                                               extra.astype(str)), np.where(notes != "", notes, extra))
     list_unit = pd.to_numeric(rows.loc[idx, "list_unit_price"], errors="coerce")
     eff = pd.to_numeric(_col(rows.loc[idx], "effective_cost"), errors="coerce")
     billed = pd.to_numeric(_col(rows.loc[idx], "billed_cost"), errors="coerce")
@@ -363,7 +383,7 @@ def _apply(rows: pd.DataFrame, idx: pd.Index, keys: pd.DataFrame, codes: np.ndar
     ratio = implied / list_unit.where(list_unit > 0)
     rows.loc[idx, "price_match_level"] = level
     rows.loc[idx, "price_missing"] = missing
-    rows.loc[idx, "price_assumptions"] = text.where(text.ne(""), None)
+    rows.loc[idx, "price_assumptions"] = pd.Series(np.where(text != "", text, None), index=idx, dtype=object)
     rows.loc[idx, "implied_unit_price"] = implied.astype(object).where(implied.notna(), None)
     rows.loc[idx, "price_ratio"] = ratio.astype(object).where(ratio.notna(), None)
     rows.loc[ok[ok].index, "catalog_sku_id"] = res.loc[ok, "sku"]
@@ -371,35 +391,32 @@ def _apply(rows: pd.DataFrame, idx: pd.Index, keys: pd.DataFrame, codes: np.ndar
 
 
 def _missing(keys: pd.DataFrame, codes: np.ndarray, level: pd.Series, res: pd.DataFrame) -> pd.Series:
-    """What would have matched a line, per distinct key: the empty attributes of an ambiguous key that tell its
-    candidates apart (all its empty ones when none does); the instance type and region of an unmatched line named by
-    neither rate code, SKU nor usage type; else the catalog has no such product (catalog_row); unit for a unit
-    mismatch."""
-    out = pd.Series(None, index=level.index, dtype=object)
+    """What would have matched a line, once per distinct (key, level, differs): the empty attributes of an ambiguous
+    key that tell its candidates apart (all its empty ones when none does), and the operation of a usage type that has
+    none; the instance type and region of an unmatched line named by neither rate code, SKU nor usage type; else the
+    catalog has no such product (catalog_row); unit for a unit mismatch."""
     differs = res["differs"].astype(object)
-    frame = pd.DataFrame({"code": codes, "level": level.to_numpy(),
-                          "differs": differs.where(differs.notna(), "").astype(str).to_numpy()}, index=level.index)
-    todo = frame[frame["level"].isin(("ambiguous", "unmatched"))]
-    if not todo.empty:
-        first = pd.Series(np.arange(len(keys)), index=keys.index).groupby(codes).first()
-        named = keys[["rate_code", "sku", "usage_type"]].notna().any(axis=1)
-        answer: dict = {}
-        for code, lv, differs in todo.drop_duplicates().itertuples(index=False):
-            row = keys.iloc[first[code]]
-            if lv == "ambiguous":
-                empty = [c for c in ATTRIBUTES if pd.isna(row[c])]
-                apart = [c for c in empty if c in differs.split(", ")] or empty
-                if pd.notna(row["usage_type"]) and pd.isna(row["operation"]):
-                    apart = ["operation", *apart]     # an EC2 or RDS usage type: the operation names the OS, engine
-                answer[(code, lv, differs)] = ", ".join(apart) or None
-            elif not named.iloc[first[code]]:
-                answer[(code, lv, differs)] = ", ".join(c for c in ("instance_type", "region") if pd.isna(row[c])) \
-                    or "catalog_row"
-            else:
-                answer[(code, lv, differs)] = "catalog_row"
-        out[todo.index] = [answer[t] for t in todo.itertuples(index=False, name=None)]
-    out[level.eq("unit_mismatch")] = "unit"
-    return out
+    frame = pd.DataFrame({"code": codes, "level": level.fillna("").to_numpy(),
+                          "differs": differs.where(differs.notna(), "").astype(str).to_numpy()})
+    combo, uniques = pd.factorize(pd.MultiIndex.from_frame(frame))
+    named = keys[["rate_code", "sku", "usage_type"]].notna().any(axis=1).to_numpy()
+    answers = []
+    for code, lv, diff in uniques:
+        row = keys.iloc[code]
+        if lv == "ambiguous":
+            empty = [c for c in ATTRIBUTES if pd.isna(row[c])]
+            apart = [c for c in empty if c in diff.split(", ")] or empty
+            if pd.notna(row["usage_type"]) and pd.isna(row["operation"]):
+                apart = ["operation", *apart]         # an EC2 or RDS usage type: the operation names the OS, engine
+            answers.append(", ".join(apart) or None)
+        elif lv == "unmatched":
+            answers.append("catalog_row" if named[code] else
+                            ", ".join(c for c in ("instance_type", "region") if pd.isna(row[c])) or "catalog_row")
+        elif lv == "unit_mismatch":
+            answers.append("unit")
+        else:
+            answers.append(None)
+    return pd.Series(np.array(answers, dtype=object)[combo], index=level.index, dtype=object)
 
 
 def _count(stats: PriceStats, level: pd.Series, missing: pd.Series, cost: pd.Series, ratio: pd.Series,

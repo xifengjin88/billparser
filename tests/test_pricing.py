@@ -421,3 +421,37 @@ def test_500k_lines_with_2000_keys(catalog, capsys):
         print(f"\n  priced {n:,} lines with {k:,} distinct keys in {seconds:.2f} s ({stats.lookups:,} lookups)")
     assert seconds < 10
     assert stats.levels["exact"][0] > 0 and json.dumps(stats.summary())
+
+
+# ---------------------------------------------------------------- region default, undated lines
+def test_assume_region_prices_lines_without_a_region(catalog):
+    rows = _lines(description=["$0.192 per On Demand Linux m5.xlarge Instance Hour"], region=[None])
+    extract(rows)
+    match_prices(rows, catalog)
+    assert rows.loc[0, "price_match_level"] == "unmatched" and rows.loc[0, "price_missing"] == "region"
+    rows = _lines(description=["$0.192 per On Demand Linux m5.xlarge Instance Hour"], region=[None])
+    extract(rows)
+    match_prices(rows, catalog, PriceDefaults(region="us-east-1"))
+    assert rows.loc[0, "price_match_level"] == "assumed" and rows.loc[0, "catalog_sku_id"] == LINUX
+    assert "region=us-east-1 (request)" in rows.loc[0, "price_assumptions"]
+    assert pd.isna(rows.loc[0, "region"])                        # the line's own column stays as parsed
+
+
+class _Day:
+    """pricing's datetime module with a fixed today."""
+
+    def __init__(self, day: str):
+        import datetime as real
+        self.date = type("date", (), {"today": staticmethod(lambda: real.date.fromisoformat(day))})
+
+
+def test_a_reprice_prices_undated_lines_as_of_the_first_date(tmp_path, monkeypatch):
+    import billparse.pricing as pricing_mod
+    pipe = _pipe(tmp_path)
+    monkeypatch.setattr(pricing_mod, "dt", _Day("2026-10-27"))
+    r = pipe.parse_file(FILES / "reseller_invoice.pdf")
+    assert r["pricing"]["undated_as_of"] == "2026-10-27"
+    monkeypatch.setattr(pricing_mod, "dt", _Day("2027-03-01"))
+    again = pipe.reprice(r["sha256"])
+    assert again["pricing"]["undated_as_of"] == "2026-10-27"
+    assert any("the date of the first pricing" in w for w in again["pricing"]["warnings"])
