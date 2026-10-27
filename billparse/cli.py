@@ -15,6 +15,7 @@ import json
 import sys
 from pathlib import Path
 
+from . import headers
 from .pipeline import Pipeline, Settings
 from .settings import configure_logging, load_env
 
@@ -163,7 +164,9 @@ def _specs(pipe: Pipeline, a) -> None:
         print(json.dumps(st.get_spec(a.id, a.version), indent=1))
     elif a.action == "approve":
         s = st.get_spec(a.id)
-        print(st.save_spec(dict(s, trust="verified"))["version"])
+        saved = st.save_spec(dict(s, trust="verified"))
+        headers.learn_spec(st.engine, saved, "spec")      # a verified spec confirms its headers
+        print(saved["version"])
     elif a.action == "rollback":
         st.set_current(a.id, a.version)
         print(f"{a.id} -> v{a.version}")

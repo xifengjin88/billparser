@@ -28,6 +28,7 @@ import pandas as pd
 
 from . import agent as agent_mod
 from . import bigfile, contract, coverage, jobs
+from . import headers as headers_mod
 from . import llm as llm_mod
 from .analyze import analyze, resolve_services
 from .attributes import extract as extract_attributes
@@ -35,7 +36,7 @@ from .attributes import normalize_regions
 from .docmodel import Document, load_bytes
 from .fingerprint import fingerprint, similarity, table_headers
 from .induce import derive_spec
-from .mapper import propose, propose_all
+from .mapper import MapContext, propose, propose_all
 from .pricing import KeyCache, PriceDefaults, PriceStats, apply_discount, drop_prices, infer_discount, match_prices
 from .settings import catalog_dir, data_dir
 from .spec import Extraction, SpecError, check_spec, detect_score, run
@@ -83,6 +84,7 @@ class Attempt:
     error: str | None = None
     llm_calls: int = 0
     chosen: bool = True             # False: a spec candidate another one beat (logged, never accepted)
+    settled: dict | None = None     # the mapper's columns mapped with a score of 3.0 or more: field -> header
 
     @property
     def confidence(self) -> float:
@@ -448,11 +450,30 @@ class Pipeline:
                     out.append(dict(t, kind="document_total"))
         return out
 
+    def map_context(self) -> MapContext:
+        """What the mapper may use beyond the headers: the header dictionary and the price catalog (a catalog that
+        cannot be read gives none: the detectors of instance types then use their pattern, SKUs none)."""
+        try:
+            catalog = self.catalog()
+            catalog = catalog if catalog is not None and catalog.version else None    # loaded: a current snapshot
+        except Exception:                                       # noqa: BLE001
+            catalog = None
+        return MapContext(dictionary=headers_mod.dictionary(self.store.engine), catalog=catalog)
+
     def _mapper(self, doc, fp, headers, attempts):
-        for spec, conf in propose_all(doc):
+        # a built-in spec that recognized the file and read rows keeps it: the mapper's guess at a known provider
+        # export is never better (and a built-in result must not change with the mapper)
+        if any(a.route == "builtin" and a.ext is not None and not a.ext.rows.empty for a in attempts):
+            return
+        ctx = self.map_context()
+        for spec, conf, m in propose_all(doc, ctx):
             found = self._printed_totals(attempts)
             att = self._try("mapper", spec, doc, extra_totals=found)
             att.verdict["mapper_confidence"] = conf
+            if m is not None:
+                att.settled = m.settled
+                if att.ext is not None:
+                    att.ext.warnings.extend(m.warnings)
             yield att
 
     def _llm_spec(self, doc, fp, headers, attempts):
@@ -463,16 +484,17 @@ class Pipeline:
             return
         preview = build_preview(doc)
         examples = self._examples(fp)
+        settled = _settled(attempts)
         spec, feedback = None, None
         rounds = self.s.max_repairs
         if self.s.spec_candidates > 1 and rounds > 0:
-            best, feedback, spec = yield from self._spec_candidates(doc, preview, examples, attempts)
+            best, feedback, spec = yield from self._spec_candidates(doc, preview, examples, attempts, settled)
             if best is not None and self._accept(best):
                 return
             rounds -= 1
         for _ in range(rounds):
             try:
-                spec = llm_mod.generate_spec(self.llm, preview, examples, feedback, spec)
+                spec = llm_mod.generate_spec(self.llm, preview, examples, feedback, spec, settled=settled)
                 check_spec(spec)
             except Exception as e:                              # noqa: BLE001  bad JSON / bad spec -> repair
                 feedback = [f"Spec rejected: {e}"]
@@ -480,12 +502,13 @@ class Pipeline:
                 continue
             att = self._try("llm_spec", spec, doc, extra_totals=self._printed_totals(attempts))
             att.llm_calls = 1
+            _note_settled(att, settled)
             yield att
             if self._accept(att):
                 return
             feedback = att.verdict.get("feedback") or [att.error or "No rows extracted"]
 
-    def _spec_candidates(self, doc, preview, examples, attempts):
+    def _spec_candidates(self, doc, preview, examples, attempts, settled: dict | None = None):
         """Round 1: spec_candidates specs at once, each from another order of the examples, the later ones told to read
         the layout on their own. Every candidate is an attempt in the log; the best (accepted; else no failed critical
         check; else the fewest failed price checks; else the most confident) is the only one that can be accepted.
@@ -500,7 +523,7 @@ class Pipeline:
             before = spent() if spent else 0.0
             try:
                 out, err = llm_mod.generate_spec(self.llm, preview, _example_variant(examples, i),
-                                                 note=CANDIDATE_NOTE if i else None), None
+                                                 note=CANDIDATE_NOTE if i else None, settled=settled), None
             except Exception as e:                              # noqa: BLE001  a failed candidate is an attempt
                 out, err = None, e
             return out, err, (spent() - before) if spent else 0.0
@@ -520,6 +543,7 @@ class Pipeline:
                 continue
             att = self._try("llm_spec", spec, doc, extra_totals=self._printed_totals(attempts))
             att.llm_calls = 1
+            _note_settled(att, settled)
             atts.append(att)
         ran = sorted((a for a in atts if a.ext is not None), key=self._candidate_rank)
         best = ran[0] if ran else None
@@ -630,7 +654,7 @@ class Pipeline:
             return None
         if (best.spec.get("meta") or {}).get("kind", "cost_lines") != "cost_lines" or best.spec.get("reshape"):
             return None
-        spec, _ = propose(doc)
+        spec, _ = propose(doc, legacy=True)
         if not spec:
             return None
         try:
@@ -808,6 +832,26 @@ def build_preview(doc: Document, max_rows: int = 40, max_regions: int = 4) -> di
             bold = [i for i, row in enumerate(r.rows[:max_rows]) if row.bold]
             regions.append({"name": r.name, "kind": r.kind, "rows": rows, "bold_rows": bold})
     return {"file_type": doc.file_type, "regions": regions}
+
+
+def _settled(attempts: list[Attempt]) -> dict[str, str] | None:
+    """The columns the mapper settled (score 3.0 or more), from its most confident attempt that settled any; the LLM
+    keeps them and maps only the others."""
+    mapped = [a for a in attempts if a.route == "mapper" and a.settled]
+    return max(mapped, key=lambda a: a.confidence).settled if mapped else None
+
+
+def _note_settled(att: Attempt, settled: dict[str, str] | None) -> None:
+    """An LLM spec that changed a settled column is kept (the checks decide, as for any candidate), with a warning."""
+    if not settled or not att.spec:
+        return
+    cols = att.spec.get("columns") or {}
+    changed = [f for f, h in sorted(settled.items()) if h not in ((cols.get(f) or {}).get("from") or [])[:1]]
+    if changed:
+        warns = [f"the spec changed a settled column: {f}" for f in changed]
+        att.verdict.setdefault("warnings", []).extend(warns)
+        if att.ext is not None:
+            att.ext.warnings.extend(warns)
 
 
 def _warnings(best: Attempt | None, big: bigfile.Scan | None = None) -> list[str]:

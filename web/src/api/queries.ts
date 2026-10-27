@@ -9,6 +9,7 @@ import {
   type CostsOut,
   type DocumentItem,
   type DocumentView,
+  type HeaderEntry,
   type MappingPage,
   type ParseTask,
   type Resolution,
@@ -66,6 +67,7 @@ export const keys = {
   specs: ['specs'] as const,
   spec: (id: string) => ['specs', id] as const,
   aliases: ['aliases'] as const,
+  headers: ['headers'] as const,
 }
 
 export const useSettings = () =>
@@ -287,6 +289,29 @@ export function useAddAlias() {
   return useMutation({
     mutationFn: (a: { provider: 'aws' | 'azure' | 'gcp'; label: string; code: string }) => api.post('/aliases', a),
     onSuccess: () => qc.invalidateQueries({ queryKey: keys.aliases }),
+  })
+}
+
+// column headers the mapper learned (or must not use) for a canonical field
+export const useHeaders = () => useQuery({ queryKey: keys.headers, queryFn: () => api.get<HeaderEntry[]>('/headers') })
+export const useHeaderFields = () =>
+  useQuery({ queryKey: [...keys.headers, 'fields'], queryFn: () => api.get<{ field: string; description: string }[]>('/headers/fields') })
+
+export function useTeachHeader() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ reject, ...h }: { header: string; field: string; reject: boolean }) =>
+      api.post<HeaderEntry>(reject ? '/headers/reject' : '/headers', h),
+    onSuccess: () => qc.invalidateQueries({ queryKey: keys.headers }),
+  })
+}
+
+export function useDeleteHeader() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (h: { header_norm: string; field: string }) =>
+      api.del(`/headers/${encodeURIComponent(h.header_norm)}/${encodeURIComponent(h.field)}`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: keys.headers }),
   })
 }
 

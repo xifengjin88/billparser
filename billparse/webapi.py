@@ -23,7 +23,7 @@ from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, Upl
 from fastapi.responses import Response
 from pydantic import BaseModel, Field
 
-from . import agent, auth, bigfile, contract, highlight, jobs, worker
+from . import agent, auth, bigfile, contract, headers, highlight, jobs, worker
 from . import llm as llm_mod
 from .analyze import RESOLVER_LOCK, get_resolver
 from .pipeline import Pipeline
@@ -32,6 +32,7 @@ from .review import CHECKLIST, apply_edits, approve, charge_rows, drop_gaps
 from .schema import DOC_TYPES, KINDS, Cite, Document, Pricing, cv
 from .settings import catalog_dir, data_dir
 from .store import Store
+from .transforms import CANONICAL
 from .validate import PRICE_CHECKS
 
 router = APIRouter()
@@ -464,6 +465,22 @@ class AliasIn(BaseModel):
     provider: Literal["aws", "azure", "gcp"]
     label: str
     code: str
+
+
+class HeaderIn(BaseModel):
+    header: str                     # as printed in a file
+    field: str                      # a canonical field
+
+
+class HeaderOut(BaseModel):
+    header_norm: str
+    field: str
+    count: int
+    source: str
+    rejected: bool
+    created: float
+    updated: float
+    updated_by: str | None = None
 
 
 class CostsOut(BaseModel):
@@ -1152,6 +1169,59 @@ def add_alias(alias: AliasIn) -> dict:
         if key is None:
             raise HTTPException(400, f"{alias.code} is not a {alias.provider} code in the mapping.")
         res.add_synonym(alias.label, key, provider=alias.provider)
+    return {"ok": True}
+
+
+# ------------------------------------------------------------------ column headers (headers.py)
+def _header_field(field: str) -> str:
+    if field not in CANONICAL:
+        raise HTTPException(400, f"{field} is not a canonical field.")
+    return field
+
+
+@router.get("/headers/fields", tags=["web"])
+def header_fields() -> list[dict[str, str]]:
+    """The fields a header can be taught for (every canonical field but the derived and vague ones)."""
+    return [{"field": f, "description": str(d)} for f, d in sorted(CANONICAL.items())
+            if f not in headers.NEVER_LEARNED]
+
+
+@router.get("/headers", response_model=list[HeaderOut], tags=["web"])
+def header_entries(field: str | None = None, source: str | None = None, rejected: bool | None = None,
+                   store: Store = Depends(get_store)) -> list[dict]:
+    """The learned column headers: confirmed by review, a verified spec or an admin, or rejected for a field."""
+    return headers.dictionary(store.engine).entries(field, source, rejected)
+
+
+@router.post("/headers", response_model=HeaderOut, tags=["web"])
+def add_header(h: HeaderIn, request: Request, store: Store = Depends(get_store)) -> dict:
+    """An admin teaches a header: it maps to this field in the next parses (score 3.5), and stops being rejected."""
+    d = headers.dictionary(store.engine)
+    if not d.learn(h.header, _header_field(h.field), "admin", auth.current_user(request)):
+        raise HTTPException(400, "This header or field is never learned (one or two characters, a number, or the "
+                                 "fields coverage and provider).")
+    return _header_row(d, h)
+
+
+@router.post("/headers/reject", response_model=HeaderOut, tags=["web"])
+def reject_header(h: HeaderIn, request: Request, store: Store = Depends(get_store)) -> dict:
+    """This header must not map to this field: no rule, dictionary entry or detector maps it there any more."""
+    d = headers.dictionary(store.engine)
+    if not d.reject(h.header, _header_field(h.field), auth.current_user(request)):
+        raise HTTPException(400, "An empty header cannot be rejected.")
+    return _header_row(d, h)
+
+
+def _header_row(d, h: HeaderIn) -> dict:
+    key = headers.normalize(h.header)
+    return next(e for e in d.entries(h.field) if e["header_norm"] == key)
+
+
+@router.delete("/headers/{header_norm}/{field}", tags=["web"])
+def delete_header(header_norm: str, field: str, store: Store = Depends(get_store)) -> dict:
+    """Forget a learned header or a rejection."""
+    if not headers.dictionary(store.engine).remove(header_norm, field):
+        raise HTTPException(404, "No such entry.")
     return {"ok": True}
 
 

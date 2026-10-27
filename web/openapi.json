@@ -1499,6 +1499,257 @@
     }
    }
   },
+  "/headers/fields": {
+   "get": {
+    "tags": [
+     "web"
+    ],
+    "summary": "Header Fields",
+    "description": "The fields a header can be taught for (every canonical field but the derived and vague ones).",
+    "operationId": "header_fields_headers_fields_get",
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "items": {
+          "additionalProperties": {
+           "type": "string"
+          },
+          "type": "object"
+         },
+         "type": "array",
+         "title": "Response Header Fields Headers Fields Get"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/headers": {
+   "get": {
+    "tags": [
+     "web"
+    ],
+    "summary": "Header Entries",
+    "description": "The learned column headers: confirmed by review, a verified spec or an admin, or rejected for a field.",
+    "operationId": "header_entries_headers_get",
+    "parameters": [
+     {
+      "name": "field",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Field"
+      }
+     },
+     {
+      "name": "source",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Source"
+      }
+     },
+     {
+      "name": "rejected",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "boolean"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Rejected"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "array",
+         "items": {
+          "$ref": "#/components/schemas/HeaderOut"
+         },
+         "title": "Response Header Entries Headers Get"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   },
+   "post": {
+    "tags": [
+     "web"
+    ],
+    "summary": "Add Header",
+    "description": "An admin teaches a header: it maps to this field in the next parses (score 3.5), and stops being rejected.",
+    "operationId": "add_header_headers_post",
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/HeaderIn"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HeaderOut"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/headers/reject": {
+   "post": {
+    "tags": [
+     "web"
+    ],
+    "summary": "Reject Header",
+    "description": "This header must not map to this field: no rule, dictionary entry or detector maps it there any more.",
+    "operationId": "reject_header_headers_reject_post",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/HeaderIn"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HeaderOut"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/headers/{header_norm}/{field}": {
+   "delete": {
+    "tags": [
+     "web"
+    ],
+    "summary": "Delete Header",
+    "description": "Forget a learned header or a rejection.",
+    "operationId": "delete_header_headers__header_norm___field__delete",
+    "parameters": [
+     {
+      "name": "header_norm",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "title": "Header Norm"
+      }
+     },
+     {
+      "name": "field",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "title": "Field"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "additionalProperties": true,
+         "title": "Response Delete Header Headers  Header Norm   Field  Delete"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
   "/aliases/{provider}/{label_norm}": {
    "delete": {
     "tags": [
@@ -4347,6 +4598,78 @@
     },
     "type": "object",
     "title": "HeaderEdit"
+   },
+   "HeaderIn": {
+    "properties": {
+     "header": {
+      "type": "string",
+      "title": "Header"
+     },
+     "field": {
+      "type": "string",
+      "title": "Field"
+     }
+    },
+    "type": "object",
+    "required": [
+     "header",
+     "field"
+    ],
+    "title": "HeaderIn"
+   },
+   "HeaderOut": {
+    "properties": {
+     "header_norm": {
+      "type": "string",
+      "title": "Header Norm"
+     },
+     "field": {
+      "type": "string",
+      "title": "Field"
+     },
+     "count": {
+      "type": "integer",
+      "title": "Count"
+     },
+     "source": {
+      "type": "string",
+      "title": "Source"
+     },
+     "rejected": {
+      "type": "boolean",
+      "title": "Rejected"
+     },
+     "created": {
+      "type": "number",
+      "title": "Created"
+     },
+     "updated": {
+      "type": "number",
+      "title": "Updated"
+     },
+     "updated_by": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Updated By"
+     }
+    },
+    "type": "object",
+    "required": [
+     "header_norm",
+     "field",
+     "count",
+     "source",
+     "rejected",
+     "created",
+     "updated"
+    ],
+    "title": "HeaderOut"
    },
    "InferredDiscount": {
     "properties": {

@@ -36,7 +36,7 @@ from pydantic import BaseModel  # noqa: E402
 from sqlalchemy import text  # noqa: E402
 from starlette.middleware.sessions import SessionMiddleware  # noqa: E402
 
-from . import agent, auth, contract, jobs, webapi, worker  # noqa: E402
+from . import agent, auth, contract, headers, jobs, webapi, worker  # noqa: E402
 from .docmodel import load_bytes  # noqa: E402
 from .export import to_schema  # noqa: E402
 from .learn import metrics  # noqa: E402
@@ -317,6 +317,8 @@ def set_spec_status(spec_id: str, change: StatusChange, store: Store = Depends(g
         store.set_builtin_status(spec_id, change.status)
         return {"id": spec_id, "version": 1, "status": change.status}
     saved = store.save_spec(dict(spec, trust=TRUST_OF_STATUS[change.status]))
+    if saved.get("trust") == "verified" and spec.get("trust") != "verified":
+        headers.learn_spec(store.engine, saved, "spec")    # a verified spec confirms its headers
     return {"id": spec_id, "version": saved["version"], "status": change.status}
 
 

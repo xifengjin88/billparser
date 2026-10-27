@@ -166,6 +166,20 @@ class JobRow(SQLModel, table=True):
     parent_id: int | None = Field(default=None, sa_type=sa.BigInteger().with_variant(sa.Integer, "sqlite"))
 
 
+class HeaderSynonymRow(SQLModel, table=True):
+    """A column header learned for a canonical field (headers.py): confirmed by review, a verified spec or an admin;
+    rejected: the header must not map to that field. In the database, not a file: several workers learn at once."""
+    __tablename__: ClassVar[str] = "header_synonym"
+    header_norm: str = Field(primary_key=True)        # norm_h of the header, camelCase split
+    field: str = Field(primary_key=True)              # a canonical field (transforms.CANONICAL)
+    count: int = 1                                    # times confirmed
+    source: str                                       # review | spec | admin (the latest)
+    rejected: bool = False
+    created: float
+    updated: float = Field(index=True)
+    updated_by: str | None = None
+
+
 class AppUserRow(SQLModel, table=True):
     """A person admitted to the web app: a Google account of the allowed domain that gave a valid invite code once."""
     __tablename__: ClassVar[str] = "app_users"

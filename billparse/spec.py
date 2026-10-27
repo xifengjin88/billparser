@@ -407,7 +407,8 @@ def _keep_unmapped(raw: pd.DataFrame, out: pd.DataFrame, used: set, guess: bool 
     elif plan is not None:
         chosen = {f: c for f, c in plan.items() if c in raw.columns}
     else:
-        chosen, _, _ = map_columns({c: raw[c].head(200).tolist() for c in left})
+        # the rules of before task 10 (legacy): a built-in or learned spec's result never changes with the mapper
+        chosen, _, _ = map_columns({c: raw[c].head(200).tolist() for c in left}, legacy=True)
     taken = _take(raw, out, chosen)
     left = [c for c in left if c not in taken.values()]
     if not left or not extra:

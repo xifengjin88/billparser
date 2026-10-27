@@ -1,0 +1,187 @@
+{
+ "_about": "Column headers per canonical field, as printed, by language (headers.py). Normalized when loaded: case, accents and punctuation do not matter. A seed hit scores 3.0; a header that two fields claim is ignored. A wrong entry maps a column wrong in every file: add only headers that mean this field and nothing else.",
+ "billed_cost": {
+  "en": ["Amount (USD)", "Amount (EUR)", "Ext. Price", "Extended Price", "Cost (Net)", "Net Cost", "Line Amount", "Charge Amount", "Billed Amount"],
+  "de": ["Betrag", "Kosten", "Nettobetrag", "Betrag netto", "Gesamtkosten", "Summe"],
+  "fr": ["Montant", "Montant HT", "Montant total", "Coût", "Coût total", "Total HT"],
+  "es": ["Importe", "Importe total", "Coste", "Costo", "Monto"],
+  "pt": ["Valor", "Valor total", "Custo", "Montante"],
+  "it": ["Importo", "Importo totale", "Costo", "Totale"],
+  "nl": ["Bedrag", "Kosten", "Totaalbedrag", "Bedrag excl. btw"],
+  "ja": ["金額", "料金", "合計金額", "費用", "請求額"]
+ },
+ "quantity": {
+  "en": ["Usage Amount", "Billed Quantity"],
+  "de": ["Menge", "Anzahl", "Verbrauchsmenge"],
+  "fr": ["Quantité", "Qté"],
+  "es": ["Cantidad"],
+  "pt": ["Quantidade", "Qtd"],
+  "it": ["Quantità"],
+  "nl": ["Aantal", "Hoeveelheid"],
+  "ja": ["数量", "使用量"]
+ },
+ "unit": {
+  "de": ["Einheit", "Mengeneinheit"],
+  "fr": ["Unité", "Unité de mesure"],
+  "es": ["Unidad", "Unidad de medida"],
+  "pt": ["Unidade", "Unidade de medida"],
+  "it": ["Unità", "Unità di misura"],
+  "nl": ["Eenheid"],
+  "ja": ["単位"]
+ },
+ "unit_price": {
+  "de": ["Einzelpreis", "Preis pro Einheit", "Stückpreis"],
+  "fr": ["Prix unitaire"],
+  "es": ["Precio unitario"],
+  "pt": ["Preço unitário"],
+  "it": ["Prezzo unitario"],
+  "nl": ["Prijs per eenheid", "Eenheidsprijs", "Stukprijs"],
+  "ja": ["単価"]
+ },
+ "list_unit_price": {
+  "de": ["Listenpreis"],
+  "fr": ["Prix catalogue", "Prix public"],
+  "es": ["Precio de lista", "Precio de catálogo"],
+  "pt": ["Preço de lista", "Preço de tabela"],
+  "it": ["Prezzo di listino"],
+  "nl": ["Lijstprijs", "Catalogusprijs"],
+  "ja": ["定価", "リスト価格"]
+ },
+ "list_cost": {
+  "en": ["On-Demand Equivalent Cost", "Pay-As-You-Go Cost", "PAYG Cost"],
+  "de": ["Kosten zu Listenpreisen"],
+  "fr": ["Coût au prix catalogue"],
+  "es": ["Costo de lista", "Coste de lista"],
+  "pt": ["Custo de lista"],
+  "it": ["Costo di listino"],
+  "nl": ["Kosten tegen lijstprijs"]
+ },
+ "effective_cost": {
+  "de": ["Amortisierte Kosten", "Effektive Kosten"],
+  "fr": ["Coût amorti", "Coût effectif"],
+  "es": ["Costo amortizado", "Coste amortizado", "Costo efectivo"],
+  "pt": ["Custo amortizado", "Custo efetivo"],
+  "it": ["Costo ammortizzato", "Costo effettivo"],
+  "nl": ["Geamortiseerde kosten", "Effectieve kosten"],
+  "ja": ["償却コスト", "実効コスト"]
+ },
+ "service_raw": {
+  "de": ["Leistung", "Dienst", "Dienstname", "Produkt"],
+  "fr": ["Nom du service", "Produit"],
+  "es": ["Servicio", "Nombre del servicio", "Producto"],
+  "pt": ["Serviço", "Nome do serviço", "Produto"],
+  "it": ["Servizio", "Nome servizio", "Prodotto"],
+  "nl": ["Dienst", "Product"],
+  "ja": ["サービス", "サービス名", "製品"]
+ },
+ "description": {
+  "de": ["Beschreibung", "Bezeichnung"],
+  "fr": ["Désignation", "Libellé"],
+  "es": ["Descripción", "Concepto", "Detalle"],
+  "pt": ["Descrição", "Detalhe"],
+  "it": ["Descrizione", "Dettaglio"],
+  "nl": ["Omschrijving", "Beschrijving"],
+  "ja": ["説明", "内容", "明細"]
+ },
+ "region": {
+  "de": ["Standort"],
+  "fr": ["Région", "Emplacement"],
+  "es": ["Región", "Ubicación"],
+  "pt": ["Região", "Localização"],
+  "it": ["Regione"],
+  "nl": ["Regio", "Locatie"],
+  "ja": ["リージョン", "地域"]
+ },
+ "account_id": {
+  "en": ["Linked Account", "Payer Account Id"],
+  "de": ["Konto-ID", "Abonnement-ID"],
+  "fr": ["ID de compte", "ID d'abonnement"],
+  "es": ["ID de cuenta", "ID de suscripción"],
+  "pt": ["ID da conta", "ID da assinatura"],
+  "it": ["ID account", "ID abbonamento", "ID sottoscrizione"],
+  "nl": ["Account-ID", "Abonnements-ID"],
+  "ja": ["アカウントID", "サブスクリプションID"]
+ },
+ "account_name": {
+  "de": ["Kontoname", "Abonnementname"],
+  "fr": ["Nom du compte", "Nom de l'abonnement"],
+  "es": ["Nombre de cuenta", "Nombre de la suscripción"],
+  "pt": ["Nome da conta", "Nome da assinatura"],
+  "it": ["Nome account", "Nome abbonamento"],
+  "nl": ["Accountnaam", "Abonnementsnaam"],
+  "ja": ["アカウント名", "サブスクリプション名"]
+ },
+ "currency": {
+  "de": ["Währung"],
+  "fr": ["Devise", "Monnaie"],
+  "es": ["Moneda", "Divisa"],
+  "pt": ["Moeda"],
+  "it": ["Valuta"],
+  "nl": ["Valuta", "Munteenheid"],
+  "ja": ["通貨"]
+ },
+ "charge_start": {
+  "de": ["Datum", "Leistungsdatum", "Startdatum", "Von"],
+  "fr": ["Date de début", "Période"],
+  "es": ["Fecha", "Fecha de inicio", "Desde", "Periodo"],
+  "pt": ["Data", "Data de início", "Período"],
+  "it": ["Data", "Data inizio", "Data di inizio", "Periodo"],
+  "nl": ["Datum", "Begindatum", "Periode"],
+  "ja": ["日付", "開始日", "利用日", "期間"]
+ },
+ "charge_end": {
+  "de": ["Enddatum", "Bis"],
+  "fr": ["Date de fin"],
+  "es": ["Fecha de fin", "Fecha final", "Hasta"],
+  "pt": ["Data de término", "Data final"],
+  "it": ["Data fine", "Data di fine"],
+  "nl": ["Einddatum"],
+  "ja": ["終了日"]
+ },
+ "tax": {
+  "de": ["MwSt", "MwSt.", "Umsatzsteuer", "USt", "Steuer"],
+  "fr": ["TVA", "Taxe", "Taxes"],
+  "es": ["IVA", "Impuesto", "Impuestos"],
+  "pt": ["Imposto", "Impostos"],
+  "it": ["Imposta"],
+  "nl": ["BTW", "Btw-bedrag", "Belasting"],
+  "ja": ["消費税", "税額"]
+ },
+ "invoice_id": {
+  "en": ["Bill ID", "Bill Number"],
+  "de": ["Rechnungsnummer", "Rechnungs-Nr.", "Rechnungs-ID"],
+  "fr": ["Numéro de facture", "N° de facture", "ID de facture"],
+  "es": ["Número de factura", "Nº de factura", "ID de factura"],
+  "pt": ["Número da fatura", "Nº da fatura", "ID da fatura"],
+  "it": ["Numero fattura", "N. fattura", "ID fattura"],
+  "nl": ["Factuurnummer", "Factuur-ID"],
+  "ja": ["請求書番号", "請求書ID"]
+ },
+ "resource_id": {
+  "de": ["Ressourcen-ID", "Ressource"],
+  "fr": ["ID de ressource", "Ressource"],
+  "es": ["ID de recurso", "Recurso"],
+  "pt": ["ID do recurso", "Recurso"],
+  "it": ["ID risorsa", "Risorsa"],
+  "nl": ["Resource-ID"],
+  "ja": ["リソースID", "リソース"]
+ },
+ "instance_type": {
+  "de": ["Instanztyp", "VM-Größe", "Maschinentyp"],
+  "fr": ["Type d'instance", "Taille de la VM", "Type de machine"],
+  "es": ["Tipo de instancia", "Tamaño de VM", "Tipo de máquina"],
+  "pt": ["Tipo de instância", "Tamanho da VM", "Tipo de máquina"],
+  "it": ["Tipo di istanza", "Dimensione VM", "Tipo di macchina"],
+  "nl": ["Instantietype", "VM-grootte", "Machinetype"],
+  "ja": ["インスタンスタイプ", "VMサイズ", "マシンタイプ"]
+ },
+ "credits": {
+  "de": ["Gutschrift", "Gutschriften"],
+  "fr": ["Crédit", "Crédits", "Avoir"],
+  "es": ["Crédito", "Créditos"],
+  "pt": ["Crédito", "Créditos"],
+  "it": ["Credito", "Crediti"],
+  "nl": ["Tegoed"],
+  "ja": ["クレジット"]
+ }
+}

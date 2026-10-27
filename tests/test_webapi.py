@@ -12,7 +12,7 @@ from fastapi.testclient import TestClient
 
 import billparse.analyze as analyze_mod
 import billparse.api as api
-from billparse import webapi
+from billparse import headers, webapi
 from billparse.pipeline import Pipeline, Settings
 from billparse.schema import SCHEMA_VERSION
 
@@ -118,7 +118,8 @@ def test_review_preview_and_approve(client):
     assert client.get(f"/documents/{sha}/view").json()["status"] == "approved"
 
 
-def test_review_queue_and_delete(client):
+def test_review_queue_and_delete(client, monkeypatch):
+    monkeypatch.setattr(headers, "load_seed", lambda path=None: {})     # German headers the mapper cannot read
     sha = _parse(client, "german_invoice.xlsx")["sha256"]
     queue = client.get("/review/queue").json()
     assert [d["sha256"] for d in queue] == [sha] and queue[0]["status"] == "needs_review"
