@@ -17,7 +17,21 @@ import pandas as pd
 
 from .docmodel import Document as FileDoc
 from .docmodel import Region
-from .schema import Charge, Cite, Commitment, Confidence, Context, Document, Gap, Section, StatedFact, StatedTotal, cv
+from .pricing import flagged, recompute
+from .schema import (
+    Charge,
+    Cite,
+    Commitment,
+    Confidence,
+    Context,
+    Document,
+    Gap,
+    Pricing,
+    Section,
+    StatedFact,
+    StatedTotal,
+    cv,
+)
 from .transforms import parse_number
 
 MAX_CHARGES = int(os.environ.get("CONTRACT_MAX_CHARGES", "50000"))  # more lines are rolled up (see _rollup)
@@ -57,8 +71,11 @@ ROLLUP_KEYS = ["service_code", "service_name", "service_raw", "region", "account
                "instance_type", "operating_system", "database_engine", "deployment_option", "usage_type", "unit",
                "commitment_id", "currency", "provider", "coverage", "line_type_raw", "sku_id", "sku_price_id", "meter_id",
                "operation", "tenancy", "license_model", "pre_installed_sw", "pricing_term", "purchase_option",
-               "commitment_status", "commitment_term"]   # never resource_id: one per line. commitment_status: unused apart (analysis)
+               "commitment_status", "commitment_term",
+               "price_match_level", "price_assumptions"]   # never resource_id: one per line. commitment_status: unused apart (analysis)
 UNIT_PRICES = ("list_unit_price", "contracted_unit_price")    # kept on a rolled line when all its lines agree
+SHARED_TEXT = ("price_missing", "catalog_sku_id")             # the same: text kept when all the lines agree
+PRICE_FLAGS = ("_list_cost_inferred", "_contracted_cost_inferred", "_list_unit_price_inferred")   # any line
 
 
 def month_of(dates: pd.Series) -> pd.Series:
@@ -76,6 +93,20 @@ def shared_value(df: pd.DataFrame, by, col: str) -> pd.Series:
     g = pd.DataFrame({"v": v, "n": lines.where(v.notna(), 0), "all": lines}).groupby(by, sort=False, dropna=False)
     lo, hi, n, total = g["v"].min(), g["v"].max(), g["n"].sum(), g["all"].sum()
     return lo.where((lo == hi) & (n == total))
+
+
+def shared_text(df: pd.DataFrame, by, col: str) -> pd.Series:
+    """As shared_value, for text."""
+    v = df[col].astype(object).where(df[col].notna() & df[col].astype(str).ne(""), None)
+    lines = df["_lines"] if "_lines" in df else pd.Series(1, index=df.index)
+    g = pd.DataFrame({"v": v, "n": lines.where(v.notna(), 0), "all": lines}).groupby(by, sort=False, dropna=False)
+    first, kinds, n, total = g["v"].first(), g["v"].nunique(), g["n"].sum(), g["all"].sum()
+    return first.where((kinds == 1) & (n == total))
+
+
+def any_flag(df: pd.DataFrame, by, col: str) -> pd.Series:
+    """Per group: whether any line has the flag."""
+    return pd.Series(flagged(df[col]).to_numpy(), index=df.index).groupby(by, sort=False, dropna=False).max()
 
 
 # ---------------------------------------------------------------- cites
@@ -184,10 +215,15 @@ def build(summary: dict, rows: pd.DataFrame | None, file_doc: FileDoc | None) ->
     if doc.billing_period_start is None:              # a printed billing period ("Billing period: Apr 1 - Apr 30, 2025")
         _period(doc, summary, loc)
     _currency(doc, summary, loc)
+    if summary.get("pricing"):
+        doc.pricing = Pricing.model_validate(summary["pricing"])
     doc.commitments = _commitments(doc.charges)
     usage = [c for c in doc.charges if c.kind.value in USAGE_KINDS]
-    # a cost type the file gives for every usage line; a partial one would read as a total a consumer can sum
-    doc.cost_types = [t for t, f in COST_TYPES.items() if usage and all(getattr(c, f) is not None for c in usage)]
+    # a cost type the file gives for every usage line; a partial one would read as a total a consumer can sum. A cost
+    # pricing filled from the catalog is not the file's
+    doc.cost_types = [t for t, f in COST_TYPES.items()
+                      if usage and all(getattr(c, f) is not None and getattr(c, f).source != "price_catalog"
+                                       for c in usage)]
     basis = (summary.get("header_fields") or {}).get("cost_basis")
     doc.cost_basis = basis if basis in ("actual", "amortized", "unknown") else None
     if kind == "cost_lines":                           # an inventory or a price sheet prints counts, not money
@@ -259,11 +295,16 @@ def _rollup(rows: pd.DataFrame) -> pd.DataFrame:
     out = df.groupby(keys, dropna=False, sort=False).agg(agg)
     for c in [c for c in UNIT_PRICES if c in df]:
         out[c] = shared_value(df, [df[k] for k in keys], c)
+    for c in [c for c in SHARED_TEXT if c in df]:
+        out[c] = shared_text(df, [df[k] for k in keys], c)
+    for c in [c for c in PRICE_FLAGS if c in df]:
+        out[c] = any_flag(df, [df[k] for k in keys], c)
     if "_lines" not in df:
         out["_lines"] = df.groupby(keys, dropna=False, sort=False).size()
     out = out.reset_index().drop(columns=["_month"], errors="ignore")
     for k in [k for k in keys if k != "_month"]:
         out[k] = out[k].replace("", None)
+    recompute(out)                                      # implied unit price and price ratio of the sums
     return out.sort_values("billed_cost", key=lambda s: -s.abs()).reset_index(drop=True)
 
 
@@ -338,6 +379,7 @@ def _charge(i: int, r: dict, loc: Locator, sections: dict[str, str]) -> Charge:
         c.period_end = cv(d, cite)
     if "sku_id" not in r and (p := _str(r.get("product_code"))):    # no SKU column: the product id, as before
         c.sku_id = cv(p, cite)
+    _prices(c, r, cite)
     attrs: dict = {}
     # effective_cost and list_cost: deprecated in 1.4: use the typed fields
     for k in ("service_raw", "category", "resolved_by", "charge_type", "account_name", "region_name", "effective_cost",
@@ -354,6 +396,21 @@ def _charge(i: int, r: dict, loc: Locator, sections: dict[str, str]) -> Charge:
         attrs["under"] = str(r["_path"])
     c.attributes = attrs
     return c
+
+
+def _prices(c: Charge, r: dict, cite: Cite) -> None:
+    """The price match of a line (pricing.py): inferred, source price_catalog; the list cost, list unit price and
+    contracted cost pricing filled are inferred too (a printed one stays printed)."""
+    for f in ("price_match_level", "price_missing", "price_assumptions", "catalog_sku_id"):
+        if (v := _str(r.get(f))):
+            setattr(c, f, cv(v, cite, "inferred", None, "price_catalog"))
+    for f in ("implied_unit_price", "price_ratio"):
+        if (d := _dec(r.get(f))) is not None:
+            setattr(c, f, cv(round(d, 6), cite, "inferred", None, "price_catalog"))
+    for flag, f in (("_list_cost_inferred", "list_cost"), ("_contracted_cost_inferred", "contracted_cost"),
+                    ("_list_unit_price_inferred", "list_unit_price")):
+        if getattr(c, f) is not None and flagged(pd.Series([r.get(flag)])).iloc[0]:
+            setattr(c, f, cv(getattr(c, f).value, cite, "inferred", None, "price_catalog"))
 
 
 def _cited(value, cite: Cite, how):
@@ -385,24 +442,28 @@ def _currency(doc: Document, summary: dict, loc: Locator) -> None:
                                            amount=cv(_dec(x.get("other")), cite), cite=cite))  # type: ignore[arg-type]
 
 
-def _period(doc: Document, summary: dict, loc: Locator) -> None:
-    """The billing period from a header field that names a period and prints a date range."""
-    srcs = summary.get("header_field_src") or {}
-    for name, value in (summary.get("header_fields") or {}).items():
+def printed_period(header_fields: dict) -> tuple[str, str, str] | None:
+    """(start, end, field name) of a header field that names a period and prints a date range, or None."""
+    for name, value in header_fields.items():
         m = DATE_SPAN.match(str(value)) if PERIOD_NAME.search(str(name)) else None
         if not m:
             continue
         if m["c"]:
-            start, end = m["c"].replace("/", "-"), m["d"].replace("/", "-")
-        else:
-            start = pd.to_datetime(f"{m['a']} {m['ya'] or m['yb']}", errors="coerce")
-            end = pd.to_datetime(f"{m['b']} {m['yb']}", errors="coerce")
-            if pd.isna(start) or pd.isna(end):
-                continue
-            start, end = start.strftime("%Y-%m-%d"), end.strftime("%Y-%m-%d")
-        cite = loc.cite(srcs.get(name), str(value))
+            return m["c"].replace("/", "-"), m["d"].replace("/", "-"), name
+        start = pd.to_datetime(f"{m['a']} {m['ya'] or m['yb']}", errors="coerce")
+        end = pd.to_datetime(f"{m['b']} {m['yb']}", errors="coerce")
+        if not (pd.isna(start) or pd.isna(end)):
+            return start.strftime("%Y-%m-%d"), end.strftime("%Y-%m-%d"), name
+    return None
+
+
+def _period(doc: Document, summary: dict, loc: Locator) -> None:
+    """The billing period from a header field that names a period and prints a date range."""
+    fields = summary.get("header_fields") or {}
+    if (found := printed_period(fields)):
+        start, end, name = found
+        cite = loc.cite((summary.get("header_field_src") or {}).get(name), str(fields[name]))
         doc.billing_period_start, doc.billing_period_end = cv(start, cite), cv(end, cite)
-        return
 
 
 def _region(r: dict, loc: Locator, cite: Cite):

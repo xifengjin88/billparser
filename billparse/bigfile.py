@@ -40,8 +40,10 @@ from . import contract, coverage
 from .analyze import resolve_service_sums
 from .attributes import extract as extract_attributes
 from .attributes import normalize_regions
-from .contract import shared_value
+from .contract import any_flag, shared_text, shared_value
 from .docmodel import HEADER_SCAN_ROWS, TEXT_EXT, Document, Region, _frame, _tabular, _unique_headers, detect_header_row
+from .pricing import FLAGS as PRICE_FLAGS
+from .pricing import PRICE_COLUMNS, KeyCache, PriceDefaults, PriceStats, match_prices, recompute
 from .spec import HOW, needed_columns, run
 from .transforms import CANONICAL, DATES, NUMERIC
 from .validate import RowStats, clean_rows
@@ -431,7 +433,8 @@ def stored_doc(store, sha: str) -> Document | None:
 # ---------------------------------------------------------------- the scan
 # columns the steps add to a spec's canonical fields (spec._keep_unmapped, attributes, coverage, resolve_services)
 STEP_COLUMNS = ["service", "service_name", "service_code", "category", "resolved_by", "region_name", "price_per",
-                "commitment_status", "meter_name", HOW + "coverage", "_extra", "_src", "_group"]
+                "commitment_status", "meter_name", HOW + "coverage", "_extra", "_src", "_group", *PRICE_COLUMNS]
+PRICE_NUMBERS = {"implied_unit_price", "price_ratio", *PRICE_FLAGS}     # Parquet numbers (a flag: 1.0 or 0.0)
 ROLL_KEYS = [*contract.ROLLUP_KEYS, "service", "category", "_month"]
 HOW_RANK = contract.HOW_RANK                  # a rolled-up line keeps its lines' least certain way
 
@@ -451,6 +454,7 @@ class Scan:
     skipped: int = 0                    # CSV rows with a different number of fields than the header
     path: Path | None = None            # the rows, as Parquet
     bases: set = field(default_factory=set)
+    pricing: PriceStats | None = None   # the price match of every chunk, merged (None: not priced)
 
     @property
     def rows(self) -> int:
@@ -471,13 +475,14 @@ class Scan:
 
 def scan(spec: dict, info: FileInfo, sample: Document, catalog_dir: Path | None = None, out: Path | None = None,
          full: bool = True, on_progress: Callable[[str], None] | None = None, unmapped: dict | None = None,
-         cost_basis: str | None = None) -> Scan:
+         cost_basis: str | None = None, prices=None, price_defaults: PriceDefaults | None = None) -> Scan:
     """Read the whole file in chunks with the spec. full: the steps of a parse (attributes, coverage, services, the
     rows to `out` as Parquet, the rolled-up lines); else only the spec, the cleaning and the statistics (the
     regression gate). unmapped: the fields guessed on the sample for columns the spec does not name, used for every
     chunk (else each chunk would guess from its own first rows). Raises TooLarge when the file grows past
     MAX_UNCOMPRESSED_GB. cost_basis: the export's basis told from the sample (Azure actual or amortized), for chunks
-    whose own rows cannot tell it."""
+    whose own rows cannot tell it. prices: the price catalog (pricing.py): each chunk's usage lines are priced, the
+    keys looked up once for the file (a KeyCache)."""
     spec = dict(spec, _no_extra=True, _cost_basis=cost_basis,
                 **({"_unmapped": unmapped} if unmapped is not None else {}))
     pa.set_cpu_count(max(1, int(setting("LARGE_IO_THREADS", 2))))
@@ -493,6 +498,7 @@ def scan(spec: dict, info: FileInfo, sample: Document, catalog_dir: Path | None 
     schema: pa.Schema | None = None
     pending: list[pd.DataFrame] = []
     kind = (spec.get("meta") or {}).get("kind", "cost_lines")
+    cache = KeyCache()
     base = rss()
     try:
         for chunk in src.frames(lambda: size["rows"], columns):
@@ -511,6 +517,12 @@ def scan(spec: dict, info: FileInfo, sample: Document, catalog_dir: Path | None 
                     r, u = resolve_service_sums(rows, catalog_dir)
                     res.resolved += r
                     res.usage += u
+                if kind == "cost_lines" and prices is not None:
+                    stats = match_prices(rows, prices, price_defaults, cache)
+                    if res.pricing is None:
+                        res.pricing = stats
+                    else:
+                        res.pricing.merge(stats)
             res.stats.add(rows)
             _merge_meta(res, ext)
             if full and not rows.empty:
@@ -596,7 +608,7 @@ def _schema(rows: pd.DataFrame, spec: dict) -> pa.Schema:
     out = []
     for c in names:
         s = rows[c] if c in rows else None
-        if c in NUMERIC:
+        if c in NUMERIC or c in PRICE_NUMBERS:
             out.append(pa.field(c, pa.float64()))
         elif c in DATES or (s is not None and pd.api.types.is_datetime64_any_dtype(s)):
             out.append(pa.field(c, pa.timestamp("ns")))
@@ -662,13 +674,19 @@ def roll(df: pd.DataFrame) -> pd.DataFrame:
     prices = [c for c in contract.UNIT_PRICES if c in df]
     if prices:
         parts.append(pd.DataFrame({c: shared_value(df, [df[k] for k in keys], c) for c in prices}))
+    texts = [c for c in contract.SHARED_TEXT if c in df]
+    if texts:
+        parts.append(pd.DataFrame({c: shared_text(df, [df[k] for k in keys], c) for c in texts}))
+    flags = [c for c in PRICE_FLAGS if c in df]
+    if flags:
+        parts.append(pd.DataFrame({c: any_flag(df, [df[k] for k in keys], c) for c in flags}))
     hows = [c for c in df.columns if str(c).startswith(HOW)]
     if hows:
         rank = pd.DataFrame({c: df[c].map(HOW_RANK) for c in hows}, index=df.index)
         top = rank.groupby([df[k] for k in keys], sort=False, dropna=False).max()
         names = {v: k for k, v in HOW_RANK.items()}
         parts.append(top.apply(lambda s: s.map(names)))
-    return pd.concat(parts, axis=1).reset_index()
+    return recompute(pd.concat(parts, axis=1).reset_index())
 
 
 def _cap(rolled: pd.DataFrame, res: Scan, factor: int) -> pd.DataFrame:
@@ -687,6 +705,42 @@ def _cap(rolled: pd.DataFrame, res: Scan, factor: int) -> pd.DataFrame:
     res.note(f"More than {limit:,} kinds of lines: the smaller ones are one line per service, charge type, coverage "
              "and month (description 'Other lines of this service')")
     return pd.concat([keep, roll(rest)], ignore_index=True)
+
+
+def reprice(src: Path, out: Path, prices, price_defaults: PriceDefaults | None = None,
+            period_start: str | None = None, batch_rows: int | None = None) -> Scan:
+    """A large file's stored rows (Parquet) priced again with the current catalog, never parsed again: read in
+    batches, the values pricing filled before dropped (pricing.drop_prices), priced with one KeyCache, written to
+    `out`, and rolled up as the scan does. The Scan has the rolled-up lines and the merged price statistics."""
+    from .pricing import drop_prices
+    res = Scan(path=out)
+    cache = KeyCache()
+    writer: pq.ParquetWriter | None = None
+    schema: pa.Schema | None = None
+    pending: list[pd.DataFrame] = []
+    try:
+        for batch in pq.ParquetFile(str(src)).iter_batches(batch_size=batch_rows or int(setting("CHUNK_ROWS", 250_000))):
+            rows = drop_prices(batch.to_pandas())
+            stats = match_prices(rows, prices, price_defaults, cache, period_start)
+            if res.pricing is None:
+                res.pricing = stats
+            else:
+                res.pricing.merge(stats)
+            res.stats.add(rows)
+            if writer is None:
+                schema = _schema(rows, {})
+                writer = pq.ParquetWriter(str(out), schema, compression="snappy")
+            writer.write_table(_table(rows, schema, res))
+            pending.append(roll(rows))
+            if len(pending) >= 10:
+                pending = [_cap(roll(pd.concat(pending, ignore_index=True)), res, 4)]
+            res.chunks += 1
+    finally:
+        if writer is not None:
+            writer.close()
+    if pending:
+        res.rolled = finish_rolled(_cap(roll(pd.concat(pending, ignore_index=True)), res, 1))
+    return res
 
 
 def finish_rolled(rolled: pd.DataFrame) -> pd.DataFrame:

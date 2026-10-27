@@ -37,7 +37,7 @@ def eligible(tmp_path: Path, name: str, store: str = "store") -> dict:
 
 
 def test_schema_version():
-    assert SCHEMA_VERSION == "1.7"            # 1.6: the analysis change; 1.7: pre_installed_sw
+    assert SCHEMA_VERSION == "1.8"            # 1.6: the analysis change; 1.7: pre_installed_sw; 1.8: pricing
 
 
 def test_covered_usage_is_under_its_commitment(tmp_path):
@@ -123,8 +123,7 @@ def test_no_savings_or_discount_estimate(tmp_path, name):
             continue
         assert "discount" not in k.lower() and "saving" not in k.lower(), path
         assert "assume" not in k.lower() and "indicative" not in k.lower(), path
-    old = a["commitment_opportunity"]
-    assert old["deprecated"] is True and old["replaced_by"] == "commitment_eligible_usage"
+    assert "commitment_opportunity" not in a                  # removed in schema 1.8
 
 
 def test_the_forecast_excludes_negations():

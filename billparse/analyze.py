@@ -245,7 +245,6 @@ def analyze(rows: pd.DataFrame, confidence: float, status: str, fields: dict) ->
     period = _period(df, fields)
     monthly = _monthly(df)
     forecast = _forecast(usage_total, period, monthly, confidence, status)
-    commit = _commitments(usage, by_category)
 
     return {
         "currency": currency, "total_billed": round(total, 2), "usage_spend": round(usage_total, 2),
@@ -262,7 +261,6 @@ def analyze(rows: pd.DataFrame, confidence: float, status: str, fields: dict) ->
         "monthly": {k: round(float(v), 2) for k, v in monthly.items()} if monthly is not None else None,
         "forecast": forecast,
         "commitment_eligible_usage": _eligible_usage(df),
-        "commitment_opportunity": commit,              # deprecated in 1.6, removed in 1.8
     }
 
 
@@ -322,14 +320,6 @@ def _forecast(usage_total: float, period: dict, monthly: pd.Series | None, conf:
 
 def _band(x: float, w: float) -> dict:
     return {"low": round(x * (1 - w), 2), "expected": round(x, 2), "high": round(x * (1 + w), 2)}
-
-
-def _commitments(usage: pd.DataFrame, by_cat: pd.Series) -> dict:
-    """Deprecated in 1.6, removed in 1.8: see commitment_eligible_usage. No savings, discount or coverage assumption."""
-    eligible = float(sum(v for k, v in by_cat.items() if k in COMMITTABLE))
-    return {"deprecated": True, "replaced_by": "commitment_eligible_usage", "eligible_monthly_spend": round(eligible, 2),
-            "note": "Deprecated: commitment_eligible_usage gives the facts (covered, on demand, unused). billparse "
-                    "estimates no savings."}
 
 
 # ---------------------------------------------------------------- commitment-eligible usage (facts only)

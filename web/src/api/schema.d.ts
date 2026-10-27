@@ -184,6 +184,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/documents/{sha256}/reprice": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Reprice
+         * @description Price the stored result again with the current price catalog, in the background: the stored rows are priced
+         *     again, never the file parsed again (free, no model request). body: new defaults (else the earlier ones).
+         */
+        post: operations["reprice_documents__sha256__reprice_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/documents/{sha256}/stop": {
         parameters: {
             query?: never;
@@ -1024,6 +1045,8 @@ export interface components {
             list_unit_price?: number | null;
             /** Contracted Unit Price */
             contracted_unit_price?: number | null;
+            /** Price Match Level */
+            price_match_level?: string | null;
             /** Section */
             section?: string | null;
             /** Source */
@@ -1190,6 +1213,7 @@ export interface components {
             cost_types: string[];
             /** Cost Basis */
             cost_basis?: string | null;
+            pricing?: components["schemas"]["Pricing"] | null;
             /** Counted Total */
             counted_total: string;
             /** Money At Risk */
@@ -1304,6 +1328,21 @@ export interface components {
             period_end?: string | null;
             /** Basis */
             basis?: ("billed" | "estimated" | "priced") | null;
+        };
+        /** InferredDiscount */
+        InferredDiscount: {
+            /** Value */
+            value: number;
+            /**
+             * Estimate
+             * @default true
+             */
+            estimate: boolean;
+            /**
+             * Note
+             * @default
+             */
+            note: string;
         };
         /** InviteIn */
         InviteIn: {
@@ -1442,6 +1481,65 @@ export interface components {
             cached?: boolean | null;
             /** Cost Usd */
             cost_usd?: number | null;
+        };
+        /**
+         * PriceDefaultsIn
+         * @description What pricing may assume for lines that do not say it (each recorded in price_assumptions); empty: nothing.
+         */
+        PriceDefaultsIn: {
+            /** Operating System */
+            operating_system?: string | null;
+            /** Tenancy */
+            tenancy?: string | null;
+            /** Pre Installed Sw */
+            pre_installed_sw?: string | null;
+            /** License Model */
+            license_model?: string | null;
+            /** Region */
+            region?: string | null;
+        };
+        /**
+         * Pricing
+         * @description How the usage lines matched the public list prices (pricing.py).
+         */
+        Pricing: {
+            /** Catalog Version */
+            catalog_version?: string | null;
+            /** Defaults */
+            defaults?: {
+                [key: string]: string;
+            };
+            /** Undated As Of */
+            undated_as_of?: string | null;
+            /** Match Rate */
+            match_rate?: {
+                [key: string]: number | null;
+            };
+            /** Levels */
+            levels?: {
+                [key: string]: components["schemas"]["PricingLevel"];
+            };
+            /** Missing */
+            missing?: components["schemas"]["PricingMissing"][];
+            inferred_discount?: components["schemas"]["InferredDiscount"] | null;
+            /** Warnings */
+            warnings?: string[];
+        };
+        /** PricingLevel */
+        PricingLevel: {
+            /** Lines */
+            lines: number;
+            /** Cost */
+            cost: number;
+        };
+        /** PricingMissing */
+        PricingMissing: {
+            /** Field */
+            field: string;
+            /** Lines */
+            lines: number;
+            /** Cost */
+            cost: number;
         };
         /** Resolution */
         Resolution: {
@@ -1824,6 +1922,16 @@ export interface operations {
                 force?: boolean;
                 backend?: string | null;
                 fallback?: string | null;
+                /** @description price lines that name no operating system as this one (Linux) */
+                assume_os?: string | null;
+                /** @description price lines that name no tenancy as this one (Shared) */
+                assume_tenancy?: string | null;
+                /** @description price lines that name no pre-installed software as this (NA) */
+                assume_software?: string | null;
+                /** @description price lines that name no license model as this one */
+                assume_license?: string | null;
+                /** @description price lines that name no region as this one (us-east-1) */
+                assume_region?: string | null;
             };
             header?: never;
             path?: never;
@@ -1916,6 +2024,41 @@ export interface operations {
             cookie?: never;
         };
         requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ParseTask"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    reprice_documents__sha256__reprice_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                sha256: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["PriceDefaultsIn"] | null;
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {
@@ -2616,6 +2759,16 @@ export interface operations {
             query?: {
                 /** @description parse again a file seen before; a learning or improving job of the file that ended without a spec runs again */
                 force?: boolean;
+                /** @description price lines that name no operating system as this one (Linux) */
+                assume_os?: string | null;
+                /** @description price lines that name no tenancy as this one (Shared) */
+                assume_tenancy?: string | null;
+                /** @description price lines that name no pre-installed software as this (NA) */
+                assume_software?: string | null;
+                /** @description price lines that name no license model as this one */
+                assume_license?: string | null;
+                /** @description price lines that name no region as this one (us-east-1) */
+                assume_region?: string | null;
             };
             header?: never;
             path?: never;

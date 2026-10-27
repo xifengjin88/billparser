@@ -53,6 +53,7 @@ export const CHARGE_COLUMNS: Column<ChargeRow>[] = [
   { key: 'cost', header: 'Cost', width: '120px', align: 'right', render: (c) => <span className={c.counted ? '' : 'text-muted-foreground line-through'}>{money(c.cost_exact)}</span> },
   { key: 'kind', header: 'Kind', width: '140px', render: (c) => <span title={c.kind_by}>{c.kind.replaceAll('_', ' ')}</span> },
   { key: 'coverage', header: 'Coverage', width: '120px', render: (c) => opt(c.coverage?.replaceAll('_', ' ')) },
+  { key: 'priceMatch', header: 'Price match', width: '120px', render: (c) => opt(c.price_match_level?.replaceAll('_', ' ')) },
   { key: 'list', header: 'List cost', width: '110px', align: 'right', render: (c) => c.list_cost == null ? opt(null) : money(c.list_cost) },
   { key: 'contracted', header: 'Contracted cost', width: '130px', align: 'right', render: (c) => c.contracted_cost == null ? opt(null) : money(c.contracted_cost) },
   { key: 'effective', header: 'Effective cost', width: '120px', align: 'right', render: (c) => c.effective_cost == null ? opt(null) : money(c.effective_cost) },

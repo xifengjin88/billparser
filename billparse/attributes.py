@@ -316,12 +316,10 @@ def _ec2_instance(v) -> bool:
 
 def ec2_software(rows: pd.DataFrame) -> list[str]:
     """The operating system, pre-installed software, license model and tenancy of EC2 instance lines, when no column
-    gave them: from the operation code (RunInstances:0006 is Windows with SQL Server Standard) and the usage type
-    (DedicatedUsage: is Dedicated), else, for a line that names an operating system: NA software when it names no SQL
-    Server, the price list's license model for Windows without BYOL, Dedicated or Host when the text says so, else
-    Shared. Every value is a rule (inferred). The price catalog needs them: m5.xlarge Linux in one region has six
-    prices (plain and three SQL Server editions; Shared, Dedicated and Host), Windows three licenses. Returns the
-    fields filled."""
+    gave them and the line proves them: the operation code (RunInstances:0006 is Windows with SQL Server Standard),
+    the usage type (DedicatedUsage: is Dedicated), or the words Dedicated / Dedicated Host. Rules (inferred). A line
+    that proves nothing keeps them empty: pricing (pricing.py) may assume NA software and Shared tenancy for its
+    lookup, and records it in price_assumptions. Returns the fields filled."""
     if rows.empty or "instance_type" not in rows:
         return []
     ec2 = map_unique(rows["instance_type"], _ec2_instance).astype(bool)
@@ -346,19 +344,10 @@ def ec2_software(rows: pd.DataFrame) -> list[str]:
         known = code.dropna()
         for i, col in enumerate(("operating_system", "pre_installed_sw", "license_model")):
             fill(col, known.map(lambda c, i=i: c[i]))
-    if "operating_system" in rows:
-        named = rows.loc[ec2, "operating_system"].notna()
-        fill("pre_installed_sw", pd.Series("NA", index=named[named].index))
-        windows = rows.loc[ec2, "operating_system"].eq("Windows")
-        fill("license_model", pd.Series(NO_LICENSE, index=windows[windows].index))
     if "usage_type" in rows:
         fill("tenancy", map_unique(rows.loc[ec2, "usage_type"], lambda v: _first_match(USAGE_TENANCY, v)).dropna())
-    if "operating_system" in rows:
-        named = rows.loc[ec2, "operating_system"].notna()
-        idx = named[named].index
-        text = (map_unique(rows.loc[idx, "description"], lambda v: _first_match(TEXT_TENANCY, v))
-                if "description" in rows else pd.Series(None, index=idx, dtype=object))
-        fill("tenancy", text.fillna("Shared"))
+    if "description" in rows:
+        fill("tenancy", map_unique(rows.loc[ec2, "description"], lambda v: _first_match(TEXT_TENANCY, v)).dropna())
     return list(dict.fromkeys(filled))
 
 

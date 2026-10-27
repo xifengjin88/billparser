@@ -6,7 +6,7 @@ from typing import Any, Generic, Literal, Optional, TypeVar, cast
 
 from pydantic import BaseModel, Field
 
-SCHEMA_VERSION = "1.7"            # 1.2: database_engine, deployment_option on charges; 1.3: confidence;
+SCHEMA_VERSION = "1.8"            # 1.2: database_engine, deployment_option on charges; 1.3: confidence;
                                   # 1.4: typed list/contracted/effective cost, coverage, line_type_raw on charges,
                                   #      kind commitment_negation, cost_types and cost_basis on documents
                                   # 1.5: tenancy, license_model, resource_id, pricing_term, purchase_option,
@@ -15,6 +15,9 @@ SCHEMA_VERSION = "1.7"            # 1.2: database_engine, deployment_option on c
                                   #      estimate; analysis.commitment_opportunity is deprecated, removed in 1.8;
                                   #      commitment_term on charges; term, payment option and unused on commitments
                                   # 1.7: pre_installed_sw on charges (AWS product/preInstalledSw)
+                                  # 1.8: price matching: price_match_level, price_missing, price_assumptions,
+                                  #      implied_unit_price, price_ratio on charges; pricing on documents;
+                                  #      analysis.commitment_opportunity removed
 
 T = TypeVar("T")
 
@@ -135,6 +138,12 @@ class Charge(BaseModel):
     tenancy: Optional[CitedValue[str]] = None              # Shared, Dedicated, Host
     license_model: Optional[CitedValue[str]] = None
     pre_installed_sw: Optional[CitedValue[str]] = None    # AWS: NA, SQL Std, SQL Web, SQL Ent
+    # price matching (pricing.py): inferred, source price_catalog
+    price_match_level: Optional[CitedValue[str]] = None    # exact, attributes, assumed, ambiguous, unmatched, ...
+    price_missing: Optional[CitedValue[str]] = None        # the key columns that would have matched it
+    price_assumptions: Optional[CitedValue[str]] = None    # "tenancy=Shared (text); operating_system=Linux (request)"
+    implied_unit_price: Optional[CitedValue[Decimal]] = None   # effective (else billed) cost / quantity
+    price_ratio: Optional[CitedValue[Decimal]] = None          # implied unit price / list unit price
     resource_id: Optional[CitedValue[str]] = None
     pricing_term: Optional[CitedValue[str]] = None         # OnDemand, Reserved (as printed)
     purchase_option: Optional[CitedValue[str]] = None      # All Upfront, Partial Upfront, No Upfront
@@ -185,6 +194,35 @@ class Confidence(BaseModel):
     reasons: list[str] = Field(default_factory=list)
 
 
+class PricingLevel(BaseModel):
+    lines: int
+    cost: float                     # |billed cost|
+
+
+class PricingMissing(BaseModel):
+    field: str
+    lines: int
+    cost: float
+
+
+class InferredDiscount(BaseModel):
+    value: float                    # 1 - the steady ratio of billed to list price (rule R2)
+    estimate: bool = True
+    note: str = ""
+
+
+class Pricing(BaseModel):
+    """How the usage lines matched the public list prices (pricing.py)."""
+    catalog_version: Optional[str] = None
+    defaults: dict[str, str] = Field(default_factory=dict)          # what the request said to assume
+    undated_as_of: Optional[str] = None     # the date of lines without one: kept, so a reprice uses it again
+    match_rate: dict[str, Optional[float]] = Field(default_factory=dict)   # sure, assumed (by cost); *_lines
+    levels: dict[str, PricingLevel] = Field(default_factory=dict)
+    missing: list[PricingMissing] = Field(default_factory=list)
+    inferred_discount: Optional[InferredDiscount] = None
+    warnings: list[str] = Field(default_factory=list)
+
+
 class Document(BaseModel):
     schema_version: str = SCHEMA_VERSION
     source_name: str
@@ -210,6 +248,7 @@ class Document(BaseModel):
     #                                                       for every usage line
     cost_basis: Optional[str] = None                     # actual | amortized | unknown (Azure exports); else None
     confidence: Optional[Confidence] = None
+    pricing: Optional[Pricing] = None                    # the list price match of the usage lines (1.8)
 
     def counted_total(self) -> Decimal:
         return sum((c.cost.value for c in self.charges if c.counted and c.cost), Decimal(0))

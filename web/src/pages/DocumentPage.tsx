@@ -1,12 +1,12 @@
 import { useEffect, useRef } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router'
 import { toast } from 'sonner'
-import { DownloadIcon, FileCheckIcon, Loader2Icon, RotateCwIcon, Trash2Icon } from 'lucide-react'
+import { DownloadIcon, FileCheckIcon, Loader2Icon, RotateCwIcon, TagIcon, Trash2Icon } from 'lucide-react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 
 import { api, ApiError, downloadJson, type DocumentItem, type DocumentView } from '@/api/client'
-import { keys, useDeleteDocument, useDocumentView, useParseCurrent, useReparse, useStopDocument, useTask } from '@/api/queries'
+import { keys, useDeleteDocument, useDocumentView, useParseCurrent, useReparse, useReprice, useStopDocument, useTask } from '@/api/queries'
 import { CompletenessPill, ConfidencePill, Pill, StatusPill } from '@/components/app/badges'
 import { ChargesTab } from '@/components/app/charges'
 import { ConfirmDelete } from '@/components/app/ConfirmDelete'
@@ -97,17 +97,19 @@ function DocumentBody({ view }: { view: DocumentView }) {
   const qc = useQueryClient()
   const reparse = useReparse()
   const parseCurrent = useParseCurrent()
+  const reprice = useReprice()
   const stop = useStopDocument()
   const del = useDeleteDocument()
   const [confirm, setConfirm] = useState(false)
-  const [waiting, setWaiting] = useState<'agent' | 'spec' | null>(null)
+  const [waiting, setWaiting] = useState<'agent' | 'spec' | 'price' | null>(null)
   const task = useTask(view.sha256, waiting !== null)
 
   useEffect(() => {
     if (waiting && task.data && task.data.state !== 'running') {
       setWaiting(null)
       if (task.data.state === 'error') toast.error(task.data.error ?? 'The parse failed.')
-      else toast.success(waiting === 'agent' ? 'Parsed again; the agent ran for this file.' : 'Parsed again with the current specs.')
+      else toast.success(waiting === 'agent' ? 'Parsed again; the agent ran for this file.'
+        : waiting === 'price' ? 'Priced again with the current price catalog.' : 'Parsed again with the current specs.')
       qc.invalidateQueries({ queryKey: keys.view(view.sha256) })
       qc.invalidateQueries({ queryKey: keys.documents })
     }
@@ -137,6 +139,11 @@ function DocumentBody({ view }: { view: DocumentView }) {
               onClick={() => parseCurrent.mutate(v.sha256, { onSuccess: () => setWaiting('spec'), onError: (e) => toast.error(e.message) })}>
               {waiting === 'spec' ? <Loader2Icon className="animate-spin" /> : <FileCheckIcon />} Parse with current spec
             </Button>
+            <Button variant="outline" size="sm" disabled={waiting !== null || reprice.isPending}
+              title="Prices the stored lines again with the current price catalog: the file is not read again (free)"
+              onClick={() => reprice.mutate(v.sha256, { onSuccess: () => setWaiting('price'), onError: (e) => toast.error(e.message) })}>
+              {waiting === 'price' ? <Loader2Icon className="animate-spin" /> : <TagIcon />} Price again
+            </Button>
             <Button variant="outline" size="sm" disabled={waiting !== null || reparse.isPending}
               title="Reads the file again and runs the agent for it again: a new layout spec, or a fresh look at the one that reads it (paid when learning is on)"
               onClick={() => reparse.mutate(v.sha256, { onSuccess: () => setWaiting('agent'), onError: (e) => toast.error(e.message) })}>
@@ -151,7 +158,7 @@ function DocumentBody({ view }: { view: DocumentView }) {
       />
       {waiting && (
         <div className="mb-4 flex items-center gap-2 rounded-lg border p-3 text-sm text-violet-800 dark:text-violet-300">
-          <Loader2Icon className="size-4 animate-spin" /> <span className="flex-1">{task.data?.progress ?? 'Parsing again…'}</span>
+          <Loader2Icon className="size-4 animate-spin" /> <span className="flex-1">{task.data?.progress ?? (waiting === 'price' ? 'Pricing again…' : 'Parsing again…')}</span>
           {waiting === 'agent' && (
             <Button variant="destructive" size="sm" disabled={stop.isPending}
               title="Stops the agent's run at its next step. The file keeps the result it had."
@@ -182,6 +189,8 @@ function DocumentBody({ view }: { view: DocumentView }) {
         <Stat label="Cost types" value={v.cost_types?.length ? v.cost_types.join(', ') : '—'}
               hint="The cost types the file gives: billed, list, contracted, effective" />
         <Stat label="Cost basis" value={v.cost_basis ?? '—'} hint="Azure exports: actual or amortized cost" />
+        <Stat label="List price match" value={matchRate(v)}
+              hint="Share of priced AWS usage cost matched to a public list price: sure (exact or by attributes), and with assumptions" />
       </div>
 
       <Tabs value={tab} onValueChange={(t) => setParams({ tab: String(t) }, { replace: true })}>
@@ -191,6 +200,7 @@ function DocumentBody({ view }: { view: DocumentView }) {
           <TabsTrigger value="gaps">Gaps ({v.gaps.length + v.flags.length})</TabsTrigger>
           <TabsTrigger value="facts">Facts ({v.facts.length})</TabsTrigger>
           <TabsTrigger value="commitments">Commitments ({v.commitments.length})</TabsTrigger>
+          <TabsTrigger value="prices">Prices</TabsTrigger>
           <TabsTrigger value="source">Source</TabsTrigger>
           <TabsTrigger value="runs">Runs ({v.runs.length})</TabsTrigger>
           <TabsTrigger value="how">How it was read</TabsTrigger>
@@ -200,6 +210,7 @@ function DocumentBody({ view }: { view: DocumentView }) {
         <TabsContent value="gaps" className="pt-3"><GapsTab view={v} /></TabsContent>
         <TabsContent value="facts" className="pt-3"><FactsTab view={v} /></TabsContent>
         <TabsContent value="commitments" className="pt-3"><CommitmentsTab view={v} /></TabsContent>
+        <TabsContent value="prices" className="pt-3"><PricesTab view={v} /></TabsContent>
         <TabsContent value="source" className="pt-3"><SourceExplorer sha={v.sha256} /></TabsContent>
         <TabsContent value="runs" className="pt-3"><RunsTab view={v} /></TabsContent>
         <TabsContent value="how" className="pt-3"><HowTab view={v} /></TabsContent>
@@ -211,6 +222,64 @@ function DocumentBody({ view }: { view: DocumentView }) {
           onError: (e) => toast.error(e.message),
         })} />
     </>
+  )
+}
+
+const pct = (x: number | null | undefined) => (x == null ? '—' : `${(x * 100).toFixed(1)}%`)
+
+function matchRate(v: DocumentView): string {
+  const r = v.pricing?.match_rate
+  if (!v.pricing || !r || r.sure == null) return '—'
+  return r.assumed ? `${pct(r.sure)} + ${pct(r.assumed)} assumed` : pct(r.sure)
+}
+
+const LEVEL_HINT: Record<string, string> = {
+  exact: 'Rate code, SKU or usage type: one price',
+  attributes: 'Instance type, region, OS, ...: one price, nothing assumed',
+  assumed: 'As attributes, with an assumption (see each charge)',
+  ambiguous: 'Several prices fit: a key column is missing',
+  unmatched: 'No price in the catalog',
+  unit_mismatch: "The line's unit cannot be converted to the price's unit",
+  no_catalog: 'Azure or GCP: no prices in the catalog yet',
+}
+
+function PricesTab({ view }: { view: DocumentView }) {
+  const p = view.pricing
+  if (!p) return <Empty>This document was not priced (parse it again, or price it again).</Empty>
+  const levels = Object.entries(p.levels ?? {})
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+        <Stat label="Catalog" value={p.catalog_version ?? 'none loaded'} hint="The price snapshot used" />
+        <Stat label="Sure match" value={pct(p.match_rate?.sure)} hint="Cost share at exact or attributes" />
+        <Stat label="Assumed" value={pct(p.match_rate?.assumed)} hint="Cost share matched with an assumption" />
+        <Stat label="Inferred discount" value={p.inferred_discount ? `${pct(p.inferred_discount.value)} (estimate)` : '—'}
+              hint="A steady ratio of billed to list price on on-demand lines (rule R2)" />
+      </div>
+      {p.warnings?.length ? (
+        <div className="rounded-lg border border-amber-200 bg-amber-50/60 px-3 py-2 text-sm dark:border-amber-900 dark:bg-amber-950/40">
+          {p.warnings.map((w) => <div key={w}>{w}</div>)}
+        </div>
+      ) : null}
+      {Object.keys(p.defaults ?? {}).length ? (
+        <div className="text-sm text-muted-foreground">Assumed by request: {Object.entries(p.defaults ?? {}).map(([k, x]) => `${k}=${x}`).join(', ')}</div>
+      ) : null}
+      <Section title="Match levels">
+        <DataTable rows={levels} rowKey={([k]) => k} height="auto" empty="No usage line to price." columns={[
+          { key: 'level', header: 'Level', width: '160px', render: ([k]) => <span title={LEVEL_HINT[k]}>{k.replaceAll('_', ' ')}</span> },
+          { key: 'lines', header: 'Lines', width: '120px', align: 'right', render: ([, x]) => x.lines.toLocaleString() },
+          { key: 'cost', header: 'Cost', width: '160px', align: 'right', render: ([, x]) => money(String(x.cost)) },
+          { key: 'what', header: 'What it means', width: 'minmax(240px, 1fr)', render: ([k]) => <span className="text-muted-foreground">{LEVEL_HINT[k] ?? ''}</span> },
+        ]} />
+      </Section>
+      <Section title="Most common missing key columns">
+        <DataTable rows={p.missing ?? []} rowKey={(m) => m.field} height="auto" empty="Nothing missing." columns={[
+          { key: 'field', header: 'Field', width: '200px', render: (m) => <span className="font-mono text-xs">{m.field}</span> },
+          { key: 'lines', header: 'Lines', width: '120px', align: 'right', render: (m) => m.lines.toLocaleString() },
+          { key: 'cost', header: 'Cost', width: '160px', align: 'right', render: (m) => money(String(m.cost)) },
+        ]} />
+      </Section>
+    </div>
   )
 }
 

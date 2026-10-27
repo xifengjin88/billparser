@@ -90,6 +90,9 @@ def health(store: Store = Depends(get_store)) -> dict:
 def parse(request: Request, file: UploadFile = File(...),
           force: bool = Query(False, description="parse again a file seen before; a learning or improving job of the "
                                                  "file that ended without a spec runs again"),
+          assume_os: str | None = webapi.ASSUME_OS, assume_tenancy: str | None = webapi.ASSUME_TENANCY,
+          assume_software: str | None = webapi.ASSUME_SOFTWARE, assume_license: str | None = webapi.ASSUME_LICENSE,
+          assume_region: str | None = webapi.ASSUME_REGION,
           pipe: Pipeline = Depends(get_pipeline)) -> ParseResult:
     """Parse one file (CSV, TSV, xlsx, JSON, YAML, Terraform, PDF, pptx, docx, text, zip)."""
     path, sha, _ = save_upload(file, pipe.store)       # on disk, never whole in memory (a large export)
@@ -98,7 +101,8 @@ def parse(request: Request, file: UploadFile = File(...),
     t0 = time.time()
     try:
         r = pipe.parse_path(path, file.filename or "upload", force=force, user=auth.current_user(request), move=True,
-                            sha=sha)
+                            sha=sha, price_defaults=webapi.price_defaults(assume_os, assume_tenancy, assume_software,
+                                                                         assume_license, assume_region))
     finally:
         path.unlink(missing_ok=True)
     c = r.get("contract") or {}

@@ -31,8 +31,9 @@ from . import llm as llm_mod
 from .analyze import RESOLVER_LOCK, get_resolver
 from .pipeline import Pipeline
 from .pipeline import Settings as PipelineSettings
+from .pricing import PriceDefaults
 from .review import CHECKLIST, apply_edits, approve, charge_rows, drop_gaps
-from .schema import DOC_TYPES, KINDS, Cite, Document, cv
+from .schema import DOC_TYPES, KINDS, Cite, Document, Pricing, cv
 from .settings import catalog_dir, data_dir
 from .store import Store
 
@@ -163,6 +164,7 @@ class ChargeRow(BaseModel):
     commitment_id: str | None = None
     list_unit_price: float | None = None
     contracted_unit_price: float | None = None
+    price_match_level: str | None = None    # exact | attributes | assumed | ambiguous | unmatched | ... (1.8)
     section: str | None = None
     source: str
     cite: CiteOut
@@ -263,6 +265,7 @@ class DocumentView(BaseModel):
     confidence: ConfidenceOut | None = None
     cost_types: list[str] = []              # billed, list, contracted, effective: the cost types the file gives
     cost_basis: str | None = None           # actual | amortized | unknown (Azure exports)
+    pricing: Pricing | None = None          # how the usage lines matched the public list prices (1.8)
     counted_total: str
     money_at_risk: str
     charges: list[ChargeRow]
@@ -364,6 +367,30 @@ class ParseTask(BaseModel):
     model_calls: int | None = None
     cached: bool | None = None
     cost_usd: float | None = None
+
+
+class PriceDefaultsIn(BaseModel):
+    """What pricing may assume for lines that do not say it (each recorded in price_assumptions); empty: nothing."""
+    operating_system: str | None = None    # Linux
+    tenancy: str | None = None             # Shared
+    pre_installed_sw: str | None = None    # NA
+    license_model: str | None = None
+    region: str | None = None              # us-east-1
+
+
+def price_defaults(assume_os: str | None, assume_tenancy: str | None, assume_software: str | None,
+                   assume_license: str | None, assume_region: str | None = None) -> PriceDefaults | None:
+    d = PriceDefaults(operating_system=assume_os or None, tenancy=assume_tenancy or None,
+                      pre_installed_sw=assume_software or None, license_model=assume_license or None,
+                      region=assume_region or None)
+    return d if d.given() else None
+
+
+ASSUME_OS = Query(None, description="price lines that name no operating system as this one (Linux)")
+ASSUME_TENANCY = Query(None, description="price lines that name no tenancy as this one (Shared)")
+ASSUME_SOFTWARE = Query(None, description="price lines that name no pre-installed software as this (NA)")
+ASSUME_LICENSE = Query(None, description="price lines that name no license model as this one")
+ASSUME_REGION = Query(None, description="price lines that name no region as this one (us-east-1)")
 
 
 class HeaderEdit(BaseModel):
@@ -529,6 +556,7 @@ def charge_row(c, gap_refs: set) -> ChargeRow:
         pricing_model=_v(c.pricing_model), quantity=_f(c.quantity), unit=_v(c.unit), unit_price=_f(c.unit_price),
         usage_type=_v(c.usage_type), operation=_v(c.operation), sku_id=_v(c.sku_id), resource_id=_v(c.resource_id),
         commitment_id=_v(c.commitment_id), list_unit_price=_f(c.list_unit_price),
+        price_match_level=_v(c.price_match_level),
         contracted_unit_price=_f(c.contracted_unit_price), section=c.section_id, source=c.cite.label(), cite=_cite(c.cost.cite if c.cost else c.cite),
         has_gap=c.id in gap_refs)
 
@@ -546,7 +574,7 @@ def view_of(doc: Document, row: dict, meta: dict, *, showing_reviewed: bool = Fa
         currency=_v(doc.currency), period_start=_v(doc.billing_period_start), period_end=_v(doc.billing_period_end),
         page_count=doc.page_count, completeness=doc.completeness,
         confidence=ConfidenceOut(**doc.confidence.model_dump()) if doc.confidence else None,
-        cost_types=list(doc.cost_types), cost_basis=doc.cost_basis,
+        cost_types=list(doc.cost_types), cost_basis=doc.cost_basis, pricing=doc.pricing,
         counted_total=str(doc.counted_total()), money_at_risk=str(contract.money_at_risk(doc)),
         charges=[charge_row(c, gap_refs) for c in doc.charges],
         totals=[TotalRow(id=t.id, label=str(t.label.value), printed=str(t.amount.value),
@@ -686,7 +714,7 @@ def _use_llm(backend: str | None) -> bool:
 
 def start_parse(store: Store, name: str, path: Path, sha: str, force: bool, use_llm: bool, user: str | None = None,
                 agent_step: bool = True, backend: str | None = None, fallback: str | None = None,
-                temp: bool = False) -> str:
+                temp: bool = False, defaults: PriceDefaults | None = None) -> str:
     """Parse the file at path (its SHA-256 is sha) in the background. temp: path is an upload, moved into the store
     or removed when the parse ends."""
     info = bigfile.classify(path, name)                 # once: the parse takes it (a gzip is read to tell its size)
@@ -709,7 +737,7 @@ def start_parse(store: Store, name: str, path: Path, sha: str, force: bool, use_
             task["progress"] = "reading" if large else None
             try:
                 result = pipe.parse_path(path, name, force=force, agent=agent_step, user=user, on_step=step,
-                                         move=temp, sha=sha, info=info)
+                                         move=temp, sha=sha, info=info, price_defaults=defaults)
                 row = store.document(sha)
                 if row is not None and user and not row.uploaded_by:
                     store.update_document(sha, uploaded_by=user)
@@ -729,7 +757,9 @@ def start_parse(store: Store, name: str, path: Path, sha: str, force: bool, use_
 @router.post("/parse/start", response_model=ParseTask, tags=["web"])
 def parse_start(request: Request, file: UploadFile = File(...), force: bool = Query(False),
                 backend: str | None = Query(None), fallback: str | None = Query(None),
-                store: Store = Depends(get_store)) -> ParseTask:
+                assume_os: str | None = ASSUME_OS, assume_tenancy: str | None = ASSUME_TENANCY,
+                assume_software: str | None = ASSUME_SOFTWARE, assume_license: str | None = ASSUME_LICENSE,
+                assume_region: str | None = ASSUME_REGION, store: Store = Depends(get_store)) -> ParseTask:
     """Start parsing a file and return at once; GET /parse/tasks/{sha256} says how it goes."""
     for choice in (backend, fallback):
         if choice and choice not in ("claude", "none") and llm_mod.parse_choice(choice) is None:
@@ -737,7 +767,9 @@ def parse_start(request: Request, file: UploadFile = File(...), force: bool = Qu
                                      f"{', '.join(llm_mod.llm_choices())}")
     path, sha, _ = save_upload(file, store)
     sha = start_parse(store, file.filename or "upload", path, sha, force, _use_llm(backend), auth.current_user(request),
-                      agent_step=fallback != "none", backend=backend, fallback=fallback, temp=True)
+                      agent_step=fallback != "none", backend=backend, fallback=fallback, temp=True,
+                      defaults=price_defaults(assume_os, assume_tenancy, assume_software, assume_license,
+                                              assume_region))
     return _task_out(store, sha, _tasks[sha])
 
 
@@ -772,6 +804,33 @@ def reparse(sha256: str, request: Request, store: Store = Depends(get_store)) ->
             store.retry_agent_job(j["id"])
     sha = start_parse(store, row["name"], path, sha256, True, llm_wanted(), auth.current_user(request))
     return _task_out(store, sha, _tasks[sha])
+
+
+@router.post("/documents/{sha256}/reprice", response_model=ParseTask, tags=["web"])
+def reprice(sha256: str, request: Request, body: PriceDefaultsIn | None = None,
+            store: Store = Depends(get_store)) -> ParseTask:
+    """Price the stored result again with the current price catalog, in the background: the stored rows are priced
+    again, never the file parsed again (free, no model request). body: new defaults (else the earlier ones)."""
+    row = _row(store, sha256)
+    if store.get_result(sha256) is None:
+        raise HTTPException(404, "The document has no stored result to price.")
+    defaults = PriceDefaults(**body.model_dump()) if body is not None else None
+    with _lock:
+        t = _tasks.get(sha256)
+        if t and not t["future"].done():
+            return _task_out(store, sha256, t)
+        pipe = _pipeline(store, False)
+        task: dict = {"name": row["name"], "started": time.time(), "by": auth.current_user(request),
+                      "progress": "pricing"}
+
+        def run() -> dict:
+            try:
+                return pipe.reprice(sha256, defaults if defaults is None or defaults.given() else None)
+            finally:
+                task["finished"] = time.time()
+        task["future"] = _pool.submit(run)
+        _tasks[sha256] = task
+    return _task_out(store, sha256, task)
 
 
 @router.post("/documents/{sha256}/stop", tags=["web"])
@@ -821,7 +880,10 @@ def charge_detail(sha256: str, charge_id: str, store: Store = Depends(get_store)
              "coverage": c.coverage, "commitment_status": c.commitment_status, "line_type_raw": c.line_type_raw,
              "sku_price_id": c.sku_price_id, "resource_id": c.resource_id, "tenancy": c.tenancy,
              "license_model": c.license_model, "pre_installed_sw": c.pre_installed_sw, "pricing_term": c.pricing_term, "purchase_option": c.purchase_option,
-             "list_unit_price": c.list_unit_price, "contracted_unit_price": c.contracted_unit_price}
+             "list_unit_price": c.list_unit_price, "contracted_unit_price": c.contracted_unit_price,
+             "price_match_level": c.price_match_level, "price_assumptions": c.price_assumptions,
+             "price_missing": c.price_missing, "catalog_sku_id": c.catalog_sku_id,
+             "implied_unit_price": c.implied_unit_price, "price_ratio": c.price_ratio}
     fields = [FieldOut(field=k, value=str(v.value), origin=v.origin, source=v.source, confidence=v.confidence,
                        cite=_cite(v.cite)) for k, v in named.items() if v is not None]
     return ChargeDetail(id=c.id, description=str(c.description.value), cite=_cite(c.cite), fields=fields,
