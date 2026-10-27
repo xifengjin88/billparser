@@ -75,8 +75,15 @@ sheets become DataFrames. gzip and zip are unpacked. JSON values outside the rec
 1. **Built-in spec**: known provider export, detected by headers (`specs/builtin/`).
 2. **Learned spec**: header match or fingerprint similarity to a stored layout.
 3. **Rule mapper** (`mapper.py`): header words plus value profiles, month pivots, list-style lines.
-4. **LLM spec** (`llm.py`): redacted preview plus the most similar stored specs as examples.
-   Validator problems are fed back for up to 3 repair rounds.
+4. **LLM spec** (`llm.py`): redacted preview plus the most similar stored specs as examples. The answer is the
+   input of an `answer` tool whose schema is a spec's (`spec_schema.py`, as loose as `check_spec`): always a whole
+   JSON object, never cut-off text (an LLM without that falls back to reading JSON from its text). The first round
+   asks for `BILLPARSE_SPEC_CANDIDATES` specs (default 2) at once, the second told to read the layout on its own;
+   each is run and checked in the parse's own thread (price checks included), and the best one wins: accepted, else
+   no failed critical check, else the fewest failed price checks, else the most confident. Every candidate is in the
+   attempts log. Two that read the same rows, total and column values add `candidates_agree` (+0.05); where they
+   differ, the next round is told the column. Validator problems are fed back for up to 3 rounds in all (round 1 has
+   the candidates, each later round one call).
 5. **LLM extract, then derive** (`induce.py`): the LLM reads the rows; the system searches for a
    deterministic spec that reproduces them. If found, it's saved, so the next file needs no LLM.
    If not, the LLM rows are returned but capped below auto-accept.

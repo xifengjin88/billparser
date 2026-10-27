@@ -121,7 +121,8 @@ def test_cost_explorer_unpivot(make_pipe):
 
 
 # ---------------------------------------------------------------- LLM routes
-def test_llm_spec_with_repair_loop(make_pipe, tmp_path):
+def test_llm_spec_with_repair_loop(make_pipe, tmp_path, monkeypatch):
+    monkeypatch.setenv("BILLPARSE_SPEC_CANDIDATES", "1")         # one candidate per round: the repair loop itself
     bad_transform = {**GERMAN_SPEC, "columns": {**GERMAN_SPEC["columns"],
                                                  "billed_cost": {"from": ["Betrag"], "t": ["parse_euro"]}}}
     no_label = {**GERMAN_SPEC, "columns": {"billed_cost": {"from": ["Betrag"]}}}

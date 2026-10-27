@@ -6,10 +6,11 @@
 services:
   api:
     command: ["uvicorn", "billparse.api:app", "--host", "0.0.0.0", "--port", "8000",
-              "--reload", "--reload-dir", "/app/billparse", "--reload-dir", "/app/svcres"]
+              "--reload", "--reload-dir", "/app/billparse", "--reload-dir", "/app/svcres", "--reload-dir", "/app/prices"]
     volumes:
       - ./billparse:/app/billparse
       - ./svcres:/app/svcres
+      - ./prices:/app/prices
       - ./specs:/app/specs
       - ./migrations:/app/migrations
     environment:
