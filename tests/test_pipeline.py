@@ -14,6 +14,7 @@ sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "samples"))
 
 import billparse.analyze as analyze_mod  # noqa: E402
+import billparse.headers as headers_mod  # noqa: E402
 from billparse import Pipeline, Settings  # noqa: E402
 from billparse.learn import regression_gate, run_nightly  # noqa: E402
 from billparse.llm import redact  # noqa: E402
@@ -81,6 +82,8 @@ EXPECTED = {
     "focus_full.parquet": ("builtin", 18.14), "gcp_export_full.json": ("builtin", 186.00),
     # task 04: commitment term and payment option
     "aws_cur_legacy_terms.csv.gz": ("builtin", 26.24),
+    # task 10: German headers, read by the seed dictionary with no LLM (GERMAN_SPEC's LLM test turns the seed off)
+    "german_invoice.xlsx": ("mapper", 1225.30),
 }
 
 
@@ -121,7 +124,14 @@ def test_cost_explorer_unpivot(make_pipe):
 
 
 # ---------------------------------------------------------------- LLM routes
-def test_llm_spec_with_repair_loop(make_pipe, tmp_path, monkeypatch):
+@pytest.fixture
+def no_seed(monkeypatch):
+    """No seed dictionary: the German headers are a layout the mapper cannot read (the tests of the LLM routes and of
+    learning; with the seed, the mapper reads the German sample: EXPECTED)."""
+    monkeypatch.setattr(headers_mod, "load_seed", lambda path=None: {})
+
+
+def test_llm_spec_with_repair_loop(make_pipe, tmp_path, monkeypatch, no_seed):
     monkeypatch.setenv("BILLPARSE_SPEC_CANDIDATES", "1")         # one candidate per round: the repair loop itself
     bad_transform = {**GERMAN_SPEC, "columns": {**GERMAN_SPEC["columns"],
                                                  "billed_cost": {"from": ["Betrag"], "t": ["parse_euro"]}}}
@@ -138,7 +148,7 @@ def test_llm_spec_with_repair_loop(make_pipe, tmp_path, monkeypatch):
     assert "Unknown transform" in llm.calls[1][1] and "labels" in llm.calls[2][1]
 
 
-def test_learned_spec_reused_without_llm(make_pipe, tmp_path):
+def test_learned_spec_reused_without_llm(make_pipe, tmp_path, no_seed):
     llm = FakeLLM([GERMAN_SPEC])
     pipe = make_pipe(llm)
     a, b = tmp_path / "sep.xlsx", tmp_path / "oct.xlsx"
@@ -150,7 +160,7 @@ def test_learned_spec_reused_without_llm(make_pipe, tmp_path):
     assert r["status"] == "reconciled"
 
 
-def test_extract_then_derive(make_pipe, tmp_path):
+def test_extract_then_derive(make_pipe, tmp_path, no_seed):
     f = tmp_path / "de.xlsx"
     german_xlsx(f)
     rows = [{"service_raw": "Virtual Machines D4s v5", "billed_cost": 276.48},
@@ -186,7 +196,7 @@ def _seed_layout(make_pipe, tmp_path):
     return spec_id, changed
 
 
-def test_nightly_repairs_spec_and_passes_gate(make_pipe, tmp_path):
+def test_nightly_repairs_spec_and_passes_gate(make_pipe, tmp_path, no_seed):
     spec_id, changed = _seed_layout(make_pipe, tmp_path)
     fixed = {**GERMAN_SPEC, "detect": {"required": ["Leistung"]},
              "columns": {**GERMAN_SPEC["columns"], "billed_cost": {"from": ["Betrag (EUR)", "Betrag"]}}}
@@ -199,7 +209,7 @@ def test_nightly_repairs_spec_and_passes_gate(make_pipe, tmp_path):
     assert not [r for r in night.store.read("review") if r.get("open")]
 
 
-def test_regression_gate_rejects_breaking_fix(make_pipe, tmp_path):
+def test_regression_gate_rejects_breaking_fix(make_pipe, tmp_path, no_seed):
     spec_id, _ = _seed_layout(make_pipe, tmp_path)
     breaking = {**GERMAN_SPEC, "detect": {"required": ["Leistung"]},
                 "columns": {**GERMAN_SPEC["columns"], "billed_cost": {"from": ["Betrag (EUR)"]}}}
@@ -209,7 +219,7 @@ def test_regression_gate_rejects_breaking_fix(make_pipe, tmp_path):
     assert night.store.versions(spec_id) == [1]
 
 
-def test_candidate_promoted_after_clean_files(make_pipe, tmp_path):
+def test_candidate_promoted_after_clean_files(make_pipe, tmp_path, no_seed):
     pipe = make_pipe(FakeLLM([GERMAN_SPEC]))
     for i in range(3):
         f = tmp_path / f"p{i}.xlsx"

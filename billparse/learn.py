@@ -13,7 +13,7 @@ import json
 import time
 from pathlib import Path
 
-from . import bigfile, coverage
+from . import bigfile, coverage, headers
 from . import llm as llm_mod
 from .analyze import resolve_services
 from .attributes import extract as extract_attributes
@@ -113,6 +113,7 @@ def repair_spec(pipeline, spec_id: str, sha: str) -> dict:
     if not gate["passed"]:
         return {"spec": spec_id, "result": "rejected by regression gate", "gate": gate}
     saved = pipeline.store.save_spec(new)
+    headers.reject_remapped(pipeline.store.engine, spec, new)          # a header it reads as another field now
     return {"spec": spec_id, "result": f"promoted v{saved['version']}", "gate": gate}
 
 
@@ -138,6 +139,7 @@ def promote_candidates(pipeline) -> list[dict]:
         good = [d for d in docs.values() if d["confidence"] >= PROMOTE_MIN_CONF]
         if len(good) >= PROMOTE_AFTER:
             saved = pipeline.store.save_spec(dict(spec, trust="verified"))
+            headers.learn_spec(pipeline.store.engine, saved, "spec")     # a verified spec confirms its headers
             out.append({"spec": spec["id"], "promoted_to": "verified", "version": saved["version"], "docs": len(good)})
     return out
 

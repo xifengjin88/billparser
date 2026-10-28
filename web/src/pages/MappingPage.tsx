@@ -2,7 +2,7 @@ import { useDeferredValue, useState } from 'react'
 import { toast } from 'sonner'
 import { Trash2Icon } from 'lucide-react'
 
-import { useAddAlias, useAliases, useDeleteAlias, useMapping, useResolve } from '@/api/queries'
+import { useAddAlias, useAliases, useDeleteAlias, useDeleteHeader, useHeaderFields, useHeaders, useMapping, useResolve, useTeachHeader } from '@/api/queries'
 import { DataTable } from '@/components/app/DataTable'
 import { Empty, Loading, NativeSelect, PageHeader } from '@/components/app/common'
 import { Button } from '@/components/ui/button'
@@ -21,12 +21,14 @@ export function MappingPage() {
         <TabsList>
           <TabsTrigger value="try">Try a label</TabsTrigger>
           <TabsTrigger value="aliases">Learned aliases</TabsTrigger>
+          <TabsTrigger value="headers">Column headers</TabsTrigger>
           <TabsTrigger value="flagged">Rows to check</TabsTrigger>
           <TabsTrigger value="ambiguous">Shared names</TabsTrigger>
           <TabsTrigger value="all">Full mapping</TabsTrigger>
         </TabsList>
         <TabsContent value="try" className="pt-3"><TryLabel /></TabsContent>
         <TabsContent value="aliases" className="pt-3"><Aliases /></TabsContent>
+        <TabsContent value="headers" className="pt-3"><ColumnHeaders /></TabsContent>
         <TabsContent value="flagged" className="pt-3"><MappingTable view="flagged" /></TabsContent>
         <TabsContent value="ambiguous" className="pt-3"><MappingTable view="ambiguous" /></TabsContent>
         <TabsContent value="all" className="pt-3"><MappingTable view="all" /></TabsContent>
@@ -113,6 +115,59 @@ function Aliases() {
           {
             key: 'del', header: '', width: '44px', align: 'center',
             render: (a) => <button aria-label={`Remove ${a.label}`} className="text-muted-foreground hover:text-red-600" onClick={() => del.mutate(a)}><Trash2Icon className="size-4" /></button>,
+          },
+        ]} />
+      )}
+    </div>
+  )
+}
+
+// headers the rule mapper reads as a field: learned from approved reviews and verified specs, or taught here; a
+// rejected one never maps to its field (not by a rule, the seed dictionary or the values either)
+function ColumnHeaders() {
+  const entries = useHeaders()
+  const fields = useHeaderFields()
+  const teach = useTeachHeader()
+  const del = useDeleteHeader()
+  const [header, setHeader] = useState('')
+  const [field, setField] = useState('billed_cost')
+  const submit = (reject: boolean) =>
+    teach.mutate({ header, field, reject }, {
+      onSuccess: () => { toast.success(reject ? `Rejected: ${header} ↛ ${field}` : `Saved: ${header} → ${field}`); setHeader('') },
+      onError: (er) => toast.error(er.message),
+    })
+  return (
+    <div className="space-y-4">
+      <p className="max-w-3xl text-sm text-muted-foreground">
+        The rule mapper reads a column by its header: its rules, a seed dictionary of foreign headers, and the headers learned here. A header learned from an approved review or added here counts at once; one learned from verified specs counts after two. Approving a review with no charge changed teaches the headers of the spec that read the file.
+      </p>
+      <form
+        className="flex flex-wrap items-end gap-2 rounded-lg border p-3"
+        onSubmit={(e) => { e.preventDefault(); submit(false) }}
+      >
+        <label className="space-y-1 text-xs text-muted-foreground">Header as printed
+          <Input value={header} onChange={(e) => setHeader(e.target.value)} className="w-72" required />
+        </label>
+        <label className="space-y-1 text-xs text-muted-foreground">Field
+          <NativeSelect className="block" value={field} onChange={(e) => setField(e.target.value)}>
+            {(fields.data ?? [{ field, description: '' }]).map((f) => <option key={f.field} value={f.field} title={f.description}>{f.field}</option>)}
+          </NativeSelect>
+        </label>
+        <Button type="submit" disabled={teach.isPending || !header.trim()}>Add a header</Button>
+        <Button type="button" variant="outline" disabled={teach.isPending || !header.trim()} onClick={() => submit(true)}>Reject for this field</Button>
+      </form>
+      {entries.isLoading ? <Loading /> : !entries.data?.length ? <Empty>None yet. Approving a review with no charge changed saves the headers of the spec here.</Empty> : (
+        <DataTable rows={entries.data} rowKey={(h) => `${h.header_norm}|${h.field}`} height="auto" columns={[
+          { key: 'header', header: 'Header', width: 'minmax(220px, 3fr)', render: (h) => h.header_norm },
+          { key: 'field', header: 'Field', width: '200px', render: (h) => <span className="font-mono text-xs">{h.field}</span> },
+          { key: 'state', header: 'State', width: '110px', render: (h) => h.rejected ? <span className="text-red-700 dark:text-red-300">rejected</span> : 'maps' },
+          { key: 'count', header: 'Confirmed', width: '100px', align: 'right', render: (h) => h.count },
+          { key: 'source', header: 'Source', width: '100px', render: (h) => <span className="text-muted-foreground">{h.source}</span> },
+          { key: 'updated', header: 'Updated', width: '150px', render: (h) => when(h.updated) },
+          { key: 'by', header: 'By', width: 'minmax(120px, 1fr)', render: (h) => <span className="text-muted-foreground">{h.updated_by ?? ''}</span> },
+          {
+            key: 'del', header: '', width: '44px', align: 'center',
+            render: (h) => <button aria-label={`Remove ${h.header_norm}`} className="text-muted-foreground hover:text-red-600" onClick={() => del.mutate(h)}><Trash2Icon className="size-4" /></button>,
           },
         ]} />
       )}

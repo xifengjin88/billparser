@@ -31,7 +31,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Protocol
 
-from . import bigfile, coverage
+from . import bigfile, coverage, headers
 from .attributes import extract as extract_attributes
 from .docmodel import Document
 from .llm import PRICES, SPEC_GUIDE, cost_of, redact  # noqa: F401  PRICES: the web API lists them
@@ -471,6 +471,8 @@ def run_job(pipeline, job_id: int, llm: AgentLLM | None = None, limits: Limits |
                                    error=f"Regression gate: {gate['failures'][:3]}")
             return store.agent_job(job_id)
     saved = store.save_spec(spec)
+    if start_spec is not None:                         # an improve round: a header it reads as another field now
+        headers.reject_remapped(store.engine, start_spec, spec)
     log(event="decision", status="proved", spec_id=spec_id, version=saved["version"])
     store.update_agent_job(job_id, status="proved", spec_id=spec_id, spec_version=saved["version"], **fields)
     pipeline.parse_path(stored, name, force=True, agent=False, run=False)  # read again: the learned route finds it

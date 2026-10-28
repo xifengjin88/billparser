@@ -552,6 +552,90 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/headers/fields": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Header Fields
+         * @description The fields a header can be taught for (every canonical field but the derived and vague ones).
+         */
+        get: operations["header_fields_headers_fields_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/headers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Header Entries
+         * @description The learned column headers: confirmed by review, a verified spec or an admin, or rejected for a field.
+         */
+        get: operations["header_entries_headers_get"];
+        put?: never;
+        /**
+         * Add Header
+         * @description An admin teaches a header: it maps to this field in the next parses (score 3.5), and stops being rejected.
+         */
+        post: operations["add_header_headers_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/headers/reject": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Reject Header
+         * @description This header must not map to this field: no rule, dictionary entry or detector maps it there any more.
+         */
+        post: operations["reject_header_headers_reject_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/headers/{header_norm}/{field}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Delete Header
+         * @description Forget a learned header or a rejection.
+         */
+        delete: operations["delete_header_headers__header_norm___field__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/aliases/{provider}/{label_norm}": {
         parameters: {
             query?: never;
@@ -1480,6 +1564,32 @@ export interface components {
             period_end?: string | null;
             /** Basis */
             basis?: ("billed" | "estimated" | "priced") | null;
+        };
+        /** HeaderIn */
+        HeaderIn: {
+            /** Header */
+            header: string;
+            /** Field */
+            field: string;
+        };
+        /** HeaderOut */
+        HeaderOut: {
+            /** Header Norm */
+            header_norm: string;
+            /** Field */
+            field: string;
+            /** Count */
+            count: number;
+            /** Source */
+            source: string;
+            /** Rejected */
+            rejected: boolean;
+            /** Created */
+            created: number;
+            /** Updated */
+            updated: number;
+            /** Updated By */
+            updated_by?: string | null;
         };
         /** InferredDiscount */
         InferredDiscount: {
@@ -2891,6 +3001,161 @@ export interface operations {
                 "application/json": components["schemas"]["AliasIn"];
             };
         };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    header_fields_headers_fields_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: string;
+                    }[];
+                };
+            };
+        };
+    };
+    header_entries_headers_get: {
+        parameters: {
+            query?: {
+                field?: string | null;
+                source?: string | null;
+                rejected?: boolean | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HeaderOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    add_header_headers_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["HeaderIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HeaderOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    reject_header_headers_reject_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["HeaderIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HeaderOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_header_headers__header_norm___field__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                header_norm: string;
+                field: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
         responses: {
             /** @description Successful Response */
             200: {

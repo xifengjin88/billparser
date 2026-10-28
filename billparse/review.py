@@ -16,7 +16,7 @@ from decimal import Decimal, InvalidOperation
 
 import pandas as pd
 
-from . import contract
+from . import contract, headers
 from .analyze import RESOLVER_LOCK, get_resolver
 from .schema import Charge, Cite, Context, Document, cv
 from .settings import catalog_dir
@@ -191,8 +191,12 @@ def approve(store: Store, sha: str, doc: Document, changes: dict, note: str = ""
     promoted = None
     spec = summary.get("spec") or {}
     changed = changes["deleted"] or changes["added"] or changes["cost"] or changes["kind"] or changes["counted"]
+    learned = []
     if spec.get("id") and not changed:
         current = store.get_spec(spec["id"])
         if current and current.get("trust") == "candidate":
             promoted = store.save_spec(dict(current, trust="verified"))["version"]
-    return {"sha256": sha, "status": "approved", "spec_verified": promoted}
+        # 4. the headers of the spec that read the file, confirmed by a person (headers.py)
+        read_by = store.get_spec(spec["id"], spec.get("version")) or current
+        learned = [f"{h} -> {f}" for h, f in headers.learn_spec(store.engine, read_by, "review", by)]
+    return {"sha256": sha, "status": "approved", "spec_verified": promoted, "headers_learned": learned}

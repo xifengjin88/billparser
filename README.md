@@ -139,8 +139,28 @@ sheets become DataFrames. gzip and zip are unpacked. JSON values outside the rec
 
 1. **Built-in spec**: known provider export, detected by headers (`specs/builtin/`).
 2. **Learned spec**: header match or fingerprint similarity to a stored layout.
-3. **Rule mapper** (`mapper.py`): header words plus value profiles, month pivots, list-style lines.
-4. **LLM spec** (`llm.py`): redacted preview plus the most similar stored specs as examples. The answer is the
+3. **Rule mapper** (`mapper.py`): header words plus value profiles, month pivots, list-style lines. Not tried when
+   a built-in spec recognized the file and read rows. Each column gets the field with the best score from:
+   - **header rules** for every readable canonical field (costs, prices, IDs, product attributes, commitments;
+     never `coverage`, which is derived), with negative words (`List Cost` never scores for `billed_cost`);
+   - the **header dictionary** (`headers.py`): learned headers (table `header_synonym`, 3.5) first, then the seed of
+     foreign and English headers (`data/header_synonyms.seed.json`: German, French, Spanish, Portuguese, Italian,
+     Dutch, Japanese; 3.0). Case, accents and punctuation do not matter; a header two fields claim is no hit;
+   - **value detectors** (`detect.py`, 3.0 when 80% of the sample values fit): instance types, regions, account
+     IDs, currencies, usage types, operations, resource IDs, dates, Azure meter IDs, and SKUs. Instance types and
+     SKUs are checked against the price catalog when one is loaded (half the distinct values must be products). A
+     detector never proposes a cost or a quantity: those need a header or the dictionary. The weak ID patterns
+     (12 digits, a GUID, a GCP project ID) propose an account ID only under a meaningless header (`Col_1`, none) or
+     one that says account, subscription, project, tenant, payer or linked (the GCP project ID: project only).
+
+   A pair rejected in the dictionary is never taken. Two unit-price columns (Azure's `UnitPrice` and
+   `EffectivePrice`) are told apart by line math: the one where quantity x price = cost (within 1%) is `unit_price`,
+   another is `list_unit_price` (its header says list, public or on demand) or `contracted_unit_price`. Columns a
+   spec leaves out (built-in, learned or LLM) are still guessed with the rules of before, so those results do not
+   change with the mapper.
+4. **LLM spec** (`llm.py`): redacted preview plus the most similar stored specs as examples. When the mapper was not
+   accepted but settled some columns (score 3.0 or more), the prompt lists them ("Settled columns: field <- header")
+   and asks to map only the others; a spec that changes one is kept (the checks decide), with a warning. The answer is the
    input of an `answer` tool whose schema is a spec's (`spec_schema.py`, as loose as `check_spec`): always a whole
    JSON object, never cut-off text (an LLM without that falls back to reading JSON from its text). The first round
    asks for `BILLPARSE_SPEC_CANDIDATES` specs (default 2) at once, the second told to read the layout on its own;
@@ -277,6 +297,17 @@ older than a day that no job uses.
 3. Promotes candidate specs to verified after 3 clean files.
 4. Writes a report with the metrics that should improve over time: first-route success,
    share with no LLM call, average LLM calls, reconciled share.
+
+The mapper learns column headers (`headers.py`, table `header_synonym`, shared by every worker):
+
+- **Approved review** with no charge changed: the headers of the spec that read the file (source `review`; count at
+  once).
+- **Spec verified** (the nightly promotion, Specs page, `specs approve`): its headers (source `spec`; count from the
+  second confirmation).
+- **Spec repaired** (nightly repair, agent improve round) that reads a header as another field: that header is
+  rejected for the old field.
+- **Admin**: the Mapping page's "Column headers" tab, or `GET/POST /headers`, `POST /headers/reject`,
+  `DELETE /headers/{header_norm}/{field}`. Unapproved or unverified results teach nothing.
 
 Every parse appends a record (route, status, checks) to the log.
 

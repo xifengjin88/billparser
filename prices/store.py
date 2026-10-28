@@ -21,6 +21,7 @@ says how many there were, so task 06 can report it instead of guessing.
 from __future__ import annotations
 
 import threading
+from collections.abc import Iterable
 
 import pandas as pd
 import sqlalchemy as sa
@@ -80,6 +81,8 @@ QUERY = " UNION ALL ".join([
     f"WHERE k.instance_type IS NOT NULL AND k.region IS NOT NULL",
 ])
 # exists(): does any product have this SKU, usage type, or instance type in this region (any OS, any tenancy)
+KNOWN_COLUMNS = ("instance_type", "sku")       # indexed with the provider (price_product_instance, price_product_sku)
+PROVIDERS = ("aws", "azure", "gcp")
 EXIST_KEYS = ["key_id", "provider", "sku", "service_code", "usage_type", "usage_alt", "instance_type", "region", "as_of"]
 EXIST_QUERY = " UNION ".join([
     "SELECT k.key_id FROM exist_keys k JOIN price_product p ON p.provider = k.provider AND p.sku = k.sku "
@@ -233,6 +236,23 @@ class PriceCatalog:
             return set()
         ids = dict(zip(keys["key_id"].astype(str), keys["key_id"], strict=True))
         return {ids[str(k)] for k in found["key_id"]}
+
+    def known(self, column: str, values: Iterable, provider: str = "aws") -> set[str]:
+        """Which of these values some product has in this column (instance_type or sku), in one query: the mapper
+        tells a column of instance types or SKUs by its values (mapper.detect)."""
+        if column not in KNOWN_COLUMNS:
+            raise ValueError(column)
+        fn = NORMALIZE.get(column, lambda v: v)
+        vals = {str(v): fn(str(v)) for v in values if v is not None and str(v).strip()}
+        if not vals:
+            return set()
+        frame = pd.DataFrame({"value": list(vals.values())}).drop_duplicates()
+        found = self._run("known_values", ["value"], frame,
+                          f"SELECT DISTINCT k.value FROM known_values k WHERE EXISTS (SELECT 1 FROM price_product p "
+                          f"WHERE p.provider = '{provider}' AND p.{column} = k.value)") if provider in PROVIDERS \
+            else pd.DataFrame()
+        hit = set(found["value"]) if not found.empty else set()
+        return {v for v, n in vals.items() if n in hit}
 
     def lookup_savings_plans(self, keys: pd.DataFrame) -> pd.DataFrame:
         """keys: key_id, as_of, discounted_sku, and any of plan_type, lease_length, purchase_option. Returns every

@@ -207,12 +207,16 @@ def _ask(llm: LLM, system: str, user: str, schema: dict, max_tokens: int = 4000)
 
 
 def generate_spec(llm: LLM, preview: dict, examples: list[tuple[str, dict]],
-                  feedback: list[str] | None = None, previous: dict | None = None, note: str | None = None) -> dict:
-    """note: a word to this candidate only (parallel candidates are told to try another reading)."""
+                  feedback: list[str] | None = None, previous: dict | None = None, note: str | None = None,
+                  settled: dict[str, str] | None = None) -> dict:
+    """note: a word to this candidate only (parallel candidates are told to try another reading). settled: the
+    columns the rule mapper is sure of (field -> header): the spec keeps them and maps only the others."""
     parts = []
     for i, (ex_preview, ex_spec) in enumerate(examples, 1):
         parts.append(f"<example {i}>\nPREVIEW:\n{ex_preview}\nSPEC:\n{json.dumps(ex_spec)}\n</example {i}>")
     parts.append(f"PREVIEW of the new file:\n{render_preview(preview)}")
+    if settled:
+        parts.append(settled_block(settled))
     if previous and feedback:
         parts.append("Your previous spec:\n" + json.dumps(previous))
         parts.append("Validation problems to fix:\n- " + "\n- ".join(feedback))
@@ -220,6 +224,12 @@ def generate_spec(llm: LLM, preview: dict, examples: list[tuple[str, dict]],
         parts.append(note)
     parts.append("Write the spec.")
     return _ask(llm, SPEC_GUIDE, "\n\n".join(parts), spec_json_schema())
+
+
+def settled_block(settled: dict[str, str]) -> str:
+    lines = "\n".join(f"{f} <- {h}" for f, h in sorted(settled.items()))
+    return ("Settled columns (the rule mapper read these from their headers and values; keep each one in "
+            "\"columns\" as given, and map only the other columns):\n" + lines)
 
 
 # ---------------------------------------------------------------- direct extraction
