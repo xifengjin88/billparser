@@ -246,17 +246,14 @@ def mapping(columns: dict[str, list], ctx: MapContext | None = None, legacy: boo
     pairs = []                                       # (score, source rank: rule 2 > dictionary 1 > detector 0, field, header)
     guids: list[str] = []
     for h, p in profiles.items():
-        ruled = set()
         for f in rules:
             hs = header_score(f, h, rules, negative)
-            if hs <= 0:
-                continue
-            ruled.add(f)
-            pairs.append((hs + value_score(f, p), 2, f, h))
+            if hs > 0:
+                pairs.append((hs + value_score(f, p), 2, f, h))
         if d is not None and (hit := d.lookup(h)):
             pairs.append((hit[1] + value_score(hit[0], p), 1, hit[0], h))
         if not legacy:
-            for f in detect.fields(h, columns[h], ctx, ruled):
+            for f in detect.fields(h, columns[h], ctx):
                 if f == "meter_id":                  # after the others (below): a GUID is an account first
                     guids.append(h)
                     continue

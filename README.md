@@ -149,7 +149,9 @@ sheets become DataFrames. gzip and zip are unpacked. JSON values outside the rec
    - **value detectors** (`detect.py`, 3.0 when 80% of the sample values fit): instance types, regions, account
      IDs, currencies, usage types, operations, resource IDs, dates, Azure meter IDs, and SKUs. Instance types and
      SKUs are checked against the price catalog when one is loaded (half the distinct values must be products). A
-     detector never proposes a cost or a quantity: those need a header or the dictionary.
+     detector never proposes a cost or a quantity: those need a header or the dictionary. The weak ID patterns
+     (12 digits, a GUID, a GCP project ID) propose an account ID only under a meaningless header (`Col_1`, none) or
+     one that says account, subscription, project, tenant, payer or linked (the GCP project ID: project only).
 
    A pair rejected in the dictionary is never taken. Two unit-price columns (Azure's `UnitPrice` and
    `EffectivePrice`) are told apart by line math: the one where quantity x price = cost (within 1%) is `unit_price`,

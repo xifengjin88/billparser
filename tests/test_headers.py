@@ -154,6 +154,39 @@ def test_columns_with_no_header_map_by_their_values():
     assert detect.fields("Col_8", _no_headers()["Col_8"]) == [] and detect.fields("Col_9", _no_headers()["Col_9"]) == []
 
 
+GUIDS = ["0f8fad5b-d9cb-469f-a165-70867728950e", "7c9e6679-7425-40de-944b-e07fc1f90ae7"] * 4
+
+
+@pytest.mark.parametrize("header, values", [
+    ("Order ID", ["123456789012", "210987654321"] * 4),
+    ("Hostname", ["web-01", "web-02", "db-001", "cache-01"] * 2),
+    ("Team", ["data-eng", "platform-2", "ml-ops", "web-team"] * 2),
+    ("Request ID", GUIDS),
+])
+def test_an_id_pattern_does_not_make_a_named_column_an_account(header, values):
+    # 12 digits, a GUID or a GCP project ID is an account only under a meaningless header or one that says account
+    assert mapping({header: values}).chosen.get("account_id") is None
+
+
+def test_an_invoice_number_of_12_digits_is_the_invoice():
+    m = mapping({"Invoice Number": ["123456789012", "210987654321"] * 4})
+    assert m.chosen.get("invoice_id") == "Invoice Number" and "account_id" not in m.chosen
+
+
+@pytest.mark.parametrize("header, values", [
+    ("Account", ["123456789012"] * 8), ("Linked Account", ["123456789012"] * 8), ("Subscription", GUIDS),
+    ("Tenant", GUIDS), ("Project", ["my-project-1", "data-lake-42"] * 4), ("Column 3", ["123456789012"] * 8),
+    ("", GUIDS),
+])
+def test_an_id_pattern_under_an_account_or_meaningless_header_is_the_account(header, values):
+    assert mapping({header: values}).chosen.get("account_id") == header
+
+
+def test_a_guid_in_an_azure_file_is_the_meter_when_the_account_is_taken():
+    m = mapping({"SubscriptionId": GUIDS, "Col_2": GUIDS[::-1], "Cost": [1.0] * 8})
+    assert m.chosen["account_id"] == "SubscriptionId" and m.chosen.get("meter_id") == "Col_2"
+
+
 def test_catalog_backed_detectors(make):
     pipe = make(prices=True)
     ctx = MapContext(catalog=PriceCatalog(pipe.store.engine))

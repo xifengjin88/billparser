@@ -5,6 +5,10 @@ mapper.value_score), so a column of m5.xlarge under a foreign or empty header is
 for another field wins when its total is higher; a tie goes to the header. A detector never proposes a number field:
 costs and quantities need a header or the dictionary.
 
+The weak ID patterns (12 digits, a GUID, a GCP project ID) are also invoice, order and request numbers, hostnames and
+team names: they propose account_id only under a meaningless header (Col_1, Column 3, a number, none) or one that says
+account, subscription, project, tenant, payer or linked, and the GCP project ID only under one that says project.
+
 Dates propose charge_start (task 10's table has no date detector; its no-header test reads the date column).
 
 Two detectors ask the price catalog, once per column per parse (MapContext.known): instance types (AWS ones must be
@@ -19,6 +23,8 @@ import re
 from svcres import regions
 
 from .attributes import AWS_TYPE, REGION_PREFIX, USAGE_TYPE, instance_type
+from .layout import norm_h
+from .mapper import CAMEL
 
 SCORE = 3.0
 FIT = 0.8
@@ -35,6 +41,10 @@ OPERATION = re.compile(r"^(?:[A-Z][A-Za-z]+\.)?(?:(?:Run|Create|Consume|Start|Pu
                        r"Hourly|PayPerRequestThroughput)(?::[\w.-]+)*$")
 DATE = re.compile(r"^\d{4}-\d{2}-\d{2}(?:[ T]\d{2}:\d{2}(?::\d{2})?(?:\.\d+)?(?:Z|[+-]\d{2}:?\d{2})?)?$|"
                   r"^\d{1,2}[./]\d{1,2}[./]\d{2,4}$")
+# the headers under which a weak ID pattern (12 digits, a GUID) is an account: none ("Col_1", "Column 3", "Field2",
+# "Unnamed: 0", a number, empty) or one that says account
+MEANINGLESS = re.compile(r"(?:col(?:umn)?|field|unnamed)?\s*\d*")
+ACCOUNT_WORDS = re.compile(r"\b(account|subscription|project|tenant|payer|linked)\b")
 REGION_CODE = re.compile(REGION_PREFIX.pattern[2:-1])     # "USE1": the code alone, without its dash
 # ISO 4217 codes of the currencies bills are printed in
 CURRENCIES = frozenset("""AED ARS AUD BGN BHD BRL CAD CHF CLP CNY COP CZK DKK EGP EUR GBP HKD HUF IDR ILS INR ISK JPY
@@ -86,8 +96,8 @@ def _known(ctx, column: str, vals: list[str]) -> set[str] | None:
     return ctx.known[key]
 
 
-def fields(header: str, values: list, ctx=None, ruled: set[str] | frozenset = frozenset()) -> list[str]:
-    """The fields this column's values say it is. ruled: the fields its header's rules give it."""
+def fields(header: str, values: list, ctx=None) -> list[str]:
+    """The fields this column's values say it is (its header only gates the weak ID patterns)."""
     vals = _texts(values)
     if not vals:
         return []
@@ -99,11 +109,13 @@ def fields(header: str, values: list, ctx=None, ruled: set[str] | frozenset = fr
             out.append("instance_type")
     if _fits(vals, _region):
         out.append("region")
-    if _fits(vals, lambda v: bool(AWS_ACCOUNT.match(v) or GUID.match(v))):
-        out.append("account_id")
-    elif not (ruled - {"account_id", "account_name"}) and _fits(
+    h = norm_h(CAMEL.sub(" ", str(header)))
+    if (MEANINGLESS.fullmatch(h) or ACCOUNT_WORDS.search(h)) and _fits(
+            vals, lambda v: bool(AWS_ACCOUNT.match(v) or GUID.match(v))):
+        out.append("account_id")                   # 12 digits or a GUID: an invoice or order number too
+    elif re.search(r"\bproject\b", h) and _fits(
             vals, lambda v: bool(GCP_PROJECT.match(v)) and bool(re.search(r"[-\d]", v))):
-        out.append("account_id")                   # a GCP project ID: only under a header no rule claims
+        out.append("account_id")                   # a GCP project ID: a hostname or a team name too
     if _fits(vals, lambda v: v in CURRENCIES):
         out.append("currency")
     if _fits(vals, _usage_type):
@@ -113,9 +125,9 @@ def fields(header: str, values: list, ctx=None, ruled: set[str] | frozenset = fr
     if _fits(vals, lambda v: bool(RESOURCE.match(v))):
         out.append("resource_id")
     if _fits(vals, lambda v: bool(GUID.match(v))):
-        out.append("meter_id")
+        out.append("meter_id")                     # mapper.mapping proposes it only for an Azure file
     if _fits(vals, lambda v: bool(DATE.match(v))):
-        out.append("charge_start")                 # a date is the line's start (a header says when it is the end)                     # mapper.mapping proposes it only for an Azure file
+        out.append("charge_start")                 # a date is the line's start (a header says when it is the end)
     if not any(f in out for f in ("instance_type", "region", "account_id", "currency", "usage_type", "operation",
                                   "resource_id", "charge_start")):
         known = _known(ctx, "sku", vals)
