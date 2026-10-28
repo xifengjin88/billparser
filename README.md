@@ -19,8 +19,8 @@ make help                               # every target: logs, psql, migrate, nig
 
 The ports differ from invoice-parser's (8000/8080), so both stacks run side by side; `API_PORT` and `WEB_PORT`
 change them. The API container runs the migrations (`alembic upgrade head`) before it starts. Data stays in two
-volumes: `pgdata` (PostgreSQL) and `billparse-data` (uploads, result rows, nightly reports, the service catalog and
-the synonyms that review teaches).
+volumes: `pgdata` (PostgreSQL, with the synonyms that review teaches) and `billparse-data` (uploads, result rows,
+nightly reports, the service catalog).
 
 Without Docker (SQLite file in `store/` unless `DATABASE_URL` is set):
 
@@ -324,7 +324,14 @@ GCP_API_KEY=... python scripts/fetch_gcp.py
 python scripts/build_catalog.py --raw-dir data/raw --out data/catalog.msgpack
 ```
 
-Corrections: `python -m billparse synonym "VM Hrs" "azure:Virtual Machines"`.
+Corrections: `python -m billparse synonym "VM Hrs" "azure:Virtual Machines"`, the Mapping page (`/aliases`), and
+review approval (each corrected service code). They are synonyms in the table `service_synonym` (`synonyms.py`;
+scope `*` or a provider, the normalized label, the service key, source review or admin, who and when), shared by the
+API and every worker: one statement per change, so two approvals at once lose nothing. Each process reads the table
+again when another one changed it (at most every 60 s; at once after its own change) and drops its cached picks of
+the changed labels. The old file `CATALOG_DIR/synonyms.json` is imported once into an empty table on first use (a
+`journal` entry, stream `synonym_import`, records it) and is never changed; `svcres` on its own (without billparse)
+still keeps its synonyms in that file.
 
 ## Price catalog
 
@@ -416,8 +423,8 @@ defaults, else the earlier ones stay.
 ## Storage
 
 `store.py` keeps rows in the database (`db.py`): documents, every version of every learned spec, each spec's
-regression set (`spec_doc`, `spec_fingerprint`), the logs (`journal`: records, labels, review) and the admitted
-users. PostgreSQL with `DATABASE_URL`, else a SQLite file in `PARSER_DATA_DIR`. Large parts are files in
+regression set (`spec_doc`, `spec_fingerprint`), the logs (`journal`: records, labels, review), the learned
+column headers (`header_synonym`) and service synonyms (`service_synonym`), and the admitted users. PostgreSQL with `DATABASE_URL`, else a SQLite file in `PARSER_DATA_DIR`. Large parts are files in
 `PARSER_DATA_DIR`: uploads (`docs/`), rows as Parquet (`results/`) and nightly reports.
 
 Schema changes go through Alembic: change `billparse/db.py`, then

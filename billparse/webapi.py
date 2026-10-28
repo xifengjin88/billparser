@@ -1150,25 +1150,24 @@ def mapping_resolve(label: str, provider: str | None = None) -> Resolution:
 def aliases() -> list[dict[str, Any]]:
     with RESOLVER_LOCK:
         res = get_resolver(catalog_dir())
-        created = res.syn_path.stat().st_mtime if res.syn_path.exists() else time.time()
         out = []
-        for k, key in sorted(res.synonyms.items()):
-            provider, _, label_norm = k.partition("|")
+        for e in sorted(res.store.entries(), key=lambda e: (e["scope"], e["label"])):
+            provider, label_norm, key = e["scope"], e["label"], e["service_key"]
             s = res.cat.services.get(key) or {}
             out.append({"provider": s.get("provider") if provider == "*" else provider, "label": label_norm,
-                        "label_norm": label_norm, "code": s.get("code") or key, "source": "review", "created": created,
-                        "scope": provider})
+                        "label_norm": label_norm, "code": s.get("code") or key, "source": e["source"] or "review",
+                        "created": e["created"] or time.time(), "scope": provider})
     return out
 
 
 @router.post("/aliases", tags=["web"])
-def add_alias(alias: AliasIn) -> dict:
+def add_alias(alias: AliasIn, request: Request) -> dict:
     with RESOLVER_LOCK:
         res = get_resolver(catalog_dir())
         key = res.key_for_code(alias.code, alias.provider)
         if key is None:
             raise HTTPException(400, f"{alias.code} is not a {alias.provider} code in the mapping.")
-        res.add_synonym(alias.label, key, provider=alias.provider)
+        res.add_synonym(alias.label, key, provider=alias.provider, source="admin", by=auth.current_user(request))
     return {"ok": True}
 
 

@@ -17,6 +17,8 @@ from pathlib import Path
 import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from billparse.settings import load_env  # noqa: E402
+from billparse.synonyms import synonym_store  # noqa: E402
 from svcres.catalog import Catalog  # noqa: E402
 from svcres.llm_fallback import make_llm_fallback  # noqa: E402
 from svcres.resolver import Resolver  # noqa: E402
@@ -44,10 +46,11 @@ def main() -> None:
     if not (a.code_col or a.name_col):
         sys.exit("Give --code-col and/or --name-col")
 
+    load_env()
     t0 = time.perf_counter()
     cat = Catalog.load(a.data_dir / "catalog.msgpack")
     fb = None if a.no_llm else make_llm_fallback(cat)
-    res = Resolver(cat, a.data_dir, fallback=fb)
+    res = Resolver(cat, a.data_dir, fallback=fb, synonyms=synonym_store(a.data_dir))  # the database's
     t_load = time.perf_counter() - t0
 
     df = read_any(a.file, a.sheet)

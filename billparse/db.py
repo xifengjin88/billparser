@@ -180,6 +180,19 @@ class HeaderSynonymRow(SQLModel, table=True):
     updated_by: str | None = None
 
 
+class ServiceSynonymRow(SQLModel, table=True):
+    """A label learned for a catalog service (synonyms.py, svcres.resolver steps 3 and 4a): from an approved review or
+    an admin. In the database, not a file: several workers and the API learn at once."""
+    __tablename__: ClassVar[str] = "service_synonym"
+    scope: str = Field(primary_key=True)              # '*' (any provider) or aws | azure | gcp
+    label: str = Field(primary_key=True)              # svcres.normalize.norm of the label
+    service_key: str                                  # a catalog service key ("azure:SQL Database")
+    source: str                                       # review | admin (the latest)
+    created: float
+    updated: float = Field(index=True)
+    updated_by: str | None = None
+
+
 class AppUserRow(SQLModel, table=True):
     """A person admitted to the web app: a Google account of the allowed domain that gave a valid invite code once."""
     __tablename__: ClassVar[str] = "app_users"

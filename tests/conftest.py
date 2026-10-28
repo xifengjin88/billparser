@@ -11,9 +11,11 @@ os.environ["ENV_FILE"] = str(Path(__file__).parent / "no-such.env")
 
 
 @pytest.fixture(autouse=True)
-def _sqlite_only(monkeypatch):
+def _sqlite_only(monkeypatch, tmp_path):
     monkeypatch.delenv("DATABASE_URL", raising=False)
     monkeypatch.delenv("AUTH", raising=False)
+    # the default store (and so the service synonyms' database): the test's own, never the project's store/
+    monkeypatch.setenv("PARSER_DATA_DIR", str(tmp_path / "default-store"))
 
 
 @pytest.fixture(autouse=True)
