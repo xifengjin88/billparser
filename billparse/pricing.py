@@ -498,9 +498,13 @@ def _apply(rows: pd.DataFrame, idx: pd.Index, keys: pd.DataFrame, codes: np.ndar
     level[found & cand.gt(1)] = "ambiguous"
     level[~found] = "unmatched"
     missing = _missing(keys, codes, level, res, reasons)
-    # prices: in the line's unit; printed values always win (R1)
+    # the line's currency: a price in another one is converted with the line's printed rate, else not used
+    fx, fx_note, no_rate = _currency(rows.loc[idx], res, one)
+    level[no_rate] = "unmatched"
+    missing[no_rate] = "currency"
+    # prices: in the line's unit and currency; printed values always win (R1)
     ok = level.isin(MATCHED)
-    price = pd.to_numeric(res["unit_price"], errors="coerce") * factor
+    price = pd.to_numeric(res["unit_price"], errors="coerce") * factor * fx
     fill_price = ok & pd.to_numeric(_col(rows.loc[idx], "list_unit_price"), errors="coerce").isna()
     fill_list = ok & pd.to_numeric(_col(rows.loc[idx], "list_cost"), errors="coerce").isna()
     for c in ("list_unit_price", "list_cost"):
@@ -515,6 +519,10 @@ def _apply(rows: pd.DataFrame, idx: pd.Index, keys: pd.DataFrame, codes: np.ndar
     before = ok & res["effective_from"].notna() & (dates.astype(str) < res["effective_from"].astype(str))
     extra = np.where(tiered & before, "tiered; before_history",
                      np.where(tiered, "tiered", np.where(before, "before_history", "")))
+    conv = (ok & fx_note.ne("")).to_numpy()
+    extra = np.where(conv & (extra != ""), np.char.add(np.char.add(extra.astype(str), "; "),
+                                                       fx_note.to_numpy().astype(str)),
+                     np.where(conv, fx_note.to_numpy(), extra))
     text = np.where((notes != "") & (extra != ""), np.char.add(np.char.add(notes.astype(str), "; "),
                                                                extra.astype(str)), np.where(notes != "", notes, extra))
     list_unit = pd.to_numeric(rows.loc[idx, "list_unit_price"], errors="coerce")
@@ -532,6 +540,29 @@ def _apply(rows: pd.DataFrame, idx: pd.Index, keys: pd.DataFrame, codes: np.ndar
     rows.loc[ok[ok].index, "catalog_unit_price"] = price[ok]      # the catalog's, even where the file printed one
     rows.loc[idx, "price_conflict"] = _conflicts(rows.loc[idx], res, level.eq("exact"))
     _count(stats, level, missing, cost, ratio, ok, rows.loc[idx], billed)
+
+
+def _currency(p: pd.DataFrame, res: pd.DataFrame, one: pd.Series) -> tuple[pd.Series, pd.Series, pd.Series]:
+    """(factor, note, no rate) per line: a line that prints a currency other than its price's (the catalog's USD) is
+    priced in its own currency with its printed rate (currency_conversion_rate: units of the line's currency per
+    unit of the price's, GCP and FOCUS print it), noted "currency=EUR at 0.92 per USD (printed rate)"; with no rate
+    it is not priced (price_missing currency). A line that prints no currency is taken to be in the price's."""
+    factor = pd.Series(1.0, index=p.index)
+    note = pd.Series("", index=p.index, dtype=object)
+    mine = map_unique(_col(p, "currency"), lambda v: str(v).strip().upper() if isinstance(v, str) and v.strip()
+                      else None)
+    theirs = _col(res, "currency").astype(object)
+    theirs = theirs.where(theirs.notna(), None).map(lambda v: str(v).strip().upper() if isinstance(v, str) else None)
+    other = one & mine.notna() & theirs.notna() & mine.ne(theirs)
+    if not other.any():
+        return factor, note, pd.Series(False, index=p.index)
+    rate = pd.to_numeric(_col(p, "currency_conversion_rate"), errors="coerce")
+    rate = rate.where(rate > 0)
+    have = other & rate.notna()
+    factor[have] = rate[have]
+    note[have] = [f"currency={m} at {r:g} per {t} (printed rate)"
+                  for m, r, t in zip(mine[have], rate[have], theirs[have], strict=True)]
+    return factor, note, other & rate.isna()
 
 
 def _conflicts(p: pd.DataFrame, res: pd.DataFrame, exact: pd.Series) -> pd.Series:

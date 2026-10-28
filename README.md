@@ -248,8 +248,10 @@ checks compare printed list prices and the file's own costs. None is critical ye
 `printed_list_price`, `implied_unit_price` and `usage_hours` count as internal checks (a pass can make a file
 `consistent`). The attempts of a parse are priced too (one key cache per parse), so a failure lowers a wrong route,
 goes to the LLM's repair and the agent, and a learned spec's attempt that fails one is not accepted at once (the most
-confident attempt wins; a built-in spec is). The regression gate prices too and rejects a new spec version that fails
-a price check the accepted result passed.
+confident attempt wins; a built-in spec is). A built-in spec is judged without its failed price checks: one (a SKU
+the catalog does not have: an old bill, a SKU newer than the last price download) lowers its confidence, and may make
+it need review, but never hands the file to another route, whose reading would replace the built-in's. The regression
+gate prices too and rejects a new spec version that fails a price check the accepted result passed.
 
 Status: `reconciled` (total matched), `unreconciled` (no total, other checks fine; forecast
 ranges widen), `needs_review` (goes to the review queue), `auxiliary` (price sheets,
@@ -437,6 +439,13 @@ has is `no_such_product` (or `service_not_loaded` when the catalog has no SKU of
   invoices often print no region). Each is in `price_assumptions`; the line's own columns stay
   as parsed. A first-tier price (`tiered`) and a date before the catalog's oldest price (`before_history`) are noted
   there too.
+- **Currency.** The catalog's prices are in USD. A line that prints another currency is priced in its own currency
+  with the rate it prints (`currency_conversion_rate`: units of its currency per USD; GCP exports print
+  `currency_conversion_rate`, GCP FOCUS `x_CurrencyConversionRate`), noted in `price_assumptions`
+  (`currency=EUR at 0.92 per USD (printed rate)`): `list_unit_price`, `list_cost` and `catalog_unit_price` are then in
+  the line's currency, so the price checks compare one currency. A line with another currency and no rate is not
+  priced (`unmatched`, `price_missing` `currency`). A line that prints no currency is taken to be in USD. AWS and GCP
+  alike.
 - **R1.** `list_unit_price` and `list_cost` are filled only where the file printed none (inferred, source
   `price_catalog`); `Document.cost_types` still lists only what the file gives.
 - **R2.** When at least 20 on-demand lines matched `exact` or `attributes`, across at least 3 services, have the same

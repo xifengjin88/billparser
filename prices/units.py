@@ -14,7 +14,8 @@ UNITS: dict[str, dict[str, float]] = {
              "min": 1 / 60, "days": 24, "day": 24},
     "gb_month": {"gb-mo": 1, "gb-month": 1, "gb/month": 1, "gb month": 1, "gibibyte month": 1, "gib-month": 1,
                  "gb-mo.": 1, "tb-mo": 1024, "tb-month": 1024, "tb/month": 1024},
-    "gb": {"gb": 1, "gib": 1, "gigabyte": 1, "gibibyte": 1, "tb": 1024, "mb": 1 / 1024},
+    "gb": {"gb": 1, "gib": 1, "gigabyte": 1, "gibibyte": 1, "tb": 1024, "mb": 1 / 1024,
+           "tebibyte": 1024, "mebibyte": 1 / 1024},          # GCP's unit words (an AWS price list never spells them)
     "request": {"requests": 1, "request": 1, "req": 1, "api calls": 1, "calls": 1, "count": 1, "invocations": 1},
 }
 SCALE = {"k": 1e3, "m": 1e6, "b": 1e9}

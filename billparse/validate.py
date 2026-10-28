@@ -817,11 +817,14 @@ def completeness(checks: list[Check], reconciled: bool) -> str:
     return "unchecked"
 
 
+REVIEW_BELOW = 0.6             # a result less confident than this needs review
+
+
 def _summarize(checks: list[Check], conf: float, reconciled: bool) -> dict:
     critical_fail = any(c.status == "fail" and c.name in CRITICAL for c in checks)
     if reconciled and conf >= 0.7 and not critical_fail:
         status = "reconciled"
-    elif not critical_fail and conf >= 0.6:
+    elif not critical_fail and conf >= REVIEW_BELOW:
         status = "unreconciled"
     else:
         status = "needs_review"

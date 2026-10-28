@@ -4,9 +4,10 @@ API call, no customer data.
 
     python tests/fixtures/prices/gcp/make_fixture.py
 
-Compute Engine: the two SKU IDs of samples/files/gcp_export_full.json (an N2 and an E2 core, on demand), a Spot N2
-core, an N2 1-year commitment, an N2 RAM SKU (priced per gibibyte hour, exported in byte-seconds). Cloud Storage: a
-multi-region storage SKU (per gibibyte month). Networking: an egress SKU with tiers, the first one free.
+The SKU IDs of the GCP samples (samples/make_samples.py: GCP_N2_CORE, ...). Compute Engine: an N2 and an E2 core
+(on demand), a Spot N2 core, an N2 1-year commitment, an N2 RAM SKU (priced per gibibyte hour, exported in
+byte-seconds). Cloud Storage: a multi-region storage SKU (per gibibyte month). Networking: an egress SKU with tiers,
+the first one free. BigQuery: analysis per tebibyte, the first one free. Cloud SQL: a vCPU hour.
 """
 
 from __future__ import annotations
@@ -19,7 +20,9 @@ OUT = Path(__file__).parent / "download"
 WHEN = "2026-10-01T07:00:00Z"
 AMERICAS = ["us-central1", "us-east1", "us-east4", "us-west1"]
 COMPUTE, STORAGE, NETWORK = "6F81-5844-456A", "95FF-2EF5-5EA1", "E505-1604-58F8"
-SERVICES = {COMPUTE: "Compute Engine", STORAGE: "Cloud Storage", NETWORK: "Networking"}
+BIGQUERY, CLOUD_SQL = "24E6-581D-38E5", "9662-B51E-5089"
+SERVICES = {COMPUTE: "Compute Engine", STORAGE: "Cloud Storage", NETWORK: "Networking", BIGQUERY: "BigQuery",
+            CLOUD_SQL: "Cloud SQL"}
 
 
 def money(price: float) -> dict:
@@ -50,7 +53,7 @@ def sku(service: str, sku_id: str, description: str, family: str, group: str, us
 HOUR = ("h", "hour", "s", "second", 3600)
 SKUS = {
     COMPUTE: [
-        sku(COMPUTE, "CP-COMPUTEENGINE-VMIMAGE-N2-STANDARD-4", "N2 Instance Core running in Americas", "Compute", "CPU",
+        sku(COMPUTE, "BB77-5FDA-4F5A", "N2 Instance Core running in Americas", "Compute", "CPU",
             "OnDemand", AMERICAS, *HOUR, [(0, 0.031611)]),
         sku(COMPUTE, "D973-5D65-BAB2", "E2 Instance Core running in Americas", "Compute", "CPU", "OnDemand", AMERICAS,
             *HOUR, [(0, 0.021811)]),
@@ -70,6 +73,14 @@ SKUS = {
         sku(NETWORK, "9DE9-9092-B3BC", "Network Internet Egress from Americas to Americas", "Network", "PremiumInternetEgress",
             "OnDemand", ["us-central1"], "GiBy", "gibibyte", "By", "byte", 1073741824,
             [(0, 0.0), (1, 0.12), (1024, 0.11), (10240, 0.08)]),
+    ],
+    BIGQUERY: [
+        sku(BIGQUERY, "3362-E469-6BEF", "Analysis", "ApplicationServices", "BigQuery", "OnDemand", ["us-central1"],
+            "TiBy", "tebibyte", "By", "byte", 1099511627776, [(0, 0.0), (1, 6.25)]),
+    ],
+    CLOUD_SQL: [
+        sku(CLOUD_SQL, "D9A6-08F5-3B79", "Cloud SQL for PostgreSQL: Zonal - vCPU in Iowa", "ApplicationServices",
+            "SQLGen2InstancesCPU", "OnDemand", ["us-central1"], *HOUR, [(0, 0.0413)]),
     ],
 }
 

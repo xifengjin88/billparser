@@ -21,6 +21,9 @@ from pathlib import Path
 import pandas as pd
 
 OUT = Path(__file__).parent / "files"
+# GCP SKU IDs in the Cloud Billing Catalog's format (tests/fixtures/prices/gcp has their prices)
+GCP_N2_CORE, GCP_E2_CORE, GCP_N2_SPOT = "BB77-5FDA-4F5A", "D973-5D65-BAB2", "2D3A-6B1E-9F0C"
+GCP_STORAGE, GCP_BQ_ANALYSIS, GCP_SQL_VCPU = "E5F0-6A5D-7BAD", "3362-E469-6BEF", "D9A6-08F5-3B79"
 rnd = random.Random(42)
 DAYS = [date(2026, 9, 1) + timedelta(days=i) for i in range(30)]
 
@@ -305,7 +308,7 @@ def _cur2_full_rows(as_map: bool) -> list[dict]:
                 continue
             if as_map and k in CUR2_MAP_KEYS:
                 continue
-            o[_cur2_name(k) if not (k in CUR2_MAP_KEYS) else "product_" + CUR2_MAP_KEYS[k]] = v
+            o[_cur2_name(k) if k not in CUR2_MAP_KEYS else "product_" + CUR2_MAP_KEYS[k]] = v
         if as_map:
             o["product"] = json.dumps({m: r[k] for k, m in CUR2_MAP_KEYS.items() if r.get(k) not in (None, "")})
         out.append(o)
@@ -396,8 +399,8 @@ def gcp_export_full() -> float:
     recs = []
     for d in DAYS[:3]:
         for sku_id, sku, cost, spec, name in [
-                ("CP-COMPUTEENGINE-VMIMAGE-N2-STANDARD-4", "N2 Instance Core running in Americas", 50.0, "n2-standard-4", "web-1"),
-                ("D973-5D65-BAB2", "E2 Instance Core running in Americas", 12.0, "e2-medium", "tools-1")]:
+                (GCP_N2_CORE, "N2 Instance Core running in Americas", 50.0, "n2-standard-4", "web-1"),
+                (GCP_E2_CORE, "E2 Instance Core running in Americas", 12.0, "e2-medium", "tools-1")]:
             recs.append({"billing_account_id": "01ABCD-234567-89EFGH",
                          "service": {"id": "6F81-5844-456A", "description": "Compute Engine"},
                          "sku": {"id": sku_id, "description": sku},
@@ -480,19 +483,20 @@ def gcp_commitments() -> float:
     """GCP billing export with a committed use discount credit on some usage, and cost_at_list."""
     recs = []
     for d in DAYS[:3]:
-        for sku, cost, credits in [
-                ("N2 Instance Core running in Americas", 50.0,
+        # core hours: the list cost (cost_at_list) at the SKU's list price
+        for sku_id, sku, cost, hours, credits in [
+                (GCP_N2_CORE, "N2 Instance Core running in Americas", 50.0, 1739.9,
                  [{"name": "Committed use discount: N2 Core", "amount": -20.0, "type": "COMMITTED_USAGE_DISCOUNT"}]),
-                ("Spot Preemptible N2 Instance Core running in Americas", 8.0, []),
-                ("E2 Instance Core running in Americas", 12.0,
+                (GCP_N2_SPOT, "Spot Preemptible N2 Instance Core running in Americas", 8.0, 1150.3, []),
+                (GCP_E2_CORE, "E2 Instance Core running in Americas", 12.0, 605.2,
                  [{"name": "Sustained use discount", "amount": -2.4, "type": "SUSTAINED_USAGE_DISCOUNT"}])]:
             recs.append({"billing_account_id": "01ABCD-234567-89EFGH",
                          "service": {"id": "6F81-5844-456A", "description": "Compute Engine"},
-                         "sku": {"id": "AAAA-BBBB", "description": sku},
+                         "sku": {"id": sku_id, "description": sku},
                          "usage_start_time": f"{d}T00:00:00Z", "usage_end_time": f"{d}T23:59:59Z",
                          "project": {"id": "shop-prod", "name": "shop-prod"}, "location": {"region": "us-east1"},
                          "cost": cost, "cost_at_list": round(cost * 1.1, 2), "currency": "USD",
-                         "usage": {"amount_in_pricing_units": 24, "pricing_unit": "hour"},
+                         "usage": {"amount_in_pricing_units": hours, "pricing_unit": "hour"},
                          "credits": credits, "cost_type": "regular"})
     recs.append({"billing_account_id": "01ABCD-234567-89EFGH", "service": {"id": "", "description": "Tax"},
                  "sku": {"id": "", "description": "Tax"}, "usage_start_time": f"{DAYS[2]}T00:00:00Z",
@@ -543,28 +547,35 @@ def pc_invoice_recon() -> None:
 def focus_parquet() -> None:
     rows = []
     for d in DAYS:
-        for svc, cat, cost in [("Compute Engine", "Compute", 210.0), ("Cloud Storage", "Storage", 35.5),
-                               ("BigQuery", "Analytics", 88.25), ("Cloud SQL", "Databases", 61.0)]:
+        # the SKU, its unit and list price (the quantity is the list cost at that price)
+        for svc, cat, cost, sku, unit, price in [
+                ("Compute Engine", "Compute", 210.0, GCP_N2_CORE, "hour", 0.031611),
+                ("Cloud Storage", "Storage", 35.5, GCP_STORAGE, "gibibyte month", 0.026),
+                ("BigQuery", "Analytics", 88.25, GCP_BQ_ANALYSIS, "tebibyte", 6.25),
+                ("Cloud SQL", "Databases", 61.0, GCP_SQL_VCPU, "hour", 0.0413)]:
             c = round(cost * rnd.uniform(0.9, 1.1), 4)
             rows.append({"BilledCost": c, "EffectiveCost": round(c * 0.97, 4), "ListCost": round(c * 1.1, 4),
                          "BillingCurrency": "USD", "ChargePeriodStart": f"{d}T00:00:00Z",
                          "ChargePeriodEnd": f"{d + timedelta(days=1)}T00:00:00Z", "ChargeCategory": "Usage",
                          "ProviderName": "Google Cloud", "ServiceName": svc, "ServiceCategory": cat,
-                         "SubAccountId": "my-project", "RegionId": "us-central1", "ConsumedQuantity": 1.0,
-                         "ConsumedUnit": "unit"})
+                         "SubAccountId": "my-project", "RegionId": "us-central1", "SkuId": sku,
+                         "ConsumedQuantity": round(c * 1.1 / price, 4), "ConsumedUnit": unit})
     pd.DataFrame(rows).to_parquet(OUT / "focus_gcp.parquet", index=False)
 
 
 def gcp_json() -> None:
     recs = []
     for d in DAYS[:10]:
-        for sid, svc, sku, cost in [("6F81-5844-456A", "Compute Engine", "N2 Instance Core running in Americas", 120.0),
-                                    ("95FF-2EF5-5EA1", "Cloud Storage", "Standard Storage US Multi-region", 12.0)]:
+        for sid, svc, sku_id, sku, cost, q, unit in [
+                ("6F81-5844-456A", "Compute Engine", GCP_N2_CORE, "N2 Instance Core running in Americas", 120.0,
+                 3796.1, "hour"),
+                ("95FF-2EF5-5EA1", "Cloud Storage", GCP_STORAGE, "Standard Storage US Multi-region", 12.0, 461.5,
+                 "gibibyte month")]:
             recs.append({"billing_account_id": "01ABCD-234567-89EFGH",
-                         "service": {"id": sid, "description": svc}, "sku": {"id": "AAAA-BBBB", "description": sku},
+                         "service": {"id": sid, "description": svc}, "sku": {"id": sku_id, "description": sku},
                          "usage_start_time": f"{d}T00:00:00Z", "usage_end_time": f"{d}T23:59:59Z",
                          "project": {"id": "shop-prod", "name": "shop-prod"}, "location": {"region": "us-east1"},
-                         "cost": cost, "currency": "USD", "usage": {"amount_in_pricing_units": 24, "pricing_unit": "hour"},
+                         "cost": cost, "currency": "USD", "usage": {"amount_in_pricing_units": q, "pricing_unit": unit},
                          "credits": [{"name": "Sustained use discount", "amount": -round(cost * 0.2, 2), "type": "SUSTAINED_USAGE_DISCOUNT"}],
                          "cost_type": "regular"})
     (OUT / "gcp_export.json").write_text(json.dumps(recs))

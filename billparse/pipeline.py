@@ -42,7 +42,7 @@ from .settings import catalog_dir, data_dir
 from .spec import Extraction, SpecError, check_spec, detect_score, run
 from .store import Store
 from .transforms import CANONICAL, period_of
-from .validate import CRITICAL, PRICE_CHECKS, clean_rows, validate, validate_stats
+from .validate import CRITICAL, PRICE_CHECKS, REVIEW_BELOW, clean_rows, validate, validate_stats
 
 
 @dataclass
@@ -636,17 +636,30 @@ class Pipeline:
             return False
         if att.verdict.get("status") == "auxiliary":
             return att.confidence > 0
-        if att.verdict.get("status") == "needs_review":
+        # a built-in spec is judged without its price checks: a failed one (a SKU the catalog does not have yet or no
+        # longer has: an old bill, a SKU newer than the last price download) lowers the result's confidence, and may
+        # make it need review, but never hands the file to another route, whose reading would replace the built-in's
+        builtin = att.route == "builtin"
+        if att.verdict.get("status") == "needs_review" and not (builtin and self._review_only_for_prices(att)):
             return False
-        floor = self.s.builtin_accept if att.route == "builtin" else self.s.accept_confidence
+        floor = self.s.builtin_accept if builtin else self.s.accept_confidence
         # a failed price check (a unit or column mix-up, products that do not exist) is not accepted at once: the next
         # routes run, and the most confident attempt wins (a wrong reading that adds up must not stop the search). Not
         # for a built-in spec: it reads a known export, so the failure is the data's, and the next routes (an LLM)
         # would cost money on every parse of the file
-        if att.route != "builtin" and any(c["status"] == "fail" and c["name"] in PRICE_CHECKS
-                                          for c in att.verdict.get("checks", [])):
+        if not builtin and any(c["status"] == "fail" and c["name"] in PRICE_CHECKS
+                               for c in att.verdict.get("checks", [])):
             return False
-        return att.confidence >= floor
+        return (_without_price_fails(att) if builtin else att.confidence) >= floor
+
+    @staticmethod
+    def _review_only_for_prices(att: Attempt) -> bool:
+        """The attempt needs review only because of its failed price checks: no critical check failed, and its
+        confidence without them is at least what a result without review needs."""
+        checks = att.verdict.get("checks", [])
+        if any(c["status"] == "fail" and c["name"] in CRITICAL for c in checks):
+            return False
+        return _without_price_fails(att) >= REVIEW_BELOW
 
     def _alt_extraction(self, doc: Document, best: Attempt) -> Extraction | None:
         """Independent second extraction for the dual-extraction check."""
@@ -832,6 +845,12 @@ def build_preview(doc: Document, max_rows: int = 40, max_regions: int = 4) -> di
             bold = [i for i, row in enumerate(r.rows[:max_rows]) if row.bold]
             regions.append({"name": r.name, "kind": r.kind, "rows": rows, "bold_rows": bold})
     return {"file_type": doc.file_type, "regions": regions}
+
+
+def _without_price_fails(att: Attempt) -> float:
+    """The attempt's confidence without the weight of its failed price checks (their weights are negative)."""
+    return att.confidence - sum(float(c.get("weight") or 0.0) for c in att.verdict.get("checks", [])
+                                if c["status"] == "fail" and c["name"] in PRICE_CHECKS)
 
 
 def _settled(attempts: list[Attempt]) -> dict[str, str] | None:

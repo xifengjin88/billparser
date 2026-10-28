@@ -110,6 +110,12 @@
     "BillingCurrency"
    ]
   },
+  "currency_conversion_rate": {
+   "from": [
+    "x_CurrencyConversionRate",
+    "x_currency_conversion_rate"
+   ]
+  },
   "charge_type": {
    "from": [
     "ChargeCategory"

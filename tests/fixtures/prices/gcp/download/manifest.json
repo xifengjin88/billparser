@@ -16,6 +16,14 @@
     "E505-1604-58F8": {
       "display_name": "Networking",
       "business_entity": "businessEntities/GCP"
+    },
+    "24E6-581D-38E5": {
+      "display_name": "BigQuery",
+      "business_entity": "businessEntities/GCP"
+    },
+    "9662-B51E-5089": {
+      "display_name": "Cloud SQL",
+      "business_entity": "businessEntities/GCP"
     }
   },
   "files": {
@@ -23,7 +31,7 @@
       "file": "skus/6F81-5844-456A.jsonl.gz",
       "display_name": "Compute Engine",
       "skus": 5,
-      "gz_bytes": 801
+      "gz_bytes": 779
     },
     "95FF-2EF5-5EA1": {
       "file": "skus/95FF-2EF5-5EA1.jsonl.gz",
@@ -36,11 +44,23 @@
       "display_name": "Networking",
       "skus": 1,
       "gz_bytes": 570
+    },
+    "24E6-581D-38E5": {
+      "file": "skus/24E6-581D-38E5.jsonl.gz",
+      "display_name": "BigQuery",
+      "skus": 1,
+      "gz_bytes": 535
+    },
+    "9662-B51E-5089": {
+      "file": "skus/9662-B51E-5089.jsonl.gz",
+      "display_name": "Cloud SQL",
+      "skus": 1,
+      "gz_bytes": 551
     }
   },
   "totals": {
-    "files": 3,
-    "skus": 7,
+    "files": 5,
+    "skus": 9,
     "errors": 0
   }
 }

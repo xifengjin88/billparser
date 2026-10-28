@@ -11,6 +11,7 @@ import shutil
 import sys
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 import pytest
 import sqlalchemy as sa
@@ -29,7 +30,7 @@ import make_fixture as fx  # noqa: E402
 from test_jobs import _drain, store  # noqa: E402, F401  (the job tests' store fixture)
 from test_pricing import _pipe  # noqa: E402
 
-N2 = "CP-COMPUTEENGINE-VMIMAGE-N2-STANDARD-4"       # the sample's SKU IDs: $0.031611 and $0.021811 per hour
+N2 = "BB77-5FDA-4F5A"                         # the samples' SKU IDs: $0.031611 and $0.021811 per hour
 E2 = "D973-5D65-BAB2"
 SPOT, COMMIT, RAM = "2D3A-6B1E-9F0C", "4C1E-7A2B-0F11", "F449-33EC-A5EF"
 STORAGE, EGRESS = "E5F0-6A5D-7BAD", "9DE9-9092-B3BC"
@@ -94,8 +95,9 @@ def _lines(**cols) -> pd.DataFrame:
 def test_load_counts_rows_and_attributes(engine):
     res = load_snapshot(engine, GCP)
     assert res.status == "current" and res.snapshot_id == "2026-10-27"
-    assert res.products == 7 and res.rates == 10
-    assert res.counts == {"gcp:6F81-5844-456A": 5, "gcp:95FF-2EF5-5EA1": 1, "gcp:E505-1604-58F8": 4}
+    assert res.products == 9 and res.rates == 13
+    assert res.counts == {"gcp:6F81-5844-456A": 5, "gcp:95FF-2EF5-5EA1": 1, "gcp:E505-1604-58F8": 4,
+                          "gcp:24E6-581D-38E5": 2, "gcp:9662-B51E-5089": 1}
     with engine.connect() as conn:
         p = conn.execute(sa.text("SELECT * FROM price_product WHERE sku = :s"), {"s": N2}).mappings().one()
         r = conn.execute(sa.text("SELECT * FROM price_rate WHERE sku = :s"), {"s": COMMIT}).mappings().one()
@@ -128,7 +130,7 @@ def test_aws_and_gcp_share_the_snapshot_and_leave_each_other_alone(engine, tmp_p
         open_gcp = conn.execute(sa.text("SELECT count(*) FROM price_rate WHERE provider = 'gcp' "
                                         "AND effective_to IS NULL")).scalar_one()
     counts = json.loads(counts) if isinstance(counts, str) else counts
-    assert counts["gcp:6F81-5844-456A"] == 5 and counts["AmazonEC2"] > 0 and open_gcp == 10
+    assert counts["gcp:6F81-5844-456A"] == 5 and counts["AmazonEC2"] > 0 and open_gcp == 13
     # and that week's GCP load adds to it
     assert load_snapshot(engine, _download(tmp_path)).status == "current"
 
@@ -212,7 +214,7 @@ def test_units_are_converted_to_the_prices(catalog):
 
 
 def test_what_a_gcp_line_lacks(catalog):
-    rows = _lines(sku_id=[None, "AAAA-BBBB", "AAAA-BBBB"], service_code=[COMPUTE, COMPUTE, "24E6-581D-38E5"],
+    rows = _lines(sku_id=[None, "AAAA-BBBB", "AAAA-BBBB"], service_code=[COMPUTE, COMPUTE, "152E-C115-5142"],
                   instance_type=["n2-standard-4", None, None])
     match_prices(rows, catalog)
     assert rows["price_match_level"].tolist() == ["unmatched"] * 3
@@ -277,7 +279,7 @@ def test_the_fetcher_pages_and_writes_a_loadable_download(tmp_path, monkeypatch,
     manifest = json.loads((out / "manifest.json").read_text())
     assert manifest["provider"] == "gcp" and set(manifest["files"]) == set(fx.SERVICES)    # not Maps
     assert manifest["files"][COMPUTE]["skus"] == 5 and ("/services/6F81-5844-456A/skus", "4") in calls
-    assert load_snapshot(engine, out).rates == 10
+    assert load_snapshot(engine, out).rates == 13
 
 
 def test_the_price_job_skips_gcp_without_a_key(store, tmp_path, monkeypatch):  # noqa: F811
@@ -298,5 +300,92 @@ def test_the_price_job_loads_aws_then_gcp(store, tmp_path, monkeypatch):  # noqa
     job, _ = jobs.enqueue(store, "prices", "maintenance", name="prices", dedupe_key="prices:test")
     assert _drain(store) == ["done"]
     result = jobs.get(store, job["id"])["result"]
-    assert result["status"] == "current" and result["gcp"]["rates"] == 10
+    assert result["status"] == "current" and result["gcp"]["rates"] == 13
     assert PriceCatalog(store.engine).services("gcp") == set(fx.SERVICES)
+
+
+# ---------------------------------------------------------------- currency
+def _rebilled(tmp_path: Path, currency: str, rate: float | None) -> Path:
+    """gcp_export_full.json billed at exactly the fixture's list price, in currency at rate (units per USD; None: the
+    file prints no rate)."""
+    price = {N2: 0.031611, E2: 0.021811}
+    recs = json.loads((ROOT / "samples" / "files" / "gcp_export_full.json").read_text())
+    for r in recs:
+        r["cost"] = round(r["usage"]["amount_in_pricing_units"] * price[r["sku"]["id"]] * (rate or 1.0), 6)
+        r["currency"] = currency
+        if rate is not None:
+            r["currency_conversion_rate"] = rate
+    path = tmp_path / f"gcp_{currency}.json"
+    path.write_text(json.dumps(recs))
+    return path
+
+
+@pytest.mark.parametrize("currency, rate", [("USD", 1.0), ("EUR", 0.92), ("JPY", 152.0)])
+def test_a_bill_at_list_price_has_ratio_one_in_any_currency(tmp_path, currency, rate):
+    pipe = _pipe(tmp_path)
+    load_snapshot(pipe.store.engine, GCP)
+    r = pipe.parse_file(_rebilled(tmp_path, currency, rate))
+    rows = pipe.store.get_rows(r["sha256"])
+    assert set(rows["price_match_level"]) == {"exact"} and set(rows["currency"]) == {currency}
+    assert pd.to_numeric(rows["price_ratio"]).tolist() == pytest.approx([1.0] * 6, rel=1e-4)
+    n2 = rows[rows["sku_id"].eq(N2)].iloc[0]
+    assert float(n2["list_cost"]) == pytest.approx(24 * 0.031611 * rate)          # in the line's currency
+    assert float(n2["catalog_unit_price"]) == pytest.approx(0.031611 * rate)
+    note = n2["price_assumptions"] if isinstance(n2["price_assumptions"], str) else ""
+    assert (f"currency={currency} at {rate:g} per USD (printed rate)" in note) == (currency != "USD")
+    checks = {c["name"]: c["status"] for c in r["checks"]}
+    assert checks["implied_unit_price"] == "pass" and checks["catalog_grounding"] == "pass"
+    assert r["confidence"] >= 0.9
+
+
+def test_a_line_in_another_currency_without_a_rate_is_not_priced(tmp_path):
+    pipe = _pipe(tmp_path)
+    load_snapshot(pipe.store.engine, GCP)
+    r = pipe.parse_file(_rebilled(tmp_path, "EUR", None))
+    rows = pipe.store.get_rows(r["sha256"])
+    assert set(rows["price_match_level"]) == {"unmatched"} and set(rows["price_missing"]) == {"currency"}
+    assert pd.to_numeric(rows["list_cost"]).isna().all() and rows["catalog_unit_price"].isna().all()
+    checks = {c["name"]: c["status"] for c in r["checks"]}
+    assert checks["implied_unit_price"] == "skip" and checks["catalog_grounding"] != "fail"
+    assert [(m["field"], m["lines"]) for m in r["pricing"]["missing"]] == [("currency", 6)]
+
+
+def test_aws_lines_follow_the_same_currency_rule(catalog):
+    from test_pricing import LINUX
+    rows = pd.DataFrame({"charge_type": "Usage", "provider": "aws", "charge_start": "2026-10-27",
+                         "region": "us-east-1", "service_code": "AmazonEC2", "quantity": 10.0, "unit": "Hrs",
+                         "billed_cost": 1.92, "sku_id": LINUX, "currency": ["USD", "EUR", "EUR", None],
+                         "currency_conversion_rate": [np.nan, np.nan, 0.9, np.nan]})
+    match_prices(rows, catalog)
+    assert rows["price_match_level"].tolist() == ["exact", "unmatched", "exact", "exact"]
+    assert rows.loc[1, "price_missing"] == "currency"
+    lst = pd.to_numeric(rows["list_cost"])
+    assert lst[0] == pytest.approx(1.92) and np.isnan(lst[1]) and lst[2] == pytest.approx(1.92 * 0.9)
+    assert lst[3] == pytest.approx(1.92)                       # no currency printed: the price's
+
+
+# ---------------------------------------------------------------- a SKU the catalog does not have
+def test_a_missing_sku_lowers_confidence_and_keeps_the_builtin_reading(tmp_path):
+    """A SKU retired before the first price download (an old bill) fails catalog_grounding: the built-in spec's
+    reading stays (route, rows, tax line) with less confidence; a stored spec that reads the same file without the SKU
+    column (so without the failure) does not replace it."""
+    pipe = _pipe(tmp_path)
+    load_snapshot(pipe.store.engine, GCP)
+    recs = json.loads((ROOT / "samples" / "files" / "gcp_commitments.json").read_text())
+    for r in recs:
+        if r["sku"]["id"]:
+            r["sku"]["id"] = "0000-1111-2222"                 # the format of a GCP SKU ID, in no catalog
+    path = tmp_path / "gcp_commitments_old.json"
+    path.write_text(json.dumps(recs))
+    builtin = pipe.store.get_spec("gcp-billing-export")
+    learned = {k: v for k, v in copy.deepcopy(builtin).items() if k not in ("version", "created_at")}
+    learned.update(id="gcp-without-sku", trust="candidate")
+    del learned["columns"]["sku_id"]
+    pipe.store.save_spec(learned)
+    r = pipe.parse_file(path)
+    assert (r["spec"]["route"], r["spec"]["id"]) == ("builtin", "gcp-billing-export")
+    rows = pipe.store.get_rows(r["sha256"])
+    assert len(rows) == 10 and rows["charge_type"].eq("Tax").sum() == 1 and r["analysis"]["total_billed"] == 213.0
+    assert set(rows.loc[rows["charge_type"].eq("Usage"), "price_missing"]) == {"no_such_product"}
+    checks = {c["name"]: c for c in r["checks"]}
+    assert checks["catalog_grounding"]["status"] == "fail" and r["confidence"] < 0.75
