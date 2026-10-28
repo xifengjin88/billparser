@@ -258,7 +258,7 @@ class RowStats:
 
     def _prices(self, df: pd.DataFrame) -> None:
         level = df["price_match_level"].astype(object)
-        usage = _usage(df) & _col(df, "provider").astype(str).str.lower().eq("aws")
+        usage = _usage(df) & _col(df, "provider").astype(str).str.lower().isin(("aws", "azure"))
         asked = usage & level.notna() & level.astype(str).ne("") & level.ne("no_catalog")
         self.catalog_lines += int(asked.sum())
         if not asked.any():
@@ -656,10 +656,10 @@ PRICE_CHECKS = ("catalog_grounding", "printed_list_price", "implied_unit_price",
 def price_checks(s: RowStats, rows: pd.DataFrame | None = None, text: str | None = None) -> list[Check]:
     """The catalog's list prices as an independent reference: a parse that maps real products, pays sane prices and
     agrees with the printed list prices is almost certainly right. Every check skips (weight 0) unless the catalog was
-    asked for some line of the file (no catalog, or Azure and GCP only: today's verdict). Catalog-filled values never
+    asked for some line of the file (no catalog, GCP only, or Azure without Azure prices). Catalog-filled values never
     check themselves: printed_list_price reads printed prices only, implied_unit_price the file's costs."""
     if not s.catalog_lines:
-        why = "No line was priced against the catalog (no catalog, or no AWS usage lines)"
+        why = "No line was priced against the catalog (no catalog, or no AWS or Azure usage lines)"
         return [Check(n, "skip", why) for n in PRICE_CHECKS]
     return [_grounding(s), _printed_list(s), _implied(s), _units(s), _hours(s), _order(s), _grounded(rows, text)]
 
@@ -682,7 +682,7 @@ def _times(f: float) -> str:
 
 
 def _grounding(s: RowStats) -> Check:
-    """catalog_grounding: of the AWS usage cost whose service the catalog has, the share whose product no catalog
+    """catalog_grounding: of the AWS and Azure usage cost whose service the catalog has, the share whose product no catalog
     row has (no_such_product), or whose exact match prints another region, instance type or OS than the product
     (price_conflict): a value read from a wrong column. At least MIN_GROUNDED lines, else skip."""
     lines = s.g_priced[0] + s.g_nosuch[0]
@@ -755,9 +755,9 @@ def _units(s: RowStats) -> Check:
         return Check("price_units", "skip", "No priced cost")
     share = bad / cost
     if share > 0.05:
-        return Check("price_units", "warn", f"{share:.0%} of the AWS usage cost has a unit the list price's cannot "
+        return Check("price_units", "warn", f"{share:.0%} of the priced usage cost has a unit the list price's cannot "
                      "be converted to: the unit column may be wrong" + _examples(s, "price_units"), -0.05)
-    return Check("price_units", "pass", f"{1 - share:.0%} of the AWS usage cost has a unit the list price's converts "
+    return Check("price_units", "pass", f"{1 - share:.0%} of the priced usage cost has a unit the list price's converts "
                  "to", 0.0)
 
 

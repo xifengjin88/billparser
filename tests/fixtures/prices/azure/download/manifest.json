@@ -1,0 +1,40 @@
+{
+  "provider": "azure",
+  "source": "azure-retail-prices",
+  "fetched_at": "2026-10-27T00:00:00+00:00",
+  "base": "https://prices.azure.com/api/retail/prices",
+  "files": {
+    "Virtual Machines": {
+      "eastus": {
+        "path": "Virtual_Machines/eastus.jsonl.gz",
+        "rows": 36,
+        "requests": 1,
+        "filter": "serviceName eq 'Virtual Machines' and armRegionName eq 'eastus' and (armSkuName eq 'Standard_D4s_v5' or armSkuName eq 'Standard_D8s_v5' or armSkuName eq 'Standard_E8ds_v5' or armSkuName eq 'Standard_B2ms')"
+      }
+    },
+    "Storage": {
+      "eastus": {
+        "path": "Storage/eastus.jsonl.gz",
+        "rows": 12,
+        "requests": 1,
+        "filter": "serviceName eq 'Storage' and armRegionName eq 'eastus' and (skuName eq 'P10 LRS' or (productName eq 'General Block Blob v2' and skuName eq 'Hot LRS'))"
+      }
+    },
+    "Bandwidth": {
+      "eastus": {
+        "path": "Bandwidth/eastus.jsonl.gz",
+        "rows": 23,
+        "requests": 1,
+        "filter": "serviceName eq 'Bandwidth' and armRegionName eq 'eastus'"
+      }
+    },
+    "Azure Kubernetes Service": {
+      "eastus": {
+        "path": "Azure_Kubernetes_Service/eastus.jsonl.gz",
+        "rows": 1,
+        "requests": 1,
+        "filter": "serviceName eq 'Azure Kubernetes Service' and armRegionName eq 'eastus' and (meterName eq 'Standard Uptime SLA')"
+      }
+    }
+  }
+}

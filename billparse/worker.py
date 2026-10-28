@@ -7,7 +7,7 @@ Each queue has its own threads, so a long learning run or a large file never tak
 a job, runs it with a heartbeat (lease renewed every 15 s; the job's state read every second, so a stop request or
 the deadline ends it at the parse's next step, between two chunks of a large file), and finishes it. A job another
 worker took over (a missed lease) is dropped without writing. Besides the job threads, each process delivers pending
-webhooks (deliver_callbacks) and enqueues what the schedules make due (the weekly AWS price refresh, the nightly
+webhooks (deliver_callbacks) and enqueues what the schedules make due (the weekly price refresh: PRICE_PROVIDERS, the nightly
 loop; `dedupe_key` keeps two processes from enqueuing the same run). On PostgreSQL a worker LISTENs for new jobs;
 polling (WORKER_POLL_SECONDS) stays the fallback. SIGTERM: no new claims, running jobs finish; what is left comes back
 through its lease (a parse is idempotent per file).
@@ -219,17 +219,36 @@ def clean_temp(store, older_than: float = 86400.0) -> int:
     return n
 
 
-def _fetcher():
-    """scripts/aws/fetch_aws_price_files.py, imported (never run as a process)."""
-    path = Path(__file__).resolve().parents[1] / "scripts" / "aws" / "fetch_aws_price_files.py"
-    spec = importlib.util.spec_from_file_location("fetch_aws_price_files", path)
+def _fetcher(provider: str = "aws"):
+    """scripts/aws/fetch_aws_price_files.py (or scripts/azure/fetch_azure_retail_prices.py), imported (never run as
+    a process)."""
+    name = {"aws": "fetch_aws_price_files", "azure": "fetch_azure_retail_prices"}[provider]
+    path = Path(__file__).resolve().parents[1] / "scripts" / provider / f"{name}.py"
+    spec = importlib.util.spec_from_file_location(name, path)
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)                          # type: ignore[union-attr]
     return mod
 
 
+PRICE_PROVIDERS = ("aws", "azure")
+
+
+def price_providers() -> list[str]:
+    """PRICE_PROVIDERS (comma separated, default aws): the providers the weekly price refresh downloads and loads,
+    in this order."""
+    got = [p.strip().lower() for p in (os.environ.get("PRICE_PROVIDERS") or "aws").split(",") if p.strip()]
+    bad = [p for p in got if p not in PRICE_PROVIDERS]
+    if bad:
+        raise ValueError(f"PRICE_PROVIDERS: unknown provider(s) {', '.join(bad)} (known: {', '.join(PRICE_PROVIDERS)})")
+    return list(dict.fromkeys(got)) or ["aws"]
+
+
 def price_files_dir() -> Path:
     return Path(os.environ.get("PRICE_FILES_DIR") or "~/aws-price-files").expanduser()
+
+
+def azure_price_files_dir() -> Path:
+    return Path(os.environ.get("AZURE_PRICE_FILES_DIR") or "~/azure-price-files").expanduser()
 
 
 def download_prices(dest: Path) -> int:
@@ -237,17 +256,44 @@ def download_prices(dest: Path) -> int:
     return _fetcher().main(["--out", str(dest), "--all-services", "--savings-plans", "--progress-every", "0"])
 
 
+def download_azure_prices(dest: Path) -> int:
+    """The Azure fetcher's download into dest (its exit code): AZURE_PRICE_SERVICES (comma separated; empty: the
+    fetcher's default services; "all": every service) in AZURE_PRICE_REGIONS (comma separated; empty: every region)."""
+    args = ["--out", str(dest)]
+    services = [s.strip() for s in (os.environ.get("AZURE_PRICE_SERVICES") or "").split(",") if s.strip()]
+    if [s.lower() for s in services] == ["all"]:
+        args.append("--all-services")
+    else:
+        for s in services:
+            args += ["--service", s]
+    for r in (os.environ.get("AZURE_PRICE_REGIONS") or "").split(","):
+        if r.strip():
+            args += ["--region", r.strip()]
+    return _fetcher("azure").main(args)
+
+
 def run_prices(store, job: dict, run: Running) -> dict:
-    """1. Download into PRICE_FILES_DIR/.incoming-<date>; only a complete download replaces the previous files (a
-    failed one leaves them, and the current snapshot, as they were). 2. Load it (prices.load.load_snapshot): a load
-    that loses more than 10% of a price list's rates is refused, the job ends `error` and the current snapshot stays.
-    Stored documents are not repriced (reprice does that)."""
+    """For each provider of PRICE_PROVIDERS (default aws; aws,azure: AWS, then Azure): 1. download into
+    <its folder>.incoming-<date> (AWS: PRICE_FILES_DIR, Azure: AZURE_PRICE_FILES_DIR); only a complete download
+    replaces the previous files (a failed one leaves them, and the current snapshot, as they were). 2. Load it
+    (prices.load.load_snapshot): a load that loses more than 10% of a price list's rates is refused, the job ends
+    `error` and the current snapshot stays (a provider loaded before stays loaded). Stored documents are not repriced
+    (reprice does that). The result is the first provider's, with every provider's under `providers` when there are
+    several."""
+    providers = price_providers()
+    results = {p: _refresh_prices(store, job, run, p) for p in providers}
+    first = results[providers[0]]
+    return {**first, "providers": results} if len(results) > 1 else first
+
+
+def _refresh_prices(store, job: dict, run: Running, provider: str) -> dict:
     from prices.load import Refused, load_snapshot
-    target = price_files_dir()
+    target, download, what = ((price_files_dir(), download_prices, "the AWS price files") if provider == "aws" else
+                              (azure_price_files_dir(), download_azure_prices, "the Azure retail prices"))
     incoming = target.parent / f"{target.name}.incoming-{dt.date.today().isoformat()}"
-    jobs.set_progress(store, job["id"], run.worker, "downloading the AWS price files")
+    jobs.set_progress(store, job["id"], run.worker, f"downloading {what}")
     try:
-        code = download_prices(incoming)
+        code = download(incoming)
         if code != 0 or not (incoming / "manifest.json").exists():
             raise RuntimeError(f"The download failed (exit code {code}); the previous files stay")
     except BaseException:
@@ -260,7 +306,8 @@ def run_prices(store, job: dict, run: Running) -> dict:
     incoming.rename(target)
     shutil.rmtree(old, ignore_errors=True)
     run.check()
-    jobs.set_progress(store, job["id"], run.worker, "loading the price catalog")
+    jobs.set_progress(store, job["id"], run.worker, "loading the price catalog" if provider == "aws"
+                      else f"loading the price catalog ({provider})")
     try:
         res = load_snapshot(store.engine, target)
     except Refused as e:
