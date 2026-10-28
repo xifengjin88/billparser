@@ -2,6 +2,10 @@
 
     load_snapshot(engine, download_dir)     every price list of the download's manifest.json
 
+A GCP download (scripts/gcp/fetch_gcp_prices.py: manifest "provider": "gcp") loads the same way: prices.gcp turns its
+SKUs into the same rows, and its price lists are named gcp:<service ID>. A load compares and changes only the price
+lists of its own provider: a GCP load never closes or refuses AWS prices, and the reverse.
+
 One file at a time: read with pyarrow (every column as text), split into products (one per SKU: the typed attributes
 task 06 matches on, and every other attribute as JSON) and rates (one per rate code: on demand or reserved, one tier),
 or Savings Plans rates. Units and values are normalized once per distinct value (prices.units, prices.normalize).
@@ -41,7 +45,7 @@ from sqlalchemy.engine import Connection, Engine
 
 from billparse.db import PriceSnapshotRow
 
-from . import azure
+from . import azure, gcp
 from . import normalize as nz
 from .units import normalize as unit_of
 
@@ -73,6 +77,16 @@ RATE_FIELDS = ["provider", "service_code", "sku", "rate_code", "term_type", "lea
 PLAN_FIELDS = ["provider", "sku", "service_code", "plan_type", "lease_length", "purchase_option", "instance_family",
                "region", "description"]
 SP_FIELDS = ["plan_sku", "discounted_sku", "unit", "rate", "currency", "effective_date"]
+
+
+def source_of(provider: str) -> str:
+    """price_snapshot.source of a provider's download whose manifest names none."""
+    return {"gcp": gcp.SOURCE, azure.PROVIDER: "azure-retail-prices"}.get(provider, "aws-price-files")
+
+
+def sources(text: str | None) -> list[str]:
+    """price_snapshot.source: the sources loaded into the snapshot, comma separated."""
+    return [s.strip() for s in (text or "").split(",") if s.strip()]
 
 
 class Refused(RuntimeError):
@@ -275,29 +289,41 @@ def load_snapshot(engine: Engine, download_dir: Path, snapshot_id: str | None = 
     manifest = json.loads((download_dir / "manifest.json").read_text())
     provider = manifest.get("provider") or "aws"
     sid = snapshot_id or manifest["fetched_at"][:10]
+    source = manifest.get("source") or source_of(provider)
     res = LoadResult(sid, "loading")
     t0 = time.monotonic()
     with engine.begin() as conn:
         snap = PriceSnapshotRow.__table__
         conn.execute(snap.delete().where(snap.c.id == sid, snap.c.status.in_(["loading", "refused"])))
-        got = conn.execute(sa.select(snap.c.status, snap.c.counts).where(snap.c.id == sid)).first()
-        # a snapshot of that day: a partial load adds to it when it is current; so does a full load of a provider it
-        # has no price list of (the weekly refresh loads AWS, then Azure, on the same day)
-        other = (got is not None and got.status == "current" and bool(got.counts)
-                 and not any(provider_of(n) == provider for n in got.counts))
+        got = conn.execute(sa.select(snap.c.status, snap.c.source).where(snap.c.id == sid)).first()
+        # a snapshot of that day: a partial load adds to it when it is current; so does the first full load of
+        # another source that day (the weekly refresh loads AWS, then Azure, then GCP). Its source, not its price
+        # lists: a full load carries the other providers' lists over
+        other = got is not None and source not in sources(got.source)
         if got is not None and (got.status != "current" or not (partial or other)):
             raise Refused(f"snapshot {sid} is already loaded")
     with engine.connect() as conn:
         _create_stage(conn)
         conn.commit()
         wanted = set(only) if only else None
+        if wanted is not None and provider == "gcp":       # --only 6F81-5844-456A or gcp:6F81-5844-456A
+            wanted = {w if w.startswith(gcp.PREFIX) else gcp.price_list(w) for w in wanted}
         if provider == azure.PROVIDER:
             _stage_azure(conn, download_dir, wanted, res, on_file)
-        for kind, offer, region, path in (download_files(download_dir) if provider == "aws" else ()):
+        files = {"aws": download_files, "gcp": gcp.download_files}.get(provider)
+        for kind, offer, region, path in (files(download_dir) if files else ()):
             if wanted is not None and offer not in wanted:
                 continue
             n = 0
-            for table in read_batches(path, block_bytes):
+            batches = gcp.read_batches(path) if kind == "gcp" else read_batches(path, block_bytes)
+            for table in batches:
+                if kind == "gcp":
+                    n += len(table)
+                    prod, rates = gcp.sku_frames(table, offer[len(gcp.PREFIX):], PRODUCT_FIELDS, RATE_FIELDS)
+                    _copy(conn, "stage_product", prod)
+                    _copy(conn, "stage_rate", rates)
+                    res.counts[offer] = res.counts.get(offer, 0) + len(rates)
+                    continue
                 n += table.num_rows
                 if kind == "offers":
                     prod, rates = offer_frames(table, offer)
@@ -315,7 +341,7 @@ def load_snapshot(engine: Engine, download_dir: Path, snapshot_id: str | None = 
         res.seconds["read_and_stage"] = round(time.monotonic() - t0, 1)
         t1 = time.monotonic()
         try:
-            _apply(conn, res, sid, partial, provider, manifest.get("source") or "aws-price-files")
+            _apply(conn, res, sid, partial, provider, source)
             conn.commit()
         except BaseException:
             conn.rollback()
@@ -452,8 +478,10 @@ def _apply(conn: Connection, res: LoadResult, sid: str, partial: bool, provider:
     if provider != "aws":
         note = f"{provider}: {note}"
     if current and current.id == sid:               # a partial load on the same day adds to the current snapshot
-        old = conn.execute(sa.select(snap.c.note).where(snap.c.id == sid)).scalar_one() or ""
-        conn.execute(snap.update().where(snap.c.id == sid).values(counts=counts, note=f"{old}\n{note}"[-4000:]))
+        old, had = conn.execute(sa.select(snap.c.note, snap.c.source).where(snap.c.id == sid)).one()
+        both = ", ".join(dict.fromkeys([*sources(had), source]))
+        conn.execute(snap.update().where(snap.c.id == sid).values(counts=counts, source=both,
+                                                                  note=f"{old or ''}\n{note}"[-4000:]))
     else:
         conn.execute(snap.update().where(snap.c.status == "current").values(status="previous"))
         conn.execute(snap.insert().values(id=sid, status="current", source=source, counts=counts,

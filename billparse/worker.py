@@ -219,10 +219,12 @@ def clean_temp(store, older_than: float = 86400.0) -> int:
     return n
 
 
+FETCHERS = {"aws": "fetch_aws_price_files", "azure": "fetch_azure_retail_prices", "gcp": "fetch_gcp_prices"}
+
+
 def _fetcher(provider: str = "aws"):
-    """scripts/aws/fetch_aws_price_files.py (or scripts/azure/fetch_azure_retail_prices.py), imported (never run as
-    a process)."""
-    name = {"aws": "fetch_aws_price_files", "azure": "fetch_azure_retail_prices"}[provider]
+    """scripts/<provider>/<fetcher>.py (FETCHERS), imported (never run as a process)."""
+    name = FETCHERS[provider]
     path = Path(__file__).resolve().parents[1] / "scripts" / provider / f"{name}.py"
     spec = importlib.util.spec_from_file_location(name, path)
     mod = importlib.util.module_from_spec(spec)
@@ -230,7 +232,7 @@ def _fetcher(provider: str = "aws"):
     return mod
 
 
-PRICE_PROVIDERS = ("aws", "azure")
+PRICE_PROVIDERS = ("aws", "azure", "gcp")
 
 
 def price_providers() -> list[str]:
@@ -249,6 +251,10 @@ def price_files_dir() -> Path:
 
 def azure_price_files_dir() -> Path:
     return Path(os.environ.get("AZURE_PRICE_FILES_DIR") or "~/azure-price-files").expanduser()
+
+
+def gcp_price_files_dir() -> Path:
+    return Path(os.environ.get("GCP_PRICE_FILES_DIR") or "~/gcp-price-files").expanduser()
 
 
 def download_prices(dest: Path) -> int:
@@ -272,14 +278,20 @@ def download_azure_prices(dest: Path) -> int:
     return _fetcher("azure").main(args)
 
 
+def download_gcp_prices(dest: Path) -> int:
+    """The GCP fetcher's download of every Google Cloud service's SKUs into dest (its exit code; it reads
+    GCP_BILLING_API_KEY itself)."""
+    return _fetcher("gcp").main(["--out", str(dest)])
+
+
 def run_prices(store, job: dict, run: Running) -> dict:
-    """For each provider of PRICE_PROVIDERS (default aws; aws,azure: AWS, then Azure): 1. download into
-    <its folder>.incoming-<date> (AWS: PRICE_FILES_DIR, Azure: AZURE_PRICE_FILES_DIR); only a complete download
-    replaces the previous files (a failed one leaves them, and the current snapshot, as they were). 2. Load it
-    (prices.load.load_snapshot): a load that loses more than 10% of a price list's rates is refused, the job ends
-    `error` and the current snapshot stays (a provider loaded before stays loaded). Stored documents are not repriced
-    (reprice does that). The result is the first provider's, with every provider's under `providers` when there are
-    several."""
+    """For each provider of PRICE_PROVIDERS (default aws; aws,azure,gcp: AWS, then Azure, then GCP): 1. download into
+    <its folder>.incoming-<date> (AWS: PRICE_FILES_DIR, Azure: AZURE_PRICE_FILES_DIR, GCP: GCP_PRICE_FILES_DIR); only
+    a complete download replaces the previous files (a failed one leaves them, and the current snapshot, as they
+    were). 2. Load it (prices.load.load_snapshot): a load that loses more than 10% of a price list's rates is refused,
+    the job ends `error` and the current snapshot stays (a provider loaded before stays loaded). GCP needs
+    GCP_BILLING_API_KEY: without it GCP is skipped (said in its result). Stored documents are not repriced (reprice
+    does that). The result is the first provider's, with every provider's under `providers` when there are several."""
     providers = price_providers()
     results = {p: _refresh_prices(store, job, run, p) for p in providers}
     first = results[providers[0]]
@@ -288,8 +300,14 @@ def run_prices(store, job: dict, run: Running) -> dict:
 
 def _refresh_prices(store, job: dict, run: Running, provider: str) -> dict:
     from prices.load import Refused, load_snapshot
-    target, download, what = ((price_files_dir(), download_prices, "the AWS price files") if provider == "aws" else
-                              (azure_price_files_dir(), download_azure_prices, "the Azure retail prices"))
+    if provider == "gcp" and not (os.environ.get("GCP_BILLING_API_KEY") or "").strip():
+        return {"skipped": "GCP_BILLING_API_KEY is not set"}
+    target, download, what = {
+        "aws": (price_files_dir(), download_prices, "the AWS price files"),
+        "azure": (azure_price_files_dir(), download_azure_prices, "the Azure retail prices"),
+        "gcp": (gcp_price_files_dir(), download_gcp_prices, "the GCP prices"),
+    }[provider]
+    run.check()
     incoming = target.parent / f"{target.name}.incoming-{dt.date.today().isoformat()}"
     jobs.set_progress(store, job["id"], run.worker, f"downloading {what}")
     try:

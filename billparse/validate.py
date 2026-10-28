@@ -258,7 +258,7 @@ class RowStats:
 
     def _prices(self, df: pd.DataFrame) -> None:
         level = df["price_match_level"].astype(object)
-        usage = _usage(df) & _col(df, "provider").astype(str).str.lower().isin(("aws", "azure"))
+        usage = _usage(df) & _col(df, "provider").astype(str).str.lower().isin(("aws", "azure", "gcp"))
         asked = usage & level.notna() & level.astype(str).ne("") & level.ne("no_catalog")
         self.catalog_lines += int(asked.sum())
         if not asked.any():
@@ -656,10 +656,10 @@ PRICE_CHECKS = ("catalog_grounding", "printed_list_price", "implied_unit_price",
 def price_checks(s: RowStats, rows: pd.DataFrame | None = None, text: str | None = None) -> list[Check]:
     """The catalog's list prices as an independent reference: a parse that maps real products, pays sane prices and
     agrees with the printed list prices is almost certainly right. Every check skips (weight 0) unless the catalog was
-    asked for some line of the file (no catalog, GCP only, or Azure without Azure prices). Catalog-filled values never
+    asked for some line of the file (no catalog, or no line of a provider whose prices are loaded). Catalog-filled values never
     check themselves: printed_list_price reads printed prices only, implied_unit_price the file's costs."""
     if not s.catalog_lines:
-        why = "No line was priced against the catalog (no catalog, or no AWS or Azure usage lines)"
+        why = "No line was priced against the catalog (no catalog, or no AWS, Azure or GCP usage lines it has prices for)"
         return [Check(n, "skip", why) for n in PRICE_CHECKS]
     return [_grounding(s), _printed_list(s), _implied(s), _units(s), _hours(s), _order(s), _grounded(rows, text)]
 
@@ -818,11 +818,14 @@ def completeness(checks: list[Check], reconciled: bool) -> str:
     return "unchecked"
 
 
+REVIEW_BELOW = 0.6             # a result less confident than this needs review
+
+
 def _summarize(checks: list[Check], conf: float, reconciled: bool) -> dict:
     critical_fail = any(c.status == "fail" and c.name in CRITICAL for c in checks)
     if reconciled and conf >= 0.7 and not critical_fail:
         status = "reconciled"
-    elif not critical_fail and conf >= 0.6:
+    elif not critical_fail and conf >= REVIEW_BELOW:
         status = "unreconciled"
     else:
         status = "needs_review"

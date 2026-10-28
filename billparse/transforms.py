@@ -33,6 +33,8 @@ CANONICAL = {
     "account_id": "Account, subscription or project ID",
     "account_name": "Account, subscription or project name",
     "currency": "Currency code",
+    "currency_conversion_rate": "Units of the line's currency per one US dollar, as printed (GCP currency_conversion_rate, "
+                                "FOCUS x_CurrencyConversionRate): converts the catalog's USD list prices",
     "charge_type": "Usage, Purchase, Tax, Credit, Refund, Fee, Support, Adjustment",
     "invoice_id": "Invoice number",
     "provider": "aws, azure, gcp, or other",
@@ -63,7 +65,7 @@ CANONICAL = {
     "contracted_unit_price": "Price of one unit after negotiated discounts (Azure UnitPrice, FOCUS ContractedUnitPrice)",
 }
 NUMERIC = {"billed_cost", "effective_cost", "list_cost", "contracted_cost", "credits", "quantity", "unit_price",
-           "tax", "list_unit_price", "contracted_unit_price"}
+           "tax", "list_unit_price", "contracted_unit_price", "currency_conversion_rate"}
 DATES = {"charge_start", "charge_end"}
 
 CHARGE_TYPE_MAP = {

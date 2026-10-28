@@ -248,8 +248,10 @@ checks compare printed list prices and the file's own costs. None is critical ye
 `printed_list_price`, `implied_unit_price` and `usage_hours` count as internal checks (a pass can make a file
 `consistent`). The attempts of a parse are priced too (one key cache per parse), so a failure lowers a wrong route,
 goes to the LLM's repair and the agent, and a learned spec's attempt that fails one is not accepted at once (the most
-confident attempt wins; a built-in spec is). The regression gate prices too and rejects a new spec version that fails
-a price check the accepted result passed.
+confident attempt wins; a built-in spec is). A built-in spec is judged without its failed price checks: one (a SKU
+the catalog does not have: an old bill, a SKU newer than the last price download) lowers its confidence, and may make
+it need review, but never hands the file to another route, whose reading would replace the built-in's. The regression
+gate prices too and rejects a new spec version that fails a price check the accepted result passed.
 
 Status: `reconciled` (total matched), `unreconciled` (no total, other checks fine; forecast
 ranges widen), `needs_review` (goes to the review queue), `auxiliary` (price sheets,
@@ -370,6 +372,36 @@ Measured on a laptop (Docker PostgreSQL 17), all AWS price lists of 2026-10-27:
 Peak memory of a load: 1.9 GB (the EC2 files, read in 32 MB batches; 3.2 GB when each file was read whole). The
 largest file is EC2 us-east-1: 18 MB gzip, about 400k rows of 90 columns.
 
+### GCP prices
+
+The GCP public list prices come from the Cloud Billing Catalog API (`services.list`, then `services.skus.list` per
+service, by `nextPageToken`). The API needs an API key: set `GCP_BILLING_API_KEY` (a Google Cloud project with the
+Cloud Billing API enabled). Without it the fetcher stops with a message, and the weekly job skips GCP.
+
+```bash
+uv run python scripts/gcp/fetch_gcp_prices.py --out ~/gcp-price-files       # every Google Cloud service
+uv run python scripts/gcp/fetch_gcp_prices.py --out ~/gcp-price-files --service "Compute Engine"
+make prices ARGS="--provider gcp"                                          # load GCP_PRICE_FILES_DIR
+make prices ARGS="--provider gcp --only 6F81-5844-456A"                    # one service; the others stay
+```
+
+The download is `skus/<service ID>.jsonl.gz` (one SKU per line, as the API returns it) and `manifest.json`
+(`"provider": "gcp"`). It loads into the same tables (provider `gcp`), with the same history and sanity rules; each
+GCP service is one price list, named `gcp:<service ID>`:
+
+- **Product** = `skuId`. `service_code` is the service ID (what a GCP export prints as `service.id`),
+  `product_family` the resource family, `usage_type` the SKU's usage type (OnDemand, Preemptible, Commit1Yr, ...),
+  `region` the SKU's one service region (none when it lists several); the description, resource group, every
+  region and the units are in `attributes`.
+- **Rates**: one per tier of the latest `pricingInfo` (rate code `<skuId>.t<startUsageAmount>`), price = `units` +
+  `nanos`, in the usage unit (`h`, `GiBy.mo`, normalized to hour, gb_month, ...), from `effectiveTime`. The term:
+  `on_demand`, `spot` (Preemptible) or `committed_use` with its lease (Commit1Yr, Commit3Yr).
+- **One snapshot for both.** A load compares and changes only its own provider's price lists: a full AWS load never
+  calls the GCP price lists missing, nor closes their rates, and the reverse. A GCP load on the day of the current
+  snapshot adds to it (`price_snapshot.source` lists both).
+- The weekly job loads GCP after AWS when `PRICE_PROVIDERS` includes `gcp` (default `aws`: nothing changes until it
+  is turned on) and the key is set.
+
 Database size: 9.8 GB. Lookup of 10,000 distinct keys: by rate code 0.5–0.8 s, by SKU 0.3–0.4 s, by usage type and
 operation 1.3–5.3 s (15 s without the operation: an EC2 usage type then fits every OS, and most keys are ambiguous), by
 attributes 2.6 s (11 s when the OS is not given: then every key is ambiguous), Savings Plans 0.2–1.3 s. A usage type
@@ -409,8 +441,9 @@ after AWS (`AZURE_PRICE_SERVICES`, `AZURE_PRICE_REGIONS`; default `aws` only, so
 
 ## Price matching
 
-After a parse, `billparse/pricing.py` looks every AWS usage line (and Azure usage line, once Azure prices are loaded)
-up in the price catalog at the public on-demand list price, as of the line's date (else the printed billing period, else today, with a warning). It runs on the
+After a parse, `billparse/pricing.py` looks every AWS usage line (and every Azure or GCP usage line, once that
+provider's prices are loaded) up in the price catalog at the public on-demand list price, as of the line's date (else
+the printed billing period, else today, with a warning). It runs on the
 normal path after the service resolution, and on the large path per chunk, with one key cache for the file. The
 catalog is called once per file with the distinct keys, never per line, and the work that depends only on the key
 (cleaning, assumptions, what is missing) is done once per key: 500,000 lines with 2,000 keys take about 1.5 s. Covered usage gets its list price too (the consumer's on-demand baseline); `coverage` and `effective_cost` are
@@ -433,9 +466,19 @@ Each line gets `price_match_level`:
 | `attributes` | instance type, region, OS, tenancy, license, software, engine, deployment; Azure: meter name, region, (VM) OS: one price |
 | `assumed` | as `attributes`, with an assumption in `price_assumptions` |
 | `ambiguous` | several prices fit; `price_missing` names the empty columns that tell them apart |
-| `unmatched` | no price; `price_missing` names what is missing (`instance_type`, `region`, or `catalog_row`) |
+| `unmatched` | no price; `price_missing` names what is missing (`instance_type`, `region`, `sku_id`, or `catalog_row`) |
 | `unit_mismatch` | the line's unit cannot be converted to the price's unit |
-| `no_catalog` | a GCP line, or an Azure line while no Azure prices are loaded |
+| `no_catalog` | an Azure or GCP line while the catalog has no prices of its provider |
+
+**GCP lines** are matched by their SKU ID only (`exact`): a GCP export prints it (`sku.id`, FOCUS `SkuId`). The price
+is the SKU's own, whatever its term: a Spot SKU gives the spot price, a commitment SKU (the commitment fee) its
+committed price. Committed-use covered usage prints the on-demand SKU and gets its list price, like AWS covered
+usage; `coverage` stays as parsed. Of a tiered SKU the first paid tier is the price (a free first tier is an
+allowance), noted `tiered`. The line's unit is converted to the price's: `hour`, `gibibyte month` as the export's
+`usage.pricing_unit` prints them, and the SKU's base unit (`usage.unit`: `seconds`, `byte-seconds`) with the SKU's
+`baseUnitConversionFactor`. A line without a SKU ID is `unmatched` with `price_missing` `sku_id`; a SKU no catalog row
+has is `no_such_product` (or `service_not_loaded` when the catalog has no SKU of its service). The price checks
+(`catalog_grounding`, `implied_unit_price`, ...) then cover GCP lines too.
 
 **Azure lines.** Exact by the line's `MeterId` (any region: the meter is the price; a printed region or size that is
 not the meter's is a `price_conflict`). Else by the meter name (`MeterName`) in the line's region, within its service
@@ -456,6 +499,13 @@ the price checks compare them.
   invoices often print no region). Each is in `price_assumptions`; the line's own columns stay
   as parsed. A first-tier price (`tiered`) and a date before the catalog's oldest price (`before_history`) are noted
   there too.
+- **Currency.** The catalog's prices are in USD. A line that prints another currency is priced in its own currency
+  with the rate it prints (`currency_conversion_rate`: units of its currency per USD; GCP exports print
+  `currency_conversion_rate`, GCP FOCUS `x_CurrencyConversionRate`), noted in `price_assumptions`
+  (`currency=EUR at 0.92 per USD (printed rate)`): `list_unit_price`, `list_cost` and `catalog_unit_price` are then in
+  the line's currency, so the price checks compare one currency. A line with another currency and no rate is not
+  priced (`unmatched`, `price_missing` `currency`). A line that prints no currency is taken to be in USD. AWS and GCP
+  alike.
 - **R1.** `list_unit_price` and `list_cost` are filled only where the file printed none (inferred, source
   `price_catalog`); `Document.cost_types` still lists only what the file gives.
 - **R2.** When at least 20 on-demand lines matched `exact` or `attributes`, across at least 3 services, have the same
@@ -465,7 +515,7 @@ the price checks compare them.
 - `implied_unit_price` (effective, else billed cost / quantity) and `price_ratio` (/ list unit price) are on each
   priced line, recomputed from the sums on rolled-up lines.
 
-`Document.pricing` has the catalog version, the match rate (share of priced AWS and Azure usage cost at `exact` and
+`Document.pricing` has the catalog version, the match rate (share of priced AWS, Azure and GCP usage cost at `exact` and
 `attributes`, and at `assumed`; also by lines), the lines and cost per level, the most common missing columns, the
 inferred discount and warnings, and `undated_as_of`: the date of lines that have none (the printed billing period,
 else the day of the first pricing; a reprice uses it again, so it gives the same prices on any day). No catalog, an empty one or a database error: the parse goes on, unpriced, with a

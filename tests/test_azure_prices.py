@@ -408,6 +408,6 @@ def test_price_providers_setting(monkeypatch):
     assert worker.price_providers() == ["aws"]
     monkeypatch.setenv("PRICE_PROVIDERS", " AWS , azure ")
     assert worker.price_providers() == ["aws", "azure"]
-    monkeypatch.setenv("PRICE_PROVIDERS", "aws,gcp")
-    with pytest.raises(ValueError, match="gcp"):
+    monkeypatch.setenv("PRICE_PROVIDERS", "aws,oracle")
+    with pytest.raises(ValueError, match="oracle"):
         worker.price_providers()
