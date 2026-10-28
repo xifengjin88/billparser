@@ -16,6 +16,7 @@ How a key finds its price, the first way that matches wins:
                  when the instance's own product fits.
 A key that several prices fit at its best way (attributes that leave the OS open, say) gets no price: candidates
 says how many there were, so task 06 can report it instead of guessing.
+Azure keys (provider azure) have their own two ways (AZURE_QUERY): the meter ID, then the meter name in a region.
 """
 
 from __future__ import annotations
@@ -102,6 +103,27 @@ SP_QUERY = ("SELECT k.key_id, r.id AS sp_rate_id, p.sku AS plan_sku, p.plan_type
             "AND (k.lease_length IS NULL OR p.lease_length = k.lease_length) "
             "AND (k.purchase_option IS NULL OR p.purchase_option = k.purchase_option)")
 
+# Azure (prices.azure): 1 meter_id   the line's meter ID (usage_type holds it), any region: the meter is the price
+#                       2 attributes the meter name in the line's region (+ service name, + the VM meter's OS when
+#                                    given: "D4s v5" is a Linux and a Windows meter)
+AZURE_KEYS = ["key_id", "provider", "as_of", "usage_type", "region", "service_code", "operating_system", "meter_name",
+              "term_type", "lease_length"]
+AZURE_DIFFERS = ["operating_system", "product_name"]
+_AZ_TERM = "r.term_type = k.term_type AND (k.lease_length IS NULL OR r.lease_length = k.lease_length)"
+_AZ_ATTRS = _ATTRS + ", p.meter_name AS p_meter_name, p.product_name AS p_product_name"
+_AZ_RATE = f"JOIN price_rate r ON r.provider = p.provider AND r.sku = p.sku AND {_AZ_TERM} AND {_TIER0} AND {_DATE} "
+AZURE_QUERY = " UNION ALL ".join([
+    f"SELECT {_OUT.format(prio=1, how='meter_id', pref='true', score=0, attrs=_AZ_ATTRS)} FROM azure_keys k "
+    f"JOIN price_product p ON p.provider = k.provider AND p.usage_type = k.usage_type {_AZ_RATE}"
+    f"WHERE k.usage_type IS NOT NULL",
+    f"SELECT {_OUT.format(prio=2, how='attributes', pref='true', attrs=_AZ_ATTRS,
+                          score='CASE WHEN p.operating_system = k.operating_system THEN 1 ELSE 0 END')} "
+    f"FROM azure_keys k JOIN price_product p ON p.provider = k.provider AND p.meter_name = k.meter_name "
+    f"AND p.region = k.region AND (k.service_code IS NULL OR p.service_code = k.service_code) "
+    f"AND (k.operating_system IS NULL OR p.operating_system IS NULL OR p.operating_system = k.operating_system) "
+    f"{_AZ_RATE}WHERE k.meter_name IS NOT NULL AND k.region IS NOT NULL",
+])
+
 
 def _keys_frame(keys: pd.DataFrame, columns: list[str]) -> pd.DataFrame:
     k = keys.copy()
@@ -148,7 +170,7 @@ def _typed(found: pd.DataFrame) -> pd.DataFrame:
 class PriceCatalog:
     def __init__(self, engine: Engine):
         self.engine = engine
-        self._services: tuple[str | None, set[str]] | None = None     # (version, service codes)
+        self._services: tuple[str | None, dict[str, set[str]]] | None = None   # (version, provider -> codes)
 
     @classmethod
     def load(cls, url: str | None = None) -> PriceCatalog:
@@ -188,9 +210,23 @@ class PriceCatalog:
         the oldest price the catalog knows: the price is that oldest one), tiered (the price has more tiers),
         differs (candidates > 1: the attributes that tell the candidates apart, "operating_system, license_model"),
         product_region, product_instance_type, product_operating_system (the matched product's, one candidate).
-        Keys that found nothing are absent."""
+        Keys that found nothing are absent.
+        Azure keys (provider azure): usage_type is the meter ID, and meter_name, region, service_code (the service
+        name), operating_system, term_type, lease_length (AZURE_QUERY); matched_by meter_id or attributes."""
+        azure = keys["provider"].eq("azure") if "provider" in keys else pd.Series(False, index=keys.index)
+        if azure.any():
+            parts = [self._best(_key_ids(self._run("azure_keys", AZURE_KEYS, _keys_frame(keys[azure], AZURE_KEYS),
+                                                   AZURE_QUERY), keys[azure]), AZURE_DIFFERS)]
+            if (~azure).any():
+                parts.append(self.lookup(keys[~azure]))
+            parts = [p for p in parts if not p.empty]
+            return pd.concat(parts, ignore_index=True) if parts else pd.DataFrame()
         frame = _keys_frame(keys, KEY_COLUMNS)
-        found = _key_ids(self._run("price_keys", KEY_COLUMNS, frame, QUERY), keys)
+        return self._best(_key_ids(self._run("price_keys", KEY_COLUMNS, frame, QUERY), keys), OPTIONAL)
+
+    @staticmethod
+    def _best(found: pd.DataFrame, differ: list[str]) -> pd.DataFrame:
+        """Per key, the prices of its best way (lowest priority, preferred, highest score): one price, or how many."""
         if found.empty:
             return found
         found["preferred"] = found["preferred"].astype(bool)          # SQLite gives 0/1
@@ -200,7 +236,7 @@ class PriceCatalog:
         best = best[best["score"] == best.groupby("key_id")["score"].transform("max")]
         g = best.groupby("key_id")
         best = best.assign(candidates=g["unit_price"].transform("nunique"), tiered=best["end_range"].notna())
-        varies = pd.DataFrame({c: g[f"p_{c}"].transform("nunique").gt(1) for c in OPTIONAL}, index=best.index)
+        varies = pd.DataFrame({c: g[f"p_{c}"].transform("nunique").gt(1) for c in differ}, index=best.index)
         best = best.assign(differs=varies.apply(lambda r: ", ".join(c for c, v in r.items() if v) or None, axis=1))
         out = best.drop_duplicates("key_id").copy()
         out.loc[out["candidates"] > 1, ["unit_price", "rate_code", "rate_id", "sku"]] = None
@@ -209,20 +245,22 @@ class PriceCatalog:
         out = out.rename(columns={f"p_{c}": f"product_{c}" for c in ("region", "instance_type", "operating_system")})
         out.loc[out["candidates"] > 1, ["product_region", "product_instance_type", "product_operating_system"]] = None
         return _typed(out.drop(columns=["priority", "preferred", "score", "begin_range", "end_range",
-                                        *(f"p_{c}" for c in PRODUCT_COLUMNS
-                                          if c not in ("region", "instance_type", "operating_system"))])
+                                        *(c for c in out.columns if c.startswith("p_"))])
                       .reset_index(drop=True))
 
     def services(self, provider: str = "aws") -> set[str]:
-        """The service codes the catalog has products for (cached per snapshot version): a line of another service is
-        a catalog gap, not a parse error."""
+        """The service codes the catalog has products for (cached per snapshot version and provider; Azure: service
+        names): a line of another service is a catalog gap, not a parse error."""
         version = self.version
         if self._services is None or self._services[0] != version:
+            self._services = (version, {})
+        cache = self._services[1]
+        if provider not in cache:
             with self.engine.connect() as conn:
                 got = conn.execute(sa.text("SELECT DISTINCT service_code FROM price_product WHERE provider = :p"),
                                    {"p": provider}).scalars().all()
-            self._services = (version, {str(s) for s in got if s})
-        return set(self._services[1])
+            cache[provider] = {str(s) for s in got if s}
+        return set(cache[provider])
 
     def exists(self, keys: pd.DataFrame) -> set:
         """The key_ids of keys that some product has: its SKU, its usage type, or its instance type in its region (any

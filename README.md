@@ -328,7 +328,7 @@ Corrections: `python -m billparse synonym "VM Hrs" "azure:Virtual Machines"`.
 
 ## Price catalog
 
-`prices/` keeps the public AWS list prices in billparse's own database (tables `price_snapshot`, `price_product`,
+`prices/` keeps the public AWS (and Azure: see "Azure" below) list prices in billparse's own database (tables `price_snapshot`, `price_product`,
 `price_rate`, `price_sp_plan`, `price_sp_rate`; migration `efba3358d2c4`). The source is the AWS Price List bulk files:
 public, no login, no cost.
 
@@ -368,10 +368,42 @@ operation 1.3–5.3 s (15 s without the operation: an EC2 usage type then fits e
 attributes 2.6 s (11 s when the OS is not given: then every key is ambiguous), Savings Plans 0.2–1.3 s. A usage type
 with the `USE1-` prefix also matches the price list's us-east-1 form without it.
 
+### Azure
+
+The Azure retail prices go into the same tables (provider `azure`; migration `a7d2e9c41b05` adds
+`price_product.meter_name`, `product_name`, `sku_name` and an index on the meter name). The source is the Azure Retail
+Prices API (`https://prices.azure.com/api/retail/prices`): public, no key, no cost.
+
+```bash
+python scripts/azure/fetch_azure_retail_prices.py --out ~/azure-price-files               # ~20 most billed services
+python scripts/azure/fetch_azure_retail_prices.py --out ~/azure-price-files --service "Virtual Machines" --region eastus
+make prices-azure                             # load AZURE_PRICE_FILES_DIR as one snapshot
+make prices-azure ARGS='--only "Virtual Machines"'
+```
+
+The fetcher follows `NextPageLink` (at most 1,000 items, about 590 KB of JSON, per request), waits and retries when
+the API answers 429, and writes each service and region as gzip JSON Lines (the API's items unchanged) with a
+`manifest.json` (provider `azure`). Set `PRICE_PROVIDERS=aws,azure` and the weekly refresh downloads and loads Azure
+after AWS (`AZURE_PRICE_SERVICES`, `AZURE_PRICE_REGIONS`; default `aws` only, so nothing changes until it is set).
+
+- A product is one meter of one SKU: `sku` = meterId/skuId/meterName, `usage_type` = the meter ID (a line's `MeterId`),
+  `service_code` = serviceName, `region` = armRegionName, `instance_type` = armSkuName, `meter_name`, `product_name`,
+  `sku_name`; a VM meter's OS from its product name ("... Series Windows" is the Windows meter, else Linux).
+- A rate is one price: `on_demand` (Consumption), `dev_test` (DevTestConsumption) or `reserved` (Reservation, 1yr /
+  3yr; the API prints the whole term's price, stored per hour). Tiers: `begin_range` = tierMinimumUnits. The unit of
+  measure's block is normalized: "10K" is per request (price / 10,000), "1 GB/Month" per GB-month, "1/Month" per
+  count-month. `effective_from` is effectiveStartDate.
+- Same history and sanity check as AWS; a price list is `azure:<service name>`. A full load compares only its own
+  provider's price lists and keeps the other provider's: AWS and Azure loaded on the same day are one snapshot.
+- A full download is not measured. Estimate (2026-10-27): the API answers 400 past `$skip=1,000,000`, and the
+  unfiltered list still had a full page at 999,000, so it has more than 1M items: at least 1,000 requests, about 600 MB
+  of JSON (about 50 MB gzip), 20 to 40 minutes at the API's rate limit. Each query is capped at 1M items, so the fetcher
+  asks per service (and per region when given); a query that reaches the cap is reported as an error.
+
 ## Price matching
 
-After a parse, `billparse/pricing.py` looks every AWS usage line up in the price catalog at the public on-demand
-list price, as of the line's date (else the printed billing period, else today, with a warning). It runs on the
+After a parse, `billparse/pricing.py` looks every AWS usage line (and Azure usage line, once Azure prices are loaded)
+up in the price catalog at the public on-demand list price, as of the line's date (else the printed billing period, else today, with a warning). It runs on the
 normal path after the service resolution, and on the large path per chunk, with one key cache for the file. The
 catalog is called once per file with the distinct keys, never per line, and the work that depends only on the key
 (cleaning, assumptions, what is missing) is done once per key: 500,000 lines with 2,000 keys take about 1.5 s. Covered usage gets its list price too (the consumer's on-demand baseline); `coverage` and `effective_cost` are
@@ -381,13 +413,25 @@ Each line gets `price_match_level`:
 
 | Level | When |
 |---|---|
-| `exact` | rate code (`pricing/RateCode`), SKU, or usage type + operation: one price |
-| `attributes` | instance type, region, OS, tenancy, license, software, engine, deployment: one price |
+| `exact` | rate code (`pricing/RateCode`), SKU, or usage type + operation; Azure: meter ID: one price |
+| `attributes` | instance type, region, OS, tenancy, license, software, engine, deployment; Azure: meter name, region, (VM) OS: one price |
 | `assumed` | as `attributes`, with an assumption in `price_assumptions` |
 | `ambiguous` | several prices fit; `price_missing` names the empty columns that tell them apart |
 | `unmatched` | no price; `price_missing` names what is missing (`instance_type`, `region`, or `catalog_row`) |
 | `unit_mismatch` | the line's unit cannot be converted to the price's unit |
-| `no_catalog` | an Azure or GCP line: the catalog has no prices for them yet |
+| `no_catalog` | a GCP line, or an Azure line while no Azure prices are loaded |
+
+**Azure lines.** Exact by the line's `MeterId` (any region: the meter is the price; a printed region or size that is
+not the meter's is a `price_conflict`). Else by the meter name (`MeterName`) in the line's region, within its service
+(`MeterCategory` = the retail serviceName) and, for VM meters, the meter's OS: Windows with the license included is
+the Windows meter; Linux, RHEL, SUSE and Windows with Azure Hybrid Benefit (BYOL) are billed on the Linux meter. A VM
+line whose OS is unknown (no `MeterSubCategory`) is `ambiguous` with `price_missing=operating_system`, until the request
+says `assume_os`. The price's unit block is converted to the line's ("1 Hour" price on a "10 Hours" line: × 10).
+Spot and Low Priority lines are their own meters (their price); reservation and savings plan usage prints the on-demand
+meter, so it gets the on-demand list price, as AWS's covered usage does. An unmatched Azure line is
+`service_not_loaded` or `catalog_row`, never `no_such_product` (a meter missing from a partial download is a catalog
+gap). Azure exports print `PayGPrice`, so R1 leaves their list price as printed; `catalog_unit_price` is beside it and
+the price checks compare them.
 
 - **No silent assumptions.** An EC2 invoice line (no operation, no SKU) that names an OS and no SQL Server is looked
   up with `pre_installed_sw=NA (text)`; one that does not say Dedicated or Host with `tenancy=Shared (text)`. The
@@ -405,7 +449,7 @@ Each line gets `price_match_level`:
 - `implied_unit_price` (effective, else billed cost / quantity) and `price_ratio` (/ list unit price) are on each
   priced line, recomputed from the sums on rolled-up lines.
 
-`Document.pricing` has the catalog version, the match rate (share of priced AWS usage cost at `exact` and
+`Document.pricing` has the catalog version, the match rate (share of priced AWS and Azure usage cost at `exact` and
 `attributes`, and at `assumed`; also by lines), the lines and cost per level, the most common missing columns, the
 inferred discount and warnings, and `undated_as_of`: the date of lines that have none (the printed billing period,
 else the day of the first pricing; a reprice uses it again, so it gives the same prices on any day). No catalog, an empty one or a database error: the parse goes on, unpriced, with a

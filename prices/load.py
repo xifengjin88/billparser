@@ -14,6 +14,11 @@ The rows go to staging tables (PostgreSQL: COPY), then one transaction:
              or changed rate is inserted from its EffectiveDate (or the load date). Only the price lists in the load
              are touched, so a partial load (one service) never closes another service's prices
   switch     the new snapshot is current, the old one previous
+
+An Azure download (scripts/azure/fetch_azure_retail_prices.py; its manifest says provider "azure") is read by
+prices.azure into the same staging tables and applied the same way; its price lists are "azure:<service name>". A full
+load compares only its own provider's price lists, and keeps the other provider's in the snapshot: a full Azure load on
+the day of the current AWS snapshot adds to it.
 """
 
 from __future__ import annotations
@@ -36,6 +41,7 @@ from sqlalchemy.engine import Connection, Engine
 
 from billparse.db import PriceSnapshotRow
 
+from . import azure
 from . import normalize as nz
 from .units import normalize as unit_of
 
@@ -57,7 +63,10 @@ RATE_COLUMNS = {"SKU", "OfferTermCode", "RateCode", "TermType", "PriceDescriptio
                 "EndingRange", "Unit", "PricePerUnit", "Currency", "LeaseContractLength", "PurchaseOption",
                 "OfferingClass"}
 TERM_TYPES = {"OnDemand": "on_demand", "Reserved": "reserved"}
-PRODUCT_FIELDS = ["provider", *PRODUCT_COLUMNS.values(), "attributes", "attr_hash"]
+AZURE_COLUMNS = ["meter_name", "product_name", "sku_name"]          # Azure only (prices.azure); empty for AWS
+# an AWS product's attr_hash is of these (the columns before Azure's were added: the stored hashes stay valid)
+AWS_HASHED = ["provider", *PRODUCT_COLUMNS.values(), "attributes"]
+PRODUCT_FIELDS = ["provider", *PRODUCT_COLUMNS.values(), *AZURE_COLUMNS, "attributes", "attr_hash"]
 RATE_FIELDS = ["provider", "service_code", "sku", "rate_code", "term_type", "lease_length", "purchase_option",
                "offering_class", "unit", "unit_raw", "unit_price", "price_raw", "begin_range", "end_range", "currency",
                "effective_date"]
@@ -146,8 +155,9 @@ def offer_frames(table: pa.Table, service: str) -> tuple[pd.DataFrame, pd.DataFr
                     ("capacity_status", nz.capacity_status), ("instance_type", nz.instance_type)):
         prod[col] = _mapped(prod[col], fn) if prod[col].notna().any() else None
     prod["attr_hash"] = [hashlib.sha1("\x1f".join(v if isinstance(v, str) else "" for v in row).encode()).hexdigest()
-                         for row in prod[[c for c in PRODUCT_FIELDS if c not in ("attr_hash",)]]
-                         .itertuples(index=False, name=None)]
+                         for row in prod[AWS_HASHED].itertuples(index=False, name=None)]
+    for c in AZURE_COLUMNS:
+        prod[c] = None
     # rates: every row
     unit, factor = _units(df["Unit"])
     price = pd.to_numeric(df["PricePerUnit"], errors="coerce")
@@ -182,6 +192,34 @@ def sp_frames(table: pa.Table, offer: str) -> tuple[pd.DataFrame, pd.DataFrame]:
         "rate": (pd.to_numeric(df["DiscountedRate"], errors="coerce") / factor).round(12),
         "currency": df["Currency"].fillna("USD"), "effective_date": df["EffectiveDate"].str.slice(0, 10)})
     return plans[PLAN_FIELDS], rates[rates["rate"].notna()][SP_FIELDS]
+
+
+def provider_of(price_list: str) -> str:
+    """The provider of a snapshot's price list: "azure:Virtual Machines" -> azure; an AWS offer code -> aws."""
+    head, sep, _ = price_list.partition(":")
+    return head if sep and head in (azure.PROVIDER, "gcp") else "aws"
+
+
+def _stage_azure(conn: Connection, download_dir: Path, wanted: set[str] | None, res: LoadResult,
+                 on_file: Callable[[str], None] | None) -> None:
+    """Stage the products and rates of an Azure download (prices.azure); only: service names."""
+    for service, region, path in azure.files(download_dir):
+        name = azure.price_list(service)
+        if wanted is not None and service not in wanted and name not in wanted:
+            continue
+        n = 0
+        for batch in azure.read_batches(path):
+            n += len(batch)
+            prod, rates = azure.frames(batch, service, PRODUCT_FIELDS, RATE_FIELDS)
+            _copy(conn, "stage_product", prod)
+            _copy(conn, "stage_rate", rates)
+            for svc, k in rates["service_code"].value_counts().items():     # a price list per service, as printed
+                res.counts[azure.price_list(svc)] = res.counts.get(azure.price_list(svc), 0) + int(k)
+        if service != azure.ALL_SERVICES:
+            res.counts.setdefault(name, 0)
+        conn.commit()
+        if on_file:
+            on_file(f"{name} {region}: {n:,} rows")
 
 
 def download_files(download_dir: Path) -> Iterator[tuple[str, str, str, Path]]:
@@ -235,20 +273,27 @@ def load_snapshot(engine: Engine, download_dir: Path, snapshot_id: str | None = 
     the current snapshot adds to it. Raises Refused when the sanity check fails."""
     download_dir = Path(download_dir)
     manifest = json.loads((download_dir / "manifest.json").read_text())
+    provider = manifest.get("provider") or "aws"
     sid = snapshot_id or manifest["fetched_at"][:10]
     res = LoadResult(sid, "loading")
     t0 = time.monotonic()
     with engine.begin() as conn:
         snap = PriceSnapshotRow.__table__
         conn.execute(snap.delete().where(snap.c.id == sid, snap.c.status.in_(["loading", "refused"])))
-        if conn.execute(sa.select(snap.c.id).where(snap.c.id == sid,
-                                                   snap.c.status != "current" if partial else sa.true())).first():
+        got = conn.execute(sa.select(snap.c.status, snap.c.counts).where(snap.c.id == sid)).first()
+        # a snapshot of that day: a partial load adds to it when it is current; so does a full load of a provider it
+        # has no price list of (the weekly refresh loads AWS, then Azure, on the same day)
+        other = (got is not None and got.status == "current" and bool(got.counts)
+                 and not any(provider_of(n) == provider for n in got.counts))
+        if got is not None and (got.status != "current" or not (partial or other)):
             raise Refused(f"snapshot {sid} is already loaded")
     with engine.connect() as conn:
         _create_stage(conn)
         conn.commit()
         wanted = set(only) if only else None
-        for kind, offer, region, path in download_files(download_dir):
+        if provider == azure.PROVIDER:
+            _stage_azure(conn, download_dir, wanted, res, on_file)
+        for kind, offer, region, path in (download_files(download_dir) if provider == "aws" else ()):
             if wanted is not None and offer not in wanted:
                 continue
             n = 0
@@ -270,7 +315,7 @@ def load_snapshot(engine: Engine, download_dir: Path, snapshot_id: str | None = 
         res.seconds["read_and_stage"] = round(time.monotonic() - t0, 1)
         t1 = time.monotonic()
         try:
-            _apply(conn, res, sid, partial)
+            _apply(conn, res, sid, partial, provider, manifest.get("source") or "aws-price-files")
             conn.commit()
         except BaseException:
             conn.rollback()
@@ -315,20 +360,23 @@ def _unique(conn: Connection, stage: str, keys: list[str]) -> str:
     return one
 
 
-def _apply(conn: Connection, res: LoadResult, sid: str, partial: bool) -> None:
+def _apply(conn: Connection, res: LoadResult, sid: str, partial: bool, provider: str = "aws",
+           source: str = "aws-price-files") -> None:
     snap = PriceSnapshotRow.__table__
     current = conn.execute(sa.select(snap.c.id, snap.c.counts).where(snap.c.status == "current")).first()
     prev = dict(current.counts or {}) if current else {}
     problems = []
     for name, n in prev.items():
         if name not in res.counts:
-            if not partial:
+            # a full load misses a price list of its own provider; another provider's lists are not its business
+            if not partial and provider_of(name) == provider:
                 problems.append(f"{name} is missing ({n:,} rates before)")
         elif res.counts[name] < (1 - MAX_DROP) * n:
             problems.append(f"{name}: {res.counts[name]:,} rates, {n:,} before")
     if problems:
-        conn.execute(snap.insert().values(id=sid, status="refused", source="aws-price-files", counts=res.counts,
-                                          created_at=time.time(), note="; ".join(problems)[:4000]))
+        if not (current and current.id == sid):        # a load on the current snapshot's day: that one stays
+            conn.execute(snap.insert().values(id=sid, status="refused", source=source, counts=res.counts,
+                                              created_at=time.time(), note="; ".join(problems)[:4000]))
         conn.commit()
         res.status, res.note = "refused", "; ".join(problems)
         raise Refused(res.note)
@@ -354,7 +402,8 @@ def _apply(conn: Connection, res: LoadResult, sid: str, partial: bool) -> None:
     step("products")
     for target, stage, fields, keys, price, scope in (
             ("price_rate", "stage_rate", RATE_FIELDS, ["rate_code"], "unit_price",
-             "r.service_code IN (SELECT DISTINCT service_code FROM stage_rate)"),
+             "r.provider IN (SELECT DISTINCT provider FROM stage_rate) "
+             "AND r.service_code IN (SELECT DISTINCT service_code FROM stage_rate)"),
             ("price_sp_rate", "stage_sp", SP_FIELDS, ["plan_sku", "discounted_sku"], "rate",
              "r.plan_sku IN (SELECT sku FROM price_sp_plan WHERE service_code IN "
              "(SELECT DISTINCT service_code FROM stage_plan))")):
@@ -394,14 +443,19 @@ def _apply(conn: Connection, res: LoadResult, sid: str, partial: bool) -> None:
             res.sp_rates = n
         x("DROP TABLE IF EXISTS rate_close")
     res.products = x("SELECT count(*) FROM (SELECT DISTINCT provider, sku FROM stage_product) t").scalar_one()
-    counts = res.counts if not partial or not prev else {**prev, **res.counts}
+    # the snapshot's price lists: a partial load's added to the current ones; a full load's replace its provider's
+    # (another provider's lists stay)
+    kept = prev if partial else {n: c for n, c in prev.items() if provider_of(n) != provider}
+    counts = {**kept, **res.counts}
     note = (f"{res.products:,} products, {res.rates:,} rates, {res.sp_rates:,} savings plans rates; "
             f"{res.closed:,} closed, {res.inserted:,} inserted")
+    if provider != "aws":
+        note = f"{provider}: {note}"
     if current and current.id == sid:               # a partial load on the same day adds to the current snapshot
         old = conn.execute(sa.select(snap.c.note).where(snap.c.id == sid)).scalar_one() or ""
         conn.execute(snap.update().where(snap.c.id == sid).values(counts=counts, note=f"{old}\n{note}"[-4000:]))
     else:
         conn.execute(snap.update().where(snap.c.status == "current").values(status="previous"))
-        conn.execute(snap.insert().values(id=sid, status="current", source="aws-price-files", counts=counts,
+        conn.execute(snap.insert().values(id=sid, status="current", source=source, counts=counts,
                                           created_at=time.time(), note=note))
     res.status = "current"

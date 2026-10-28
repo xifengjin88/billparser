@@ -239,8 +239,11 @@ price_product = sa.Table(
     sa.Column("database_engine", sa.String),
     sa.Column("deployment_option", sa.String),
     sa.Column("cache_engine", sa.String),
-    sa.Column("usage_type", sa.String),
+    sa.Column("usage_type", sa.String),               # Azure: the meter ID (a line's MeterId)
     sa.Column("operation", sa.String),
+    sa.Column("meter_name", sa.String),               # Azure only: meterName, productName, skuName
+    sa.Column("product_name", sa.String),
+    sa.Column("sku_name", sa.String),
     sa.Column("attributes", JSON),                     # every other attribute the file prints for the product
     sa.Column("attr_hash", sa.String(40), nullable=False),   # of every column above: changed -> updated
     sa.Column("first_snapshot", sa.String(10), nullable=False),
@@ -254,6 +257,9 @@ price_product = sa.Table(
              postgresql_include=["operating_system", "tenancy", "license_model", "pre_installed_sw",
                                  "capacity_status", "database_engine", "deployment_option", "service_code",
                                  "usage_type", "sku"]),
+    # an Azure line without a meter ID (or with one the catalog does not have): its meter name in its region
+    sa.Index("price_product_meter", "provider", "meter_name", "region",
+             postgresql_include=["service_code", "operating_system", "product_name", "sku"]),
 )
 
 price_rate = sa.Table(

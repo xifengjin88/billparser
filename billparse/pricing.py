@@ -15,9 +15,16 @@ Each line's level (price_match_level):
                  has no prices for the service: a catalog gap), no_such_product (no product has this SKU, usage type
                  or instance type in this region: likely read from a wrong column), else catalog_row
   unit_mismatch  a price, in a unit the line's unit cannot be converted to
-  no_catalog     an Azure or GCP line: the catalog has no prices for them yet
+  no_catalog     a GCP line, or an Azure line while the catalog has no Azure prices: no prices for them yet
 The catalog is called once per file (a large file: once per chunk, for the keys the KeyCache does not have) with the
 distinct keys, never per line. A pricing error never fails the parse: the lines stay unpriced, with a warning.
+
+Azure usage lines (once Azure prices are loaded: prices.azure) are priced the same way, with their own keys
+(_azure_keys): exact by the line's meter ID (MeterId), else attributes by the meter name in the line's region (within
+its service, and for VMs the meter's OS: Windows license included is the Windows meter, everything else the Linux
+one). The price's unit-of-measure block is converted to the line's ("1 Hour" price, "10 Hours" line: x 10). Spot and
+Low Priority lines are their own meters (their own prices); reservation and savings plan usage prints the on-demand
+meter, so it gets the on-demand list price, as AWS's covered usage does.
 """
 
 from __future__ import annotations
@@ -32,6 +39,7 @@ import numpy as np
 import pandas as pd
 
 from prices import normalize as nz
+from prices.units import azure_unit
 from prices.units import normalize as unit_of
 
 from .attributes import _ec2_instance
@@ -45,14 +53,14 @@ log = logging.getLogger(__name__)
 
 LEVELS = ["exact", "attributes", "assumed", "ambiguous", "unmatched", "unit_mismatch", "no_catalog"]
 MATCHED = ("exact", "attributes", "assumed")
-EXACT_BY = ("rate_code", "sku", "usage")              # the lookups that name the product itself
+EXACT_BY = ("rate_code", "sku", "usage", "meter_id")  # the lookups that name the product itself
 ATTRIBUTES = ["operating_system", "tenancy", "license_model", "pre_installed_sw", "database_engine",
               "deployment_option"]                    # the columns that tell an instance type's prices apart
 KEY_COLUMNS = ["rate_code", "sku", "service_code", "usage_type", "operation", "region", "instance_type", *ATTRIBUTES]
 PRICE_COLUMNS = ["price_match_level", "price_missing", "price_assumptions", "implied_unit_price", "price_ratio",
                  "catalog_sku_id", "catalog_unit_price", "price_conflict", "_list_cost_inferred", "_contracted_cost_inferred", "_list_unit_price_inferred"]
 FLAGS = ("_list_cost_inferred", "_contracted_cost_inferred", "_list_unit_price_inferred")   # what pricing filled
-NO_CATALOG = ("azure", "gcp")
+NO_CATALOG = ("azure", "gcp")                         # azure: until the catalog has Azure prices
 AWS_CODE = re.compile(r"^[A-Za-z][A-Za-z0-9]+$")      # a CUR product code: AmazonEC2, AWSLambda, awskms
 # R2: a steady negotiated discount
 R2_MIN_LINES, R2_MIN_SERVICES, R2_TOLERANCE, R2_LOW, R2_HIGH = 20, 3, 0.01, 0.5, 0.99
@@ -198,13 +206,19 @@ def match_prices(rows: pd.DataFrame, catalog: PriceCatalog | None, defaults: Pri
     usage = ct.isna() | ct.eq("Usage")
     provider = map_unique(_col(rows, "provider"), lambda v: v.lower() if isinstance(v, str) else None)
     cost = pd.to_numeric(_col(rows, "billed_cost"), errors="coerce").fillna(0.0).abs()
+    qty = pd.to_numeric(_col(rows, "quantity"), errors="coerce")
+    # Azure lines are priced once the catalog has Azure prices (prices.azure); until then, as GCP's, no_catalog
+    azure = usage & provider.eq("azure")
+    azure_on = bool(azure.any()) and _has_azure(catalog)
     other = usage & provider.isin(NO_CATALOG)
+    if azure_on:
+        other = other & ~azure
     if other.any():
         rows.loc[other, "price_match_level"] = "no_catalog"
         stats.levels["no_catalog"] = [int(other.sum()), float(cost[other].sum())]
-    qty = pd.to_numeric(_col(rows, "quantity"), errors="coerce")
     priced = usage & provider.eq("aws") & qty.notna()
-    if not priced.any():
+    azure_priced = azure & qty.notna() if azure_on else pd.Series(False, index=rows.index)
+    if not priced.any() and not azure_priced.any():
         return stats
     try:
         version = catalog.version if catalog is not None else None
@@ -215,12 +229,16 @@ def match_prices(rows: pd.DataFrame, catalog: PriceCatalog | None, defaults: Pri
         stats.note("No price catalog is loaded (make prices); the lines are not priced")
         return stats
     stats.catalog_version = version
+    cache = cache or KeyCache()
     try:
-        _price(rows, priced, qty, cost, catalog, defaults, cache or KeyCache(), stats, period_start)
+        if priced.any():
+            _price(rows, priced, qty, cost, catalog, defaults, cache, stats, period_start)
+        if azure_priced.any():
+            _price(rows, azure_priced, qty, cost, catalog, defaults, cache, stats, period_start, kind="azure")
     except Exception as e:                       # noqa: BLE001  the parse never fails because of pricing
         log.exception("price matching failed")
         for c in PRICE_COLUMNS:
-            rows.loc[priced, c] = False if c in FLAGS else None
+            rows.loc[priced | azure_priced, c] = False if c in FLAGS else None
         stats.levels = {k: v for k, v in stats.levels.items() if k == "no_catalog"}
         stats.missing, stats.ratios, stats.below_list = {}, {}, 0
         stats.note(f"Price matching failed ({type(e).__name__}: {e}); the lines are not priced")
@@ -253,6 +271,65 @@ def _keys(p: pd.DataFrame, defaults: PriceDefaults) -> tuple[pd.DataFrame, pd.Se
         assume(open_ & keys[col].isna(), col, value, "request")
     # an OS (named, or the request's) and no SQL Server in the words: no pre-installed software
     assume(ec2 & keys["pre_installed_sw"].isna() & keys["operating_system"].notna(), "pre_installed_sw", "NA", "text")
+    text = pd.Series("", index=p.index)
+    for n in notes:
+        text = text.str.cat(n, sep="; ").str.strip("; ")
+    return keys, text, text.ne("")
+
+
+def _has_azure(catalog: PriceCatalog | None) -> bool:
+    """The catalog has Azure prices (a database error: no; the AWS lines report it)."""
+    if catalog is None:
+        return False
+    try:
+        return catalog.version is not None and bool(catalog.services("azure"))
+    except Exception:                            # noqa: BLE001  a database error must not fail the parse
+        return False
+
+
+AZURE_SOURCE = ["meter_id", "region", "service_raw", "meter_name", "description", "operating_system", "license_model"]
+AZURE_KEYS = ["provider", "usage_type", "region", "service_code", "meter_name", "operating_system"]
+AZURE_VM = "virtual machines"
+
+
+def _azure_os(os_: object, lic: object) -> str | None:
+    """The OS of the VM meter that bills a line: Windows (license included) is the Windows meter; Linux, RHEL, SUSE
+    (their software is billed apart) and Windows with Azure Hybrid Benefit (BYOL) are billed on the Linux meter."""
+    o, lic_ = nz.operating_system(os_), nz.license_model(lic)
+    if o is None:
+        return None
+    return "Windows" if o == "Windows" and lic_ != "Bring your own license" else "Linux"
+
+
+def _azure_keys(p: pd.DataFrame, defaults: PriceDefaults,
+                services: set[str]) -> tuple[pd.DataFrame, pd.Series, pd.Series]:
+    """(catalog keys, assumptions as text, whether an attribute was assumed) of Azure lines: the meter ID, else the
+    meter name (meter_name, else the description: MeterName) in the line's region, within its service (MeterCategory
+    = the retail serviceName, when the catalog has it), and for VM meters the meter's OS."""
+    keys = pd.DataFrame(index=p.index)
+    keys["provider"] = "azure"
+    keys["usage_type"] = _text(_col(p, "meter_id"))
+    keys["region"] = map_unique(_text(_col(p, "region")), lambda v: nz.region(v).lower() if isinstance(v, str) else None)
+    service = _text(_col(p, "service_raw")).map(lambda v: v.strip() if isinstance(v, str) else None)
+    keys["service_code"] = service.where(service.isin(services), None)
+    keys["_service_raw"] = service
+    name = _text(_col(p, "meter_name"))
+    keys["meter_name"] = name.where(name.notna(), _text(_col(p, "description"))).map(
+        lambda v: v.strip() if isinstance(v, str) else None)
+    vm = service.astype(str).str.lower().eq(AZURE_VM)
+    pairs = pd.Series(list(zip(_col(p, "operating_system"), _col(p, "license_model"), strict=True)), index=p.index)
+    keys["operating_system"] = map_unique(pairs, lambda t: _azure_os(*t)).where(vm, None)
+    notes: list[pd.Series] = []
+    given = defaults.given()
+    if "region" in given:
+        m = keys["region"].isna()
+        keys.loc[m, "region"] = nz.region(given["region"])
+        notes.append(pd.Series(np.where(m, f"region={given['region']} (request)", ""), index=p.index))
+    if "operating_system" in given:
+        m = vm & keys["operating_system"].isna()
+        keys.loc[m, "operating_system"] = _azure_os(given["operating_system"], given.get("license_model"))
+        notes.append(pd.Series(np.where(m, f"operating_system={given['operating_system']} (request)", ""),
+                               index=p.index))
     text = pd.Series("", index=p.index)
     for n in notes:
         text = text.str.cat(n, sep="; ").str.strip("; ")
@@ -308,26 +385,35 @@ REGION_CODE = re.compile(r"^[a-z]{2}(?:-[a-z]+)+-\d+$")
 
 
 def _price(rows: pd.DataFrame, priced: pd.Series, qty: pd.Series, cost: pd.Series, catalog: PriceCatalog,
-           defaults: PriceDefaults, cache: KeyCache, stats: PriceStats, period_start: str | None) -> None:
+           defaults: PriceDefaults, cache: KeyCache, stats: PriceStats, period_start: str | None,
+           kind: str = "aws") -> None:
+    """kind: aws, or azure (the meter ID, else the meter name in its region: _azure_keys)."""
     p = rows.loc[priced]
+    azure = kind == "azure"
+    source, key_columns = (AZURE_SOURCE, AZURE_KEYS) if azure else (SOURCE_COLUMNS, KEY_COLUMNS)
     # the distinct keys, from the line columns as they are: everything that depends only on the key (cleaning, the
     # line's words, the request's defaults, what is missing) is done once per key and spread back by arrays
-    raw = pd.DataFrame({c: _col(p, c) for c in SOURCE_COLUMNS}, index=p.index).astype(object)
-    codes = raw.groupby(SOURCE_COLUMNS, dropna=False, sort=False).ngroup().to_numpy()
+    raw = pd.DataFrame({c: _col(p, c) for c in source}, index=p.index).astype(object)
+    codes = raw.groupby(source, dropna=False, sort=False).ngroup().to_numpy()
     first = pd.Series(np.arange(len(raw))).groupby(codes).first().to_numpy()
     uniq = raw.iloc[first].reset_index(drop=True)
-    keys, notes, assumed = _keys(uniq, defaults)
-    # a key whose identifier (usage type, else instance type) the parser guessed from the words: never no_such_product
-    how_usage = uniq[HOW + "usage_type"].isin(GUESSED) & keys["usage_type"].notna()
-    how_type = uniq[HOW + "instance_type"].isin(GUESSED) & keys["usage_type"].isna()
-    guessed = (keys["sku"].isna() & keys["rate_code"].isna() & (how_usage | how_type)).to_numpy()
+    if azure:
+        keys, notes, assumed = _azure_keys(uniq, defaults, catalog.services("azure"))
+        guessed = np.zeros(len(keys), dtype=bool)
+    else:
+        keys, notes, assumed = _keys(uniq, defaults)
+        # a key whose identifier (usage type, else instance type) the parser guessed from the words: never
+        # no_such_product
+        how_usage = uniq[HOW + "usage_type"].isin(GUESSED) & keys["usage_type"].notna()
+        how_type = uniq[HOW + "instance_type"].isin(GUESSED) & keys["usage_type"].isna()
+        guessed = (keys["sku"].isna() & keys["rate_code"].isna() & (how_usage | how_type)).to_numpy()
     dates = _dates(p, period_start, stats)
     # each key looked up at its first and last date, and at every date in between only when those two differ (a
     # price changed inside the file's period)
-    texts = keys[KEY_COLUMNS].astype(object).where(keys[KEY_COLUMNS].notna(), "").astype(str).agg(
+    texts = keys[key_columns].astype(object).where(keys[key_columns].notna(), "").astype(str).agg(
         "\x1f".join, axis=1).tolist()
     key_rows = {t: {c: (None if pd.isna(v) else v) for c, v in r.items()}
-                for t, r in zip(texts, keys[KEY_COLUMNS].to_dict("records"), strict=True)}
+                for t, r in zip(texts, keys[key_columns].to_dict("records"), strict=True)}
     pairs = pd.DataFrame({"code": codes, "date": dates.to_numpy()})
     span = pairs.groupby("code")["date"].agg(["min", "max"]).reindex(range(len(texts)))
     lo, hi = span["min"].tolist(), span["max"].tolist()
@@ -337,8 +423,11 @@ def _price(rows: pd.DataFrame, priced: pd.Series, qty: pd.Series, cost: pd.Serie
     for c in ("matched_by", "candidates", "unit_price", "unit", "sku", "effective_from", "tiered", "differs"):
         if c not in per_key:
             per_key[c] = None
-    per_key = _any_region(catalog, keys, texts, key_rows, per_key, lo, guessed, cache, stats)
-    reasons = _reasons(catalog, keys, texts, per_key["matched_by"].isna().to_numpy(), cache, guessed)
+    if azure:                            # a meter ID is matched in any region (it is the price); no exists() query
+        reasons = _azure_reasons(keys, per_key["matched_by"].isna().to_numpy())
+    else:
+        per_key = _any_region(catalog, keys, texts, key_rows, per_key, lo, guessed, cache, stats)
+        reasons = _reasons(catalog, keys, texts, per_key["matched_by"].isna().to_numpy(), cache, guessed)
     res = per_key.take(codes).set_axis(p.index)
     if split:
         mask = pairs["code"].isin(split).to_numpy()
@@ -350,7 +439,20 @@ def _price(rows: pd.DataFrame, priced: pd.Series, qty: pd.Series, cost: pd.Serie
         res = res.astype(object)
         res.loc[p.index[mask], per_key.columns] = rows_split.to_numpy()
     _apply(rows, p.index, keys, codes, notes.to_numpy()[codes], assumed.to_numpy()[codes], dates, res,
-           qty[p.index], cost[p.index], stats, reasons)
+           qty[p.index], cost[p.index], stats, reasons, kind)
+
+
+def _azure_reasons(keys: pd.DataFrame, unmatched: np.ndarray) -> dict[int, str]:
+    """Why an Azure key found no price: service_not_loaded when the catalog has no prices for its service (MeterCategory
+    = serviceName), else catalog_row. Never no_such_product: a meter ID the download lacks (a service or region not
+    fetched, a meter added since) is a catalog gap far more often than a column read from the wrong place."""
+    out = {}
+    for c in np.flatnonzero(unmatched):
+        if pd.notna(keys.at[c, "_service_raw"]) and pd.isna(keys.at[c, "service_code"]):
+            out[c] = "service_not_loaded"
+        elif pd.notna(keys.at[c, "usage_type"]) or pd.notna(keys.at[c, "meter_name"]):
+            out[c] = "catalog_row"
+    return out
 
 
 def _any_region(catalog: PriceCatalog, keys: pd.DataFrame, texts: list[str], key_rows: dict, per_key: pd.DataFrame,
@@ -417,14 +519,16 @@ def _reasons(catalog: PriceCatalog, keys: pd.DataFrame, texts: list[str], unmatc
 
 def _apply(rows: pd.DataFrame, idx: pd.Index, keys: pd.DataFrame, codes: np.ndarray, notes: np.ndarray,
            assumed: np.ndarray, dates: pd.Series, res: pd.DataFrame, qty: pd.Series, cost: pd.Series,
-           stats: PriceStats, reasons: dict[int, str]) -> None:
+           stats: PriceStats, reasons: dict[int, str], kind: str = "aws") -> None:
     found = res["matched_by"].notna()
     cand = pd.to_numeric(res["candidates"], errors="coerce").fillna(0)
     one = found & cand.eq(1)
     assumed = pd.Series(assumed.astype(bool), index=idx)
-    # the line's unit in the price's: (normalized unit, factor), an unknown unit as printed (lower case)
+    # the line's unit in the price's: (normalized unit, factor), an unknown unit as printed (lower case); Azure's
+    # blocks ("10 Hours", "1/Month", "10K/Month") as its prices' are read
+    unit_fn = azure_unit if kind == "azure" else unit_of
     line_unit = map_unique(_col(rows.loc[idx], "unit"),
-                           lambda u: (unit_of(u) or (str(u).strip().lower(), 1.0))
+                           lambda u: (unit_fn(u) or (str(u).strip().lower(), 1.0))
                            if isinstance(u, str) and u.strip() else None)
     exact_by = res["matched_by"].isin(EXACT_BY)
     no_unit = line_unit.isna()
@@ -438,7 +542,7 @@ def _apply(rows: pd.DataFrame, idx: pd.Index, keys: pd.DataFrame, codes: np.ndar
     level[one & ~unit_ok] = "unit_mismatch"
     level[found & cand.gt(1)] = "ambiguous"
     level[~found] = "unmatched"
-    missing = _missing(keys, codes, level, res, reasons)
+    missing = (_azure_missing if kind == "azure" else _missing)(keys, codes, level, res, reasons)
     # prices: in the line's unit; printed values always win (R1)
     ok = level.isin(MATCHED)
     price = pd.to_numeric(res["unit_price"], errors="coerce") * factor
@@ -471,27 +575,36 @@ def _apply(rows: pd.DataFrame, idx: pd.Index, keys: pd.DataFrame, codes: np.ndar
     rows.loc[idx, "price_ratio"] = ratio.astype(object).where(ratio.notna(), None)
     rows.loc[ok[ok].index, "catalog_sku_id"] = res.loc[ok, "sku"]
     rows.loc[ok[ok].index, "catalog_unit_price"] = price[ok]      # the catalog's, even where the file printed one
-    rows.loc[idx, "price_conflict"] = _conflicts(rows.loc[idx], res, level.eq("exact"))
+    rows.loc[idx, "price_conflict"] = _conflicts(rows.loc[idx], res, level.eq("exact"), kind)
     _count(stats, level, missing, cost, ratio, ok, rows.loc[idx], billed)
 
 
-def _conflicts(p: pd.DataFrame, res: pd.DataFrame, exact: pd.Series) -> pd.Series:
-    """An exact match (rate code, SKU, usage type) whose line prints another region, instance type or OS than the
-    matched product: "region eu-north-9 vs us-east-1". Strong evidence of a column read from the wrong place (the
-    rate code or SKU matched the product, the other columns did not). Printed values only; a region only when both
-    are region codes."""
+AZURE_REGION = re.compile(r"^(?!global$)[a-z]+[0-9]?$")       # eastus, eastus2, westeurope (not global)
+
+
+def _conflicts(p: pd.DataFrame, res: pd.DataFrame, exact: pd.Series, kind: str = "aws") -> pd.Series:
+    """An exact match (rate code, SKU, usage type; Azure: meter ID) whose line prints another region, instance type or
+    OS than the matched product: "region eu-north-9 vs us-east-1". Strong evidence of a column read from the wrong
+    place (the rate code or SKU matched the product, the other columns did not). Printed values only; a region only
+    when both are region codes. Azure: the OS is the meter's, never compared (a BYOL Windows VM runs on the Linux
+    meter); sizes are compared without case (standard_DC32ds_v3)."""
+    azure = kind == "azure"
+    code = AZURE_REGION if azure else REGION_CODE
     out = pd.Series("", index=p.index, dtype=object)
     for col, fn in (("region", nz.region), ("instance_type", nz.instance_type),
                     ("operating_system", nz.operating_system)):
-        if col not in p or f"product_{col}" not in res:
+        if col not in p or f"product_{col}" not in res or (azure and col == "operating_system"):
             continue
         mine = map_unique(p[col], lambda v, fn=fn: fn(v) if isinstance(v, str) and v.strip() else None)
         theirs = res[f"product_{col}"].astype(object)
+        if azure:
+            mine = map_unique(mine, lambda v: v.lower() if isinstance(v, str) else None)
+            theirs = map_unique(theirs, lambda v: v.lower() if isinstance(v, str) else None)
         printed = ~(p[HOW + col].isin(GUESSED) if HOW + col in p else pd.Series(False, index=p.index))
         both = exact & printed & mine.notna() & theirs.notna() & theirs.astype(str).ne("NA")
         if col == "region":
-            both &= map_unique(mine, lambda v: bool(REGION_CODE.match(v)) if isinstance(v, str) else False) \
-                & map_unique(theirs, lambda v: bool(REGION_CODE.match(v)) if isinstance(v, str) else False)
+            both &= map_unique(mine, lambda v: bool(code.match(v)) if isinstance(v, str) else False) \
+                & map_unique(theirs, lambda v: bool(code.match(v)) if isinstance(v, str) else False)
         off = both & mine.astype(str).ne(theirs.astype(str))
         if off.any():
             text = col + " " + mine[off].astype(str) + " vs " + theirs[off].astype(str)
@@ -521,6 +634,34 @@ def _missing(keys: pd.DataFrame, codes: np.ndarray, level: pd.Series, res: pd.Da
             answers.append(", ".join(apart) or None)
         elif lv == "unmatched":
             lacking = "" if named[code] else ", ".join(c for c in ("instance_type", "region") if pd.isna(row[c]))
+            answers.append(lacking or reasons.get(code, "catalog_row"))
+        elif lv == "unit_mismatch":
+            answers.append("unit")
+        else:
+            answers.append(None)
+    return pd.Series(np.array(answers, dtype=object)[combo], index=level.index, dtype=object)
+
+
+def _azure_missing(keys: pd.DataFrame, codes: np.ndarray, level: pd.Series, res: pd.DataFrame,
+                   reasons: dict[int, str]) -> pd.Series:
+    """_missing for Azure lines: an ambiguous meter name's empty OS (a VM size is a Linux and a Windows meter), else
+    what tells its candidates apart (product_name: the same meter name in two products); an unmatched line without a
+    meter ID: its empty meter name or region, else why (service_not_loaded, catalog_row); unit for a unit mismatch."""
+    differs = res["differs"].astype(object)
+    frame = pd.DataFrame({"code": codes, "level": level.fillna("").to_numpy(),
+                          "differs": differs.where(differs.notna(), "").astype(str).to_numpy()})
+    combo, uniques = pd.factorize(pd.MultiIndex.from_frame(frame))
+    answers = []
+    for code, lv, diff in uniques:
+        row = keys.iloc[code]
+        if lv == "ambiguous":
+            apart = [c for c in diff.split(", ") if c and not (c == "operating_system" and pd.notna(row[c]))]
+            if "operating_system" in apart:           # the OS's products differ in name too: the OS says it
+                apart = ["operating_system"]
+            answers.append(", ".join(apart) or "meter_id")
+        elif lv == "unmatched":
+            lacking = "" if pd.notna(row["usage_type"]) else ", ".join(
+                c for c in ("meter_name", "region") if pd.isna(row[c]))
             answers.append(lacking or reasons.get(code, "catalog_row"))
         elif lv == "unit_mismatch":
             answers.append("unit")
