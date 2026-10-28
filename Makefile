@@ -108,8 +108,8 @@ test:  ## Run the tests
 	uv run pytest -q
 
 lint:  ## Lint the backend (Ruff) and the web app (oxlint)
-	uv run ruff check billparse/api.py billparse/webapi.py billparse/agent.py billparse/auth.py billparse/db.py billparse/store.py billparse/jobs.py billparse/worker.py billparse/headers.py billparse/detect.py \
-		billparse/settings.py billparse/bigfile.py migrations/env.py tests/test_webapi.py tests/test_jobs.py tests/test_headers.py tests/conftest.py scripts/export_openapi.py
+	uv run ruff check billparse/api.py billparse/webapi.py billparse/agent.py billparse/auth.py billparse/db.py billparse/store.py billparse/jobs.py billparse/worker.py billparse/headers.py billparse/synonyms.py billparse/detect.py \
+		billparse/settings.py billparse/bigfile.py migrations/env.py tests/test_webapi.py tests/test_jobs.py tests/test_headers.py tests/test_service_synonyms.py tests/conftest.py scripts/export_openapi.py
 	cd web && pnpm lint
 
 lint-fix:  ## Apply Ruff's safe fixes

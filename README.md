@@ -19,8 +19,8 @@ make help                               # every target: logs, psql, migrate, nig
 
 The ports differ from invoice-parser's (8000/8080), so both stacks run side by side; `API_PORT` and `WEB_PORT`
 change them. The API container runs the migrations (`alembic upgrade head`) before it starts. Data stays in two
-volumes: `pgdata` (PostgreSQL) and `billparse-data` (uploads, result rows, nightly reports, the service catalog and
-the synonyms that review teaches).
+volumes: `pgdata` (PostgreSQL, with the synonyms that review teaches) and `billparse-data` (uploads, result rows,
+nightly reports, the service catalog).
 
 Without Docker (SQLite file in `store/` unless `DATABASE_URL` is set):
 
@@ -324,7 +324,14 @@ GCP_API_KEY=... python scripts/fetch_gcp.py
 python scripts/build_catalog.py --raw-dir data/raw --out data/catalog.msgpack
 ```
 
-Corrections: `python -m billparse synonym "VM Hrs" "azure:Virtual Machines"`.
+Corrections: `python -m billparse synonym "VM Hrs" "azure:Virtual Machines"`, the Mapping page (`/aliases`), and
+review approval (each corrected service code). They are synonyms in the table `service_synonym` (`synonyms.py`;
+scope `*` or a provider, the normalized label, the service key, source review or admin, who and when), shared by the
+API and every worker: one statement per change, so two approvals at once lose nothing. Each process reads the table
+again when another one changed it (at most every 60 s; at once after its own change) and drops its cached picks of
+the changed labels. The old file `CATALOG_DIR/synonyms.json` is imported once into an empty table on first use (a
+`journal` entry, stream `synonym_import`, records it) and is never changed; `svcres` on its own (without billparse)
+still keeps its synonyms in that file.
 
 ## Price catalog
 
@@ -409,6 +416,15 @@ catalog is called once per file with the distinct keys, never per line, and the 
 (cleaning, assumptions, what is missing) is done once per key: 500,000 lines with 2,000 keys take about 1.5 s. Covered usage gets its list price too (the consumer's on-demand baseline); `coverage` and `effective_cost` are
 never changed, and no savings are estimated.
 
+What pricing adds to a parse (task 14; a 300,000-row synthetic CUR from `scripts/bench_large.py`, the test fixture
+catalog, best of 3, the time with prices less the time with no catalog): in memory 2.2 s (8.7 s against 6.5 s), was
+3.5 s; on the large path 1.2 s (7.1 s against 6.0 s), was 2.0 s. The catalog is not the cost (its lookups take about
+0.02 s per file): the time is work per line. Task 14 removed copies of every column of the priced lines, flag columns
+read with a Python call per line (pricing, the checks and the contract now call it once per distinct value), and text
+conversions of lines that cannot have a price conflict. The results are byte-identical. The accepted attempt and the
+final pass both price the lines: the final pass runs after the service resolution, which sets `service_code` and
+`provider` (the keys and R2 read them), so it cannot reuse the attempt's prices.
+
 Each line gets `price_match_level`:
 
 | Level | When |
@@ -460,8 +476,8 @@ defaults, else the earlier ones stay.
 ## Storage
 
 `store.py` keeps rows in the database (`db.py`): documents, every version of every learned spec, each spec's
-regression set (`spec_doc`, `spec_fingerprint`), the logs (`journal`: records, labels, review) and the admitted
-users. PostgreSQL with `DATABASE_URL`, else a SQLite file in `PARSER_DATA_DIR`. Large parts are files in
+regression set (`spec_doc`, `spec_fingerprint`), the logs (`journal`: records, labels, review), the learned
+column headers (`header_synonym`) and service synonyms (`service_synonym`), and the admitted users. PostgreSQL with `DATABASE_URL`, else a SQLite file in `PARSER_DATA_DIR`. Large parts are files in
 `PARSER_DATA_DIR`: uploads (`docs/`), rows as Parquet (`results/`) and nightly reports.
 
 Schema changes go through Alembic: change `billparse/db.py`, then

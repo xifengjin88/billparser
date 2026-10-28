@@ -1,7 +1,7 @@
 """price_product: Azure's meter name, product name and SKU name, and the meter-name index
 
 Revision ID: a7d2e9c41b05
-Revises: a7e4c2d91f30
+Revises: 5d2b8e61c0a4
 Create Date: 2026-10-27 18:00:00
 
 """
@@ -12,7 +12,7 @@ import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
 revision: str = 'a7d2e9c41b05'
-down_revision: Union[str, Sequence[str], None] = 'a7e4c2d91f30'
+down_revision: Union[str, Sequence[str], None] = '5d2b8e61c0a4'
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 

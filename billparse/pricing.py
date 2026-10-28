@@ -388,9 +388,10 @@ def _price(rows: pd.DataFrame, priced: pd.Series, qty: pd.Series, cost: pd.Serie
            defaults: PriceDefaults, cache: KeyCache, stats: PriceStats, period_start: str | None,
            kind: str = "aws") -> None:
     """kind: aws, or azure (the meter ID, else the meter name in its region: _azure_keys)."""
-    p = rows.loc[priced]
     azure = kind == "azure"
     source, key_columns = (AZURE_SOURCE, AZURE_KEYS) if azure else (SOURCE_COLUMNS, KEY_COLUMNS)
+    # the priced lines, with only the columns read here (a copy of every column of a large file costs seconds)
+    p = rows.loc[priced, [c for c in rows.columns if c in source or c == "charge_start"]]
     # the distinct keys, from the line columns as they are: everything that depends only on the key (cleaning, the
     # line's words, the request's defaults, what is missing) is done once per key and spread back by arrays
     raw = pd.DataFrame({c: _col(p, c) for c in source}, index=p.index).astype(object)
@@ -527,13 +528,16 @@ def _apply(rows: pd.DataFrame, idx: pd.Index, keys: pd.DataFrame, codes: np.ndar
     # the line's unit in the price's: (normalized unit, factor), an unknown unit as printed (lower case); Azure's
     # blocks ("10 Hours", "1/Month", "10K/Month") as its prices' are read
     unit_fn = azure_unit if kind == "azure" else unit_of
-    line_unit = map_unique(_col(rows.loc[idx], "unit"),
-                           lambda u: (unit_fn(u) or (str(u).strip().lower(), 1.0))
-                           if isinstance(u, str) and u.strip() else None)
+    def at(c: str) -> pd.Series:                      # one column of the priced lines (never a copy of every column)
+        return _col(rows, c).loc[idx]
+    def line_unit(u) -> tuple[str, float] | None:
+        return (unit_fn(u) or (str(u).strip().lower(), 1.0)) if isinstance(u, str) and u.strip() else None
+    # each computed once per distinct unit text (a map over the rows' tuples was a Python call per row)
+    unit = at("unit")
     exact_by = res["matched_by"].isin(EXACT_BY)
-    no_unit = line_unit.isna()
-    norm = map_unique(line_unit, lambda t: t[0] if t else None)
-    factor = map_unique(line_unit, lambda t: t[1] if t else 1.0).astype(float)
+    no_unit = map_unique(unit, lambda u: line_unit(u) is None).astype(bool)
+    norm = map_unique(unit, lambda u: t[0] if (t := line_unit(u)) else None)
+    factor = map_unique(unit, lambda u: t[1] if (t := line_unit(u)) else 1.0).astype(float)
     unit_ok = (no_unit & exact_by) | (~no_unit & norm.eq(res["unit"]))
     level = pd.Series(None, index=idx, dtype=object)
     level[one & unit_ok & exact_by] = "exact"
@@ -546,8 +550,8 @@ def _apply(rows: pd.DataFrame, idx: pd.Index, keys: pd.DataFrame, codes: np.ndar
     # prices: in the line's unit; printed values always win (R1)
     ok = level.isin(MATCHED)
     price = pd.to_numeric(res["unit_price"], errors="coerce") * factor
-    fill_price = ok & pd.to_numeric(_col(rows.loc[idx], "list_unit_price"), errors="coerce").isna()
-    fill_list = ok & pd.to_numeric(_col(rows.loc[idx], "list_cost"), errors="coerce").isna()
+    fill_price = ok & pd.to_numeric(at("list_unit_price"), errors="coerce").isna()
+    fill_list = ok & pd.to_numeric(at("list_cost"), errors="coerce").isna()
     for c in ("list_unit_price", "list_cost"):
         if c not in rows:
             rows[c] = np.nan
@@ -563,8 +567,8 @@ def _apply(rows: pd.DataFrame, idx: pd.Index, keys: pd.DataFrame, codes: np.ndar
     text = np.where((notes != "") & (extra != ""), np.char.add(np.char.add(notes.astype(str), "; "),
                                                                extra.astype(str)), np.where(notes != "", notes, extra))
     list_unit = pd.to_numeric(rows.loc[idx, "list_unit_price"], errors="coerce")
-    eff = pd.to_numeric(_col(rows.loc[idx], "effective_cost"), errors="coerce")
-    billed = pd.to_numeric(_col(rows.loc[idx], "billed_cost"), errors="coerce")
+    eff = pd.to_numeric(at("effective_cost"), errors="coerce")
+    billed = pd.to_numeric(at("billed_cost"), errors="coerce")
     paid = eff.where(eff.notna(), billed)
     implied = paid / qty.where(qty.ne(0))
     ratio = implied / list_unit.where(list_unit > 0)
@@ -575,8 +579,14 @@ def _apply(rows: pd.DataFrame, idx: pd.Index, keys: pd.DataFrame, codes: np.ndar
     rows.loc[idx, "price_ratio"] = ratio.astype(object).where(ratio.notna(), None)
     rows.loc[ok[ok].index, "catalog_sku_id"] = res.loc[ok, "sku"]
     rows.loc[ok[ok].index, "catalog_unit_price"] = price[ok]      # the catalog's, even where the file printed one
-    rows.loc[idx, "price_conflict"] = _conflicts(rows.loc[idx], res, level.eq("exact"), kind)
-    _count(stats, level, missing, cost, ratio, ok, rows.loc[idx], billed)
+    rows.loc[idx, "price_conflict"] = _conflicts(rows.loc[idx, [c for c in rows.columns if c in CONFLICT_COLUMNS]], res,
+                                                 level.eq("exact"), kind)
+    _count(stats, level, missing, cost, ratio, ok, rows.loc[idx, [c for c in rows.columns if c in COUNT_COLUMNS]],
+           billed)
+
+
+CONFLICT_COLUMNS = [c for col in ("region", "instance_type", "operating_system") for c in (col, HOW + col)]
+COUNT_COLUMNS = ["coverage", "service_code"]
 
 
 AZURE_REGION = re.compile(r"^(?!global$)[a-z]+[0-9]?$")       # eastus, eastus2, westeurope (not global)
@@ -601,11 +611,18 @@ def _conflicts(p: pd.DataFrame, res: pd.DataFrame, exact: pd.Series, kind: str =
             mine = map_unique(mine, lambda v: v.lower() if isinstance(v, str) else None)
             theirs = map_unique(theirs, lambda v: v.lower() if isinstance(v, str) else None)
         printed = ~(p[HOW + col].isin(GUESSED) if HOW + col in p else pd.Series(False, index=p.index))
-        both = exact & printed & mine.notna() & theirs.notna() & theirs.astype(str).ne("NA")
+        # compared on the exact, printed lines only (the text conversions of every line cost more than the rest)
+        pos = np.flatnonzero((exact & printed).to_numpy())
+        if not len(pos):
+            continue
+        m, t = mine.iloc[pos], theirs.iloc[pos]
+        both = m.notna() & t.notna() & t.astype(str).ne("NA")
         if col == "region":
-            both &= map_unique(mine, lambda v: bool(code.match(v)) if isinstance(v, str) else False) \
-                & map_unique(theirs, lambda v: bool(code.match(v)) if isinstance(v, str) else False)
-        off = both & mine.astype(str).ne(theirs.astype(str))
+            both &= map_unique(m, lambda v: bool(code.match(v)) if isinstance(v, str) else False) \
+                & map_unique(t, lambda v: bool(code.match(v)) if isinstance(v, str) else False)
+        hit = np.zeros(len(p), dtype=bool)
+        hit[pos] = (both & m.astype(str).ne(t.astype(str))).to_numpy(dtype=bool)
+        off = pd.Series(hit, index=p.index)
         if off.any():
             text = col + " " + mine[off].astype(str) + " vs " + theirs[off].astype(str)
             out[off] = (out[off] + "; " + text).str.strip("; ")
@@ -751,8 +768,19 @@ def is_flag(v) -> bool:
 
 
 def flagged(s: pd.Series) -> pd.Series:
-    """A flag column as bool."""
-    return s.map(is_flag).astype(bool)
+    """A flag column as bool: the same as s.map(is_flag), with is_flag called once per distinct (value, type) pair, not
+    once per row (a value and its type decide is_flag; a missing value is False)."""
+    arr = s.to_numpy(dtype=object)
+    out = np.zeros(len(arr), dtype=bool)
+    codes, _ = pd.factorize(arr, use_na_sentinel=True)
+    kinds, _ = pd.factorize(np.fromiter(map(type, arr), dtype=object, count=len(arr)))
+    known = codes >= 0
+    if known.any():
+        pair = codes[known].astype(np.int64) * (int(kinds.max()) + 1) + kinds[known]
+        _, first, inverse = np.unique(pair, return_index=True, return_inverse=True)
+        values = np.array([is_flag(v) for v in arr[known][first]], dtype=bool)
+        out[known] = values[inverse.ravel()]
+    return pd.Series(out, index=s.index, name=s.name)
 
 
 def drop_prices(rows: pd.DataFrame) -> pd.DataFrame:

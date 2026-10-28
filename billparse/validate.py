@@ -17,6 +17,7 @@ import pandas as pd
 
 from prices.units import normalize as unit_of
 
+from .pricing import flagged
 from .spec import Extraction
 from .transforms import map_unique, parse_number
 from .tree import bound
@@ -142,8 +143,7 @@ def _flag(df: pd.DataFrame, name: str | None) -> pd.Series:
     """A flag column of pricing (True, 1, "True", 1.0) as bool; absent: False."""
     if not name or name not in df:
         return pd.Series(False, index=df.index)
-    return df[name].map(lambda v: v is True or (isinstance(v, (int, float)) and not pd.isna(v) and v != 0)
-                        or (isinstance(v, str) and v.lower() in ("true", "1", "1.0"))).astype(bool)
+    return flagged(df[name])
 
 
 def _product_label(df: pd.DataFrame) -> pd.Series:
@@ -278,7 +278,8 @@ class RowStats:
                     self.g_values[v] = self.g_values.get(v, 0.0) + float(c)
             self._example("catalog_grounding", df, conflict, lambda r: str(r["price_conflict"]))
         if nosuch.any():
-            for v, c in cost[nosuch].groupby(_product_label(df.loc[nosuch])).sum().items():
+            label_cols = [c for c in df.columns if c in ("instance_type", "region", "usage_type", "sku_id")]
+            for v, c in cost[nosuch].groupby(_product_label(df.loc[nosuch, label_cols])).sum().items():
                 if v in self.g_values or len(self.g_values) < 50:
                     self.g_values[v] = self.g_values.get(v, 0.0) + float(c)
             self._example("catalog_grounding", df, nosuch, lambda r: _product_label(r.to_frame().T).iloc[0])
