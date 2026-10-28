@@ -344,8 +344,14 @@ class RowStats:
         end = pd.to_datetime(df["charge_end"], errors="coerce", utc=True)
         hours = (end - start).dt.total_seconds() / 3600
         qty = pd.to_numeric(df["quantity"], errors="coerce")
+        # hours counted per core or GPU (GCP core SKUs, Azure vCore meters, Fargate vCPU) are hours times the
+        # resource's cores: they may exceed the window
+        per_unit = pd.Series(False, index=df.index)
+        for c in ("description", "usage_type", "meter_name"):
+            per_unit |= map_unique(_col(df, c), lambda v: bool(PER_CORE.search(v)) if isinstance(v, str)
+                                   else False).astype(bool)
         m = (_usage(df) & factor.notna() & df["resource_id"].notna() & df["resource_id"].astype(str).ne("")
-             & hours.gt(0) & qty.notna())
+             & hours.gt(0) & qty.notna() & ~per_unit)
         if not m.any():
             return
         used = qty[m] * factor[m].astype(float)
@@ -649,6 +655,7 @@ def _plausibility(s: RowStats) -> list[Check]:
 
 
 # ---------------------------------------------------------------- the price checks
+PER_CORE = re.compile(r"(?<![a-z])(?:v?cpus?|v?cores?|gpus?)(?![a-z])", re.I)   # usage_hours: per core or GPU
 PRICE_CHECKS = ("catalog_grounding", "printed_list_price", "implied_unit_price", "price_units", "usage_hours",
                 "cost_order", "grounding_values")
 

@@ -501,11 +501,12 @@ the price checks compare them.
   there too.
 - **Currency.** The catalog's prices are in USD. A line that prints another currency is priced in its own currency
   with the rate it prints (`currency_conversion_rate`: units of its currency per USD; GCP exports print
-  `currency_conversion_rate`, GCP FOCUS `x_CurrencyConversionRate`), noted in `price_assumptions`
+  `currency_conversion_rate`, FOCUS `x_CurrencyConversionRate`, Azure cost details `ExchangeRatePricingToBilling`,
+  Partner Center reconciliation `PCToBCExchangeRate`), noted in `price_assumptions`
   (`currency=EUR at 0.92 per USD (printed rate)`): `list_unit_price`, `list_cost` and `catalog_unit_price` are then in
   the line's currency, so the price checks compare one currency. A line with another currency and no rate is not
-  priced (`unmatched`, `price_missing` `currency`). A line that prints no currency is taken to be in USD. AWS and GCP
-  alike.
+  priced (`unmatched`, `price_missing` `currency`). A line that prints no currency is taken to be in USD. AWS, Azure
+  and GCP alike.
 - **R1.** `list_unit_price` and `list_cost` are filled only where the file printed none (inferred, source
   `price_catalog`); `Document.cost_types` still lists only what the file gives.
 - **R2.** When at least 20 on-demand lines matched `exact` or `attributes`, across at least 3 services, have the same

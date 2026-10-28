@@ -330,6 +330,48 @@ def test_no_azure_sample_gets_worse(tmp_path, name):
     assert priced["confidence"] >= plain["confidence"] - 1e-9, [c for c in priced["checks"] if c["status"] != "skip"]
 
 
+# ---------------------------------------------------------------- currency
+def _rebilled(tmp_path: Path, currency: str, rate: float | None) -> Path:
+    """The EA sample's AKS Uptime SLA lines (the fixture's 0.10 USD per hour) billed at exactly that list price in
+    currency at rate (ExchangeRatePricingToBilling: units per USD; None: the file prints no rate)."""
+    d = pd.read_csv(FILES / "azure_ea_usage.csv")
+    d = d[d["MeterName"].eq("Standard Uptime SLA")].copy()
+    d["EffectivePrice"] = 0.1 * (rate or 1.0)
+    d["CostInBillingCurrency"] = (d["Quantity"] * 0.1 * (rate or 1.0)).round(6)
+    d["BillingCurrencyCode"] = currency
+    if rate is not None:
+        d["ExchangeRatePricingToBilling"] = rate
+    path = tmp_path / f"azure_{currency}.csv"
+    d.to_csv(path, index=False)
+    return path
+
+
+@pytest.mark.parametrize("currency, rate", [("USD", 1.0), ("EUR", 0.92), ("JPY", 152.0)])
+def test_an_azure_bill_at_list_price_has_ratio_one_in_any_currency(tmp_path, currency, rate):
+    pipe = _pipe(tmp_path)
+    r = pipe.parse_file(_rebilled(tmp_path, currency, rate))
+    rows = pipe.store.get_rows(r["sha256"])
+    assert r["spec"]["id"] == "azure-usage-details"
+    assert set(rows["price_match_level"]) == {"attributes"} and set(rows["currency"]) == {currency}
+    assert pd.to_numeric(rows["price_ratio"]).tolist() == pytest.approx([1.0] * len(rows), rel=1e-4)
+    first = rows.iloc[0]
+    assert float(first["catalog_unit_price"]) == pytest.approx(0.1 * rate)              # in the line's currency
+    assert float(first["list_cost"]) == pytest.approx(float(first["quantity"]) * 0.1 * rate)
+    note = first["price_assumptions"] if isinstance(first["price_assumptions"], str) else ""
+    assert (f"currency={currency} at {rate:g} per USD (printed rate)" in note) == (currency != "USD")
+    checks = {c["name"]: c["status"] for c in r["checks"]}
+    assert checks["implied_unit_price"] == "pass" and checks["catalog_grounding"] == "pass"
+
+
+def test_an_azure_line_in_another_currency_without_a_rate_is_not_priced(tmp_path):
+    pipe = _pipe(tmp_path)
+    r = pipe.parse_file(_rebilled(tmp_path, "EUR", None))
+    rows = pipe.store.get_rows(r["sha256"])
+    assert set(rows["price_match_level"]) == {"unmatched"} and set(rows["price_missing"]) == {"currency"}
+    assert pd.to_numeric(rows["list_cost"]).isna().all() and rows["catalog_unit_price"].isna().all()
+    assert {c["name"]: c["status"] for c in r["checks"]}["implied_unit_price"] == "skip"
+
+
 # ---------------------------------------------------------------- the fetcher and the weekly refresh
 def _fetcher():
     path = ROOT / "scripts" / "azure" / "fetch_azure_retail_prices.py"
