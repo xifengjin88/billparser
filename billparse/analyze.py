@@ -20,6 +20,9 @@ from svcres.catalog import Catalog, build
 from svcres.resolver import Resolver
 from svcres.seeds import AZURE_FAMILY_TO_CATEGORY, FEE_SERVICES
 
+from .db import default_url
+from .settings import data_dir as settings_data_dir
+from .synonyms import synonym_store
 from .transforms import map_unique
 
 COMMITTABLE = {"Compute", "Databases", "Containers", "Analytics"}
@@ -29,25 +32,28 @@ NON_USAGE = {"Tax", "Credit", "Refund", "Purchase", "Fee", "Support", "Adjustmen
 
 # ---------------------------------------------------------------- services
 _RESOLVER: Resolver | None = None
-# the resolver's cache and synonym files are not safe to change from two threads (the API parses in a pool)
+_RESOLVER_DB: str | None = None
+# the resolver's in-memory cache and its cache file are not safe to change from two threads (the API parses in a pool)
 RESOLVER_LOCK = threading.RLock()
 
 
 def get_resolver(data_dir: Path) -> Resolver:
-    """Load the catalog once per process. Without fetched catalogs, seeds still cover common AWS names."""
-    global _RESOLVER
+    """Load the catalog once per process (again if the database changed). Without fetched catalogs, seeds still cover
+    common AWS names. The synonyms come from the database (synonyms.py)."""
+    global _RESOLVER, _RESOLVER_DB
+    url = default_url(settings_data_dir())
     with RESOLVER_LOCK:
-        if _RESOLVER is None:
-            _RESOLVER = _load_resolver(data_dir)
+        if _RESOLVER is None or _RESOLVER_DB != url:
+            _RESOLVER, _RESOLVER_DB = _load_resolver(data_dir, url), url
     return _RESOLVER
 
 
-def _load_resolver(data_dir: Path) -> Resolver:
+def _load_resolver(data_dir: Path, url: str | None = None) -> Resolver:
     data_dir.mkdir(parents=True, exist_ok=True)
     cat_path = data_dir / "catalog.msgpack"
     if not cat_path.exists():
         build(data_dir / "raw").save(cat_path)
-    return Resolver(Catalog.load(cat_path), data_dir)
+    return Resolver(Catalog.load(cat_path), data_dir, synonyms=synonym_store(data_dir, url))
 
 
 def resolve_services(rows: pd.DataFrame, data_dir: Path) -> float | None:
