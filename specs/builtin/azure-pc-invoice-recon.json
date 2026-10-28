@@ -90,6 +90,11 @@
     "BillingCurrency"
    ]
   },
+  "currency_conversion_rate": {
+   "from": [
+    "PCToBCExchangeRate"
+   ]
+  },
   "charge_type": {
    "from": [
     "ChargeType"

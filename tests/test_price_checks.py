@@ -178,6 +178,18 @@ def test_usage_hours(catalog):
     assert c["status"] == "fail" and "i-1" in c["detail"] and "i-2" not in c["detail"]
 
 
+def test_usage_hours_skips_lines_counted_per_core_or_gpu(catalog):
+    """One resource's per-core or per-GPU hours (a GCP N2 core SKU, an Azure vCore meter, a Fargate vCPU) are
+    hours times its cores: they may exceed the window."""
+    window = {"charge_start": ["2026-10-01T00:00:00Z"] * 4, "charge_end": ["2026-10-02T00:00:00Z"] * 4}
+    rows = _priced(catalog, sku_id=[LINUX] * 4, resource_id=["i-1", "vm-2", "vm-3", "task-4"],
+                   quantity=[25.0, 96.0, 48.0, 96.0], **window,
+                   description=["c5.large", "N2 Instance Core running in Americas", "Nvidia T4 GPU running in Americas",
+                                "Fargate"], usage_type=[None, None, None, "USE1-Fargate-vCPU-Hours:perCPU"])
+    c = _both(rows)["usage_hours"]
+    assert c["status"] == "fail" and c["detail"].startswith("1 of 1 ") and "i-1" in c["detail"]
+
+
 def test_cost_order(catalog):
     rows = _priced(catalog, sku_id=[LINUX] * 10, list_cost=[1.0] * 10, effective_cost=[2.0] * 10)
     c = _both(rows)["cost_order"]
