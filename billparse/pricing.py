@@ -15,7 +15,12 @@ Each line's level (price_match_level):
                  has no prices for the service: a catalog gap), no_such_product (no product has this SKU, usage type
                  or instance type in this region: likely read from a wrong column), else catalog_row
   unit_mismatch  a price, in a unit the line's unit cannot be converted to
-  no_catalog     an Azure or GCP line: the catalog has no prices for them yet
+  no_catalog     an Azure line, or a GCP line while the catalog has no GCP prices (PRICE_PROVIDERS)
+GCP lines (once GCP prices are loaded) are matched by their SKU ID only (exact): the SKU's own price whatever its
+term (a Spot SKU's, a commitment SKU's), its first paid tier; committed-use covered usage prints the on-demand SKU and
+gets its list price, like AWS covered usage. A line counted in the SKU's base unit (usage.unit "seconds",
+"byte-seconds") is converted with the SKU's baseUnitConversionFactor. A GCP line with no SKU ID is unmatched
+(price_missing sku_id).
 The catalog is called once per file (a large file: once per chunk, for the keys the KeyCache does not have) with the
 distinct keys, never per line. A pricing error never fails the parse: the lines stay unpriced, with a warning.
 """
@@ -31,6 +36,7 @@ from typing import TYPE_CHECKING
 import numpy as np
 import pandas as pd
 
+from prices import gcp as gcp_prices
 from prices import normalize as nz
 from prices.units import normalize as unit_of
 
@@ -48,11 +54,14 @@ MATCHED = ("exact", "attributes", "assumed")
 EXACT_BY = ("rate_code", "sku", "usage")              # the lookups that name the product itself
 ATTRIBUTES = ["operating_system", "tenancy", "license_model", "pre_installed_sw", "database_engine",
               "deployment_option"]                    # the columns that tell an instance type's prices apart
-KEY_COLUMNS = ["rate_code", "sku", "service_code", "usage_type", "operation", "region", "instance_type", *ATTRIBUTES]
+KEY_COLUMNS = ["rate_code", "sku", "service_code", "usage_type", "operation", "region", "instance_type", *ATTRIBUTES,
+               "provider", "term_type"]
 PRICE_COLUMNS = ["price_match_level", "price_missing", "price_assumptions", "implied_unit_price", "price_ratio",
                  "catalog_sku_id", "catalog_unit_price", "price_conflict", "_list_cost_inferred", "_contracted_cost_inferred", "_list_unit_price_inferred"]
 FLAGS = ("_list_cost_inferred", "_contracted_cost_inferred", "_list_unit_price_inferred")   # what pricing filled
-NO_CATALOG = ("azure", "gcp")
+NO_CATALOG = ("azure", "gcp")                        # gcp: until the catalog has GCP prices
+ANY_TERM = "any"                                      # prices.store.ANY_TERM: the SKU's own price, any term
+GCP_KEY = ("sku", "service_code", "region")           # what a GCP key is made of
 AWS_CODE = re.compile(r"^[A-Za-z][A-Za-z0-9]+$")      # a CUR product code: AmazonEC2, AWSLambda, awskms
 # R2: a steady negotiated discount
 R2_MIN_LINES, R2_MIN_SERVICES, R2_TOLERANCE, R2_LOW, R2_HIGH = 20, 3, 0.01, 0.5, 0.99
@@ -198,12 +207,13 @@ def match_prices(rows: pd.DataFrame, catalog: PriceCatalog | None, defaults: Pri
     usage = ct.isna() | ct.eq("Usage")
     provider = map_unique(_col(rows, "provider"), lambda v: v.lower() if isinstance(v, str) else None)
     cost = pd.to_numeric(_col(rows, "billed_cost"), errors="coerce").fillna(0.0).abs()
-    other = usage & provider.isin(NO_CATALOG)
+    gcp_on = bool((usage & provider.eq("gcp")).any()) and _has_gcp(catalog)
+    other = usage & provider.isin([v for v in NO_CATALOG if not (v == "gcp" and gcp_on)])
     if other.any():
         rows.loc[other, "price_match_level"] = "no_catalog"
         stats.levels["no_catalog"] = [int(other.sum()), float(cost[other].sum())]
     qty = pd.to_numeric(_col(rows, "quantity"), errors="coerce")
-    priced = usage & provider.eq("aws") & qty.notna()
+    priced = usage & (provider.eq("aws") | (provider.eq("gcp") & gcp_on)) & qty.notna()
     if not priced.any():
         return stats
     try:
@@ -227,6 +237,16 @@ def match_prices(rows: pd.DataFrame, catalog: PriceCatalog | None, defaults: Pri
     return stats
 
 
+def _has_gcp(catalog: PriceCatalog | None) -> bool:
+    """The catalog has GCP prices (a GCP download was loaded): GCP lines are priced, else they stay no_catalog."""
+    if catalog is None or not hasattr(catalog, "services"):
+        return False
+    try:
+        return bool(catalog.services("gcp"))
+    except Exception:                            # noqa: BLE001  a database error must not fail the parse
+        return False
+
+
 def _keys(p: pd.DataFrame, defaults: PriceDefaults) -> tuple[pd.DataFrame, pd.Series, pd.Series]:
     """(catalog keys, assumptions as text, whether an attribute was assumed) of the priced lines."""
     keys = pd.DataFrame(index=p.index)
@@ -238,6 +258,11 @@ def _keys(p: pd.DataFrame, defaults: PriceDefaults) -> tuple[pd.DataFrame, pd.Se
     keys["service_code"] = code.where(code.notna(), _text(_col(p, "service_code")))
     for c in ["usage_type", "operation", "region", "instance_type", *ATTRIBUTES]:
         keys[c] = _text(_col(p, c))
+    # a GCP key: its SKU ID (the price is the SKU's, whatever its term), service and region; nothing assumed
+    gcp = map_unique(_col(p, "provider"), lambda v: isinstance(v, str) and v.lower() == "gcp").astype(bool)
+    keys["provider"] = np.where(gcp, "gcp", "aws")
+    keys["term_type"] = pd.Series(np.where(gcp, ANY_TERM, None), index=p.index, dtype=object)
+    keys.loc[gcp, [c for c in KEY_COLUMNS if c not in (*GCP_KEY, "provider", "term_type")]] = None
     notes: list[pd.Series] = []
     # the line's own words: an EC2 line with no operation and no SKU (an invoice) that names an OS and no SQL Server
     # runs no software; one that does not say Dedicated or Host is Shared (the parser fills them when it says so)
@@ -284,7 +309,8 @@ def _lookup(catalog: PriceCatalog, pairs: list[tuple[str, str]], key_rows: dict[
     todo = [k for k in dict.fromkeys(pairs) if k not in cache]
     if not todo:
         return
-    frame = pd.DataFrame([{**key_rows[k], "as_of": d, "key_id": i, "term_type": "on_demand"}
+    frame = pd.DataFrame([{**key_rows[k], "as_of": d, "key_id": i,
+                           "term_type": key_rows[k].get("term_type") or "on_demand"}
                           for i, (k, d) in enumerate(todo)])
     stats.lookups += len(todo)
     found = catalog.lookup(frame)
@@ -301,7 +327,7 @@ def _same(a: dict | None, b: dict | None) -> bool:
 
 
 SOURCE_COLUMNS = ["sku_price_id", "sku_id", "product_code", "service_code", "usage_type", "operation", "region",
-                  "instance_type", *ATTRIBUTES,       # the line columns a key is made of, and how the identifiers
+                  "instance_type", *ATTRIBUTES, "provider",   # the line columns a key is made of, and how the ids
                   HOW + "usage_type", HOW + "instance_type"]     # were made (a value guessed from the words)
 GUESSED = ("text", "rule")                            # origins of a value read from a line's words or set by a rule
 REGION_CODE = re.compile(r"^[a-z]{2}(?:-[a-z]+)+-\d+$")
@@ -340,6 +366,7 @@ def _price(rows: pd.DataFrame, priced: pd.Series, qty: pd.Series, cost: pd.Serie
     per_key = _any_region(catalog, keys, texts, key_rows, per_key, lo, guessed, cache, stats)
     reasons = _reasons(catalog, keys, texts, per_key["matched_by"].isna().to_numpy(), cache, guessed)
     res = per_key.take(codes).set_axis(p.index)
+    gcp_rows = keys["provider"].eq("gcp").to_numpy()[codes]
     if split:
         mask = pairs["code"].isin(split).to_numpy()
         both = pairs[mask].drop_duplicates()
@@ -349,8 +376,35 @@ def _price(rows: pd.DataFrame, priced: pd.Series, qty: pd.Series, cost: pd.Serie
         rows_split = pairs[mask].merge(got, on=["code", "date"], how="left").reindex(columns=per_key.columns)
         res = res.astype(object)
         res.loc[p.index[mask], per_key.columns] = rows_split.to_numpy()
+    fix = _base_units(catalog, p, res, gcp_rows) if gcp_rows.any() else None
     _apply(rows, p.index, keys, codes, notes.to_numpy()[codes], assumed.to_numpy()[codes], dates, res,
-           qty[p.index], cost[p.index], stats, reasons)
+           qty[p.index], cost[p.index], stats, reasons, fix)
+
+
+def _base_units(catalog: PriceCatalog, p: pd.DataFrame, res: pd.DataFrame, gcp_rows: np.ndarray) -> pd.Series:
+    """GCP lines with one price whose unit is not the price's, but the SKU's base unit (usage.unit "seconds",
+    "byte-seconds"): (the price's unit, the factor of one line unit in it), from the SKU's baseUnitConversionFactor.
+    Once per distinct (SKU, unit); one query. Other lines: None."""
+    out = pd.Series(None, index=p.index, dtype=object)
+    unit = _col(p, "unit")
+    one = (pd.Series(gcp_rows, index=p.index) & res["sku"].notna()
+           & pd.to_numeric(res["candidates"], errors="coerce").eq(1) & unit.notna())
+    if not one.any():
+        return out
+    norm = map_unique(unit, lambda u: (unit_of(u) or (str(u).strip().lower(), 1.0))[0]
+                      if isinstance(u, str) and u.strip() else None)
+    todo = one & norm.ne(res["unit"])
+    if not todo.any():
+        return out
+    pairs = pd.DataFrame({"sku": res.loc[todo, "sku"].astype(str), "unit": unit[todo].astype(str),
+                          "price_unit": res.loc[todo, "unit"].astype(str)})
+    info = catalog.unit_info("gcp", pairs["sku"].unique().tolist())
+    got = {}
+    for sku, u, pu in pairs.drop_duplicates().itertuples(index=False):
+        fix = gcp_prices.base_factor(info.get(sku) or {}, u)
+        got[(sku, u, pu)] = fix if fix and fix[0] == pu else None
+    out[todo] = pd.Series([got[k] for k in pairs.itertuples(index=False, name=None)], index=pairs.index, dtype=object)
+    return out
 
 
 def _any_region(catalog: PriceCatalog, keys: pd.DataFrame, texts: list[str], key_rows: dict, per_key: pd.DataFrame,
@@ -362,6 +416,7 @@ def _any_region(catalog: PriceCatalog, keys: pd.DataFrame, texts: list[str], key
     Each such key once more, in one call."""
     todo = [c for c in range(len(texts))
             if pd.isna(per_key.at[c, "matched_by"]) and pd.notna(keys.at[c, "region"]) and not guessed[c]
+            and keys.at[c, "provider"] != "gcp"             # a GCP key is looked up by its SKU alone already
             and keys.loc[c, ["rate_code", "sku", "usage_type"]].notna().any()]
     if not todo:
         return per_key
@@ -392,19 +447,21 @@ def _reasons(catalog: PriceCatalog, keys: pd.DataFrame, texts: list[str], unmatc
             or (pd.notna(keys.at[c, "instance_type"]) and pd.notna(keys.at[c, "region"]))]
     if not todo:
         return {}
-    services = catalog.services()
+    services = {pv: catalog.services(pv) for pv in keys.loc[todo, "provider"].unique()}
     out: dict[int, str] = {}
     ask = []
     for c in todo:
         code = keys.at[c, "service_code"]
-        if isinstance(code, str) and services and code not in services:
+        services_of = services[keys.at[c, "provider"]]
+        if isinstance(code, str) and services_of and code not in services_of:
             out[c] = "service_not_loaded"
         elif texts[c] in cache.exists:
             out[c] = "catalog_row" if cache.exists[texts[c]] else "no_such_product"
         else:
             ask.append(c)
     if ask:
-        frame = keys.loc[ask, ["sku", "service_code", "usage_type", "instance_type", "region"]].assign(key_id=ask)
+        frame = keys.loc[ask, ["provider", "sku", "service_code", "usage_type", "instance_type", "region"]].assign(
+            key_id=ask)
         found = catalog.exists(frame)
         for c in ask:
             cache.exists[texts[c]] = c in found
@@ -417,7 +474,7 @@ def _reasons(catalog: PriceCatalog, keys: pd.DataFrame, texts: list[str], unmatc
 
 def _apply(rows: pd.DataFrame, idx: pd.Index, keys: pd.DataFrame, codes: np.ndarray, notes: np.ndarray,
            assumed: np.ndarray, dates: pd.Series, res: pd.DataFrame, qty: pd.Series, cost: pd.Series,
-           stats: PriceStats, reasons: dict[int, str]) -> None:
+           stats: PriceStats, reasons: dict[int, str], fix: pd.Series | None = None) -> None:
     found = res["matched_by"].notna()
     cand = pd.to_numeric(res["candidates"], errors="coerce").fillna(0)
     one = found & cand.eq(1)
@@ -426,6 +483,8 @@ def _apply(rows: pd.DataFrame, idx: pd.Index, keys: pd.DataFrame, codes: np.ndar
     line_unit = map_unique(_col(rows.loc[idx], "unit"),
                            lambda u: (unit_of(u) or (str(u).strip().lower(), 1.0))
                            if isinstance(u, str) and u.strip() else None)
+    if fix is not None and fix.notna().any():            # GCP lines counted in the SKU's base unit
+        line_unit = line_unit.astype(object).where(fix.isna(), fix)
     exact_by = res["matched_by"].isin(EXACT_BY)
     no_unit = line_unit.isna()
     norm = map_unique(line_unit, lambda t: t[0] if t else None)
@@ -519,6 +578,8 @@ def _missing(keys: pd.DataFrame, codes: np.ndarray, level: pd.Series, res: pd.Da
             if pd.notna(row["usage_type"]) and pd.isna(row["operation"]):
                 apart = ["operation", *apart]         # an EC2 or RDS usage type: the operation names the OS, engine
             answers.append(", ".join(apart) or None)
+        elif lv == "unmatched" and row["provider"] == "gcp":
+            answers.append(reasons.get(code, "catalog_row") if named[code] else "sku_id")
         elif lv == "unmatched":
             lacking = "" if named[code] else ", ".join(c for c in ("instance_type", "region") if pd.isna(row[c]))
             answers.append(lacking or reasons.get(code, "catalog_row"))

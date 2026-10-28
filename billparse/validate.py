@@ -258,7 +258,7 @@ class RowStats:
 
     def _prices(self, df: pd.DataFrame) -> None:
         level = df["price_match_level"].astype(object)
-        usage = _usage(df) & _col(df, "provider").astype(str).str.lower().eq("aws")
+        usage = _usage(df) & _col(df, "provider").astype(str).str.lower().isin(("aws", "gcp"))
         asked = usage & level.notna() & level.astype(str).ne("") & level.ne("no_catalog")
         self.catalog_lines += int(asked.sum())
         if not asked.any():
@@ -658,7 +658,7 @@ def price_checks(s: RowStats, rows: pd.DataFrame | None = None, text: str | None
     asked for some line of the file (no catalog, or Azure and GCP only: today's verdict). Catalog-filled values never
     check themselves: printed_list_price reads printed prices only, implied_unit_price the file's costs."""
     if not s.catalog_lines:
-        why = "No line was priced against the catalog (no catalog, or no AWS usage lines)"
+        why = "No line was priced against the catalog (no catalog, or no AWS or GCP usage lines it has prices for)"
         return [Check(n, "skip", why) for n in PRICE_CHECKS]
     return [_grounding(s), _printed_list(s), _implied(s), _units(s), _hours(s), _order(s), _grounded(rows, text)]
 

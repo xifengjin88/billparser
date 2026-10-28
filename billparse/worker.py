@@ -219,10 +219,14 @@ def clean_temp(store, older_than: float = 86400.0) -> int:
     return n
 
 
-def _fetcher():
-    """scripts/aws/fetch_aws_price_files.py, imported (never run as a process)."""
-    path = Path(__file__).resolve().parents[1] / "scripts" / "aws" / "fetch_aws_price_files.py"
-    spec = importlib.util.spec_from_file_location("fetch_aws_price_files", path)
+FETCHERS = {"aws": ("aws", "fetch_aws_price_files.py"), "gcp": ("gcp", "fetch_gcp_prices.py")}
+
+
+def _fetcher(provider: str = "aws"):
+    """scripts/<provider>/<fetcher>.py, imported (never run as a process)."""
+    folder, name = FETCHERS[provider]
+    path = Path(__file__).resolve().parents[1] / "scripts" / folder / name
+    spec = importlib.util.spec_from_file_location(name.removesuffix(".py"), path)
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)                          # type: ignore[union-attr]
     return mod
@@ -232,22 +236,33 @@ def price_files_dir() -> Path:
     return Path(os.environ.get("PRICE_FILES_DIR") or "~/aws-price-files").expanduser()
 
 
+def gcp_price_files_dir() -> Path:
+    return Path(os.environ.get("GCP_PRICE_FILES_DIR") or "~/gcp-price-files").expanduser()
+
+
+def price_providers() -> list[str]:
+    """PRICE_PROVIDERS: the providers the weekly refresh fetches and loads, comma separated (default aws)."""
+    got = [p.strip().lower() for p in (os.environ.get("PRICE_PROVIDERS") or "aws").split(",") if p.strip()]
+    return [p for p in got if p in FETCHERS]
+
+
 def download_prices(dest: Path) -> int:
     """The fetcher's download of every AWS price list and the Savings Plans into dest (its exit code)."""
     return _fetcher().main(["--out", str(dest), "--all-services", "--savings-plans", "--progress-every", "0"])
 
 
-def run_prices(store, job: dict, run: Running) -> dict:
-    """1. Download into PRICE_FILES_DIR/.incoming-<date>; only a complete download replaces the previous files (a
-    failed one leaves them, and the current snapshot, as they were). 2. Load it (prices.load.load_snapshot): a load
-    that loses more than 10% of a price list's rates is refused, the job ends `error` and the current snapshot stays.
-    Stored documents are not repriced (reprice does that)."""
-    from prices.load import Refused, load_snapshot
-    target = price_files_dir()
+def download_gcp_prices(dest: Path) -> int:
+    """The GCP fetcher's download of every Google Cloud service's SKUs into dest (its exit code; it reads
+    GCP_BILLING_API_KEY itself)."""
+    return _fetcher("gcp").main(["--out", str(dest)])
+
+
+def _download(target: Path, download) -> None:
+    """Download into <target>.incoming-<date>; only a complete download replaces the previous files (a failed one
+    leaves them, and the current snapshot, as they were)."""
     incoming = target.parent / f"{target.name}.incoming-{dt.date.today().isoformat()}"
-    jobs.set_progress(store, job["id"], run.worker, "downloading the AWS price files")
     try:
-        code = download_prices(incoming)
+        code = download(incoming)
         if code != 0 or not (incoming / "manifest.json").exists():
             raise RuntimeError(f"The download failed (exit code {code}); the previous files stay")
     except BaseException:
@@ -259,8 +274,10 @@ def run_prices(store, job: dict, run: Running) -> dict:
         target.rename(old)
     incoming.rename(target)
     shutil.rmtree(old, ignore_errors=True)
-    run.check()
-    jobs.set_progress(store, job["id"], run.worker, "loading the price catalog")
+
+
+def _load(store, target: Path) -> dict:
+    from prices.load import Refused, load_snapshot
     try:
         res = load_snapshot(store.engine, target)
     except Refused as e:
@@ -268,6 +285,36 @@ def run_prices(store, job: dict, run: Running) -> dict:
     return {"snapshot_id": res.snapshot_id, "status": res.status, "price_lists": sorted(res.counts),
             "products": res.products, "rates": res.rates, "sp_rates": res.sp_rates, "rates_closed": res.closed,
             "rates_inserted": res.inserted, "seconds": res.seconds}
+
+
+def run_prices(store, job: dict, run: Running) -> dict:
+    """Per provider of PRICE_PROVIDERS (default aws): 1. download into its folder's .incoming-<date> (AWS:
+    PRICE_FILES_DIR, GCP: GCP_PRICE_FILES_DIR); only a complete download replaces the previous files. 2. Load it
+    (prices.load.load_snapshot): a load that loses more than 10% of a price list's rates is refused, the job ends
+    `error` and the current snapshot stays. GCP needs GCP_BILLING_API_KEY: without it GCP is skipped (said in the
+    result). The AWS result is at the top level, GCP's under "gcp". Stored documents are not repriced (reprice does
+    that)."""
+    providers = price_providers()
+    out: dict = {"providers": providers}
+    if "aws" in providers:
+        target = price_files_dir()
+        jobs.set_progress(store, job["id"], run.worker, "downloading the AWS price files")
+        _download(target, download_prices)
+        run.check()
+        jobs.set_progress(store, job["id"], run.worker, "loading the price catalog")
+        out.update(_load(store, target))
+    if "gcp" in providers:
+        if not (os.environ.get("GCP_BILLING_API_KEY") or "").strip():
+            out["gcp"] = {"skipped": "GCP_BILLING_API_KEY is not set"}
+            return out
+        run.check()
+        target = gcp_price_files_dir()
+        jobs.set_progress(store, job["id"], run.worker, "downloading the GCP prices")
+        _download(target, download_gcp_prices)
+        run.check()
+        jobs.set_progress(store, job["id"], run.worker, "loading the GCP prices")
+        out["gcp"] = _load(store, target)
+    return out
 
 
 RUNNERS = {"parse": run_parse, "reprice": run_reprice, "learn": run_learn, "nightly": run_nightly,

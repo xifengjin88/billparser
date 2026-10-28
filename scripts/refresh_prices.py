@@ -1,8 +1,13 @@
-"""Load a download of the AWS price files into the price catalog tables, as one snapshot.
+"""Load a download of the AWS price files, or of the GCP prices, into the price catalog tables, as one snapshot.
 
     python scripts/aws/fetch_aws_price_files.py --all-services --savings-plans --out ~/aws-price-files
     python scripts/refresh_prices.py                             # PRICE_FILES_DIR (default ~/aws-price-files)
     python scripts/refresh_prices.py --only AmazonRDS --partial  # one price list; the others stay as they are
+    python scripts/gcp/fetch_gcp_prices.py --out ~/gcp-price-files       # needs GCP_BILLING_API_KEY
+    python scripts/refresh_prices.py --provider gcp              # GCP_PRICE_FILES_DIR (default ~/gcp-price-files)
+    python scripts/refresh_prices.py --provider gcp --only 6F81-5844-456A   # one GCP service (Compute Engine)
+
+The download's manifest.json says whose prices it holds; a load compares and changes only that provider's prices.
 
 The database is DATABASE_URL (billparse's own database; the tables come from the migrations: make migrate).
 Unchanged prices are not written again: only new, changed and removed prices change rows. A load that loses more than
@@ -29,15 +34,21 @@ from prices.load import Refused, load_snapshot  # noqa: E402
 def main() -> int:
     load_env()
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    ap.add_argument("--dir", type=Path, default=Path(os.environ.get("PRICE_FILES_DIR", "~/aws-price-files")),
-                    help="the download folder (with manifest.json)")
+    ap.add_argument("--provider", choices=["aws", "gcp"], default="aws", help="whose default folder to load")
+    ap.add_argument("--dir", type=Path, default=None,
+                    help="the download folder (with manifest.json); default: PRICE_FILES_DIR (aws) or "
+                         "GCP_PRICE_FILES_DIR (gcp)")
     ap.add_argument("--database-url", default=None, help="default: DATABASE_URL")
-    ap.add_argument("--only", action="append", help="repeatable: load only this price list (AmazonEC2, ...)")
+    ap.add_argument("--only", action="append",
+                    help="repeatable: load only this price list (AmazonEC2, ...; GCP: a service ID)")
     ap.add_argument("--skip", action="append", help="repeatable: load every price list but this one")
     ap.add_argument("--partial", action="store_true", help="do not refuse the price lists the load does not have")
     ap.add_argument("--snapshot-id", help="default: the download date")
     ap.add_argument("--progress-every", type=int, default=100, help="print a line every N files")
     a = ap.parse_args()
+    if a.dir is None:
+        a.dir = Path(os.environ.get("GCP_PRICE_FILES_DIR", "~/gcp-price-files") if a.provider == "gcp"
+                     else os.environ.get("PRICE_FILES_DIR", "~/aws-price-files"))
 
     only = a.only
     if a.skip:

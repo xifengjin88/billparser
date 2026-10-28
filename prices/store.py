@@ -14,12 +14,16 @@ How a key finds its price, the first way that matches wins:
                  line with no SKU. Give service_code too: EC2, WorkSpaces, EMR, GameLift, Outposts, ... share instance
                  types. EC2 capacity reservation prices are never taken here (only "Used"), nor RDS "Unused" ones
                  when the instance's own product fits.
+  gcp (2)       a GCP key (provider gcp, term_type "any"): the SKU's own price whatever its term (a Spot SKU's spot
+                 price, a commitment SKU's committed price), by SKU ID only; of its tiers the first one that is not
+                 free (a free first tier is an allowance), and tiered when it has more than one
 A key that several prices fit at its best way (attributes that leave the OS open, say) gets no price: candidates
 says how many there were, so task 06 can report it instead of guessing.
 """
 
 from __future__ import annotations
 
+import json
 import threading
 from collections.abc import Iterable
 
@@ -57,15 +61,21 @@ PRODUCT_COLUMNS = [*OPTIONAL, "region", "instance_type"]
 _ATTRS = ", ".join(f"p.{c} AS p_{c}" for c in PRODUCT_COLUMNS)
 _OUT = ("k.key_id, {prio} AS priority, '{how}' AS matched_by, {pref} AS preferred, {score} AS score, r.id AS rate_id, r.sku, r.rate_code, r.term_type, "
         "r.unit, r.unit_price, r.currency, r.effective_from, r.effective_from > k.as_of AS before_history, "
-        "r.begin_range, r.end_range, {attrs}")
+        "r.begin_range, r.end_range, {attrs}, {tiers} AS all_tiers")
+ANY_TERM = "any"                # a key's term_type: the SKU's own price, whatever its term (GCP)
 QUERY = " UNION ALL ".join([
-    f"SELECT {_OUT.format(prio=1, how='rate_code', pref='true', score=0, attrs=_ATTRS)} FROM price_keys k JOIN price_rate r "
+    f"SELECT {_OUT.format(prio=1, how='rate_code', pref='true', score=0, attrs=_ATTRS, tiers=0)} FROM price_keys k JOIN price_rate r "
     f"ON r.rate_code = k.rate_code AND {_DATE} "
     f"LEFT JOIN price_product p ON p.provider = r.provider AND p.sku = r.sku WHERE k.rate_code IS NOT NULL",
-    f"SELECT {_OUT.format(prio=2, how='sku', pref='true', score=0, attrs=_ATTRS)} FROM price_keys k JOIN price_rate r "
+    f"SELECT {_OUT.format(prio=2, how='sku', pref='true', score=0, attrs=_ATTRS, tiers=0)} FROM price_keys k JOIN price_rate r "
     f"ON r.provider = k.provider AND r.sku = k.sku AND {_TERM} AND {_TIER0} AND {_DATE} "
     f"LEFT JOIN price_product p ON p.provider = r.provider AND p.sku = r.sku WHERE k.sku IS NOT NULL",
-    *(f"SELECT {_OUT.format(prio=3, how='usage', pref=_USED, score=_SCORE, attrs=_ATTRS)} FROM price_keys k "
+    # every tier of the SKU, any term; lookup() keeps one tier
+    f"SELECT {_OUT.format(prio=2, how='sku', pref='r.unit_price > 0', score=0, attrs=_ATTRS, tiers=1)} FROM price_keys k "
+    f"JOIN price_rate r ON r.provider = k.provider AND r.sku = k.sku AND {_DATE} "
+    f"LEFT JOIN price_product p ON p.provider = r.provider AND p.sku = r.sku "
+    f"WHERE k.sku IS NOT NULL AND k.term_type = '{ANY_TERM}'",
+    *(f"SELECT {_OUT.format(prio=3, how='usage', pref=_USED, score=_SCORE, attrs=_ATTRS, tiers=0)} FROM price_keys k "
       f"JOIN price_product p ON p.provider = k.provider AND p.usage_type = k.{col} "
       f"AND (k.operation IS NULL OR p.operation = k.operation) "
       f"AND (k.region IS NULL OR p.region IS NULL OR p.region = k.region) AND {_SERVICE} "
@@ -73,7 +83,7 @@ QUERY = " UNION ALL ".join([
       f"JOIN price_rate r ON r.provider = p.provider AND r.sku = p.sku AND {_TERM} AND {_TIER0} AND {_DATE} "
       f"WHERE k.{col} IS NOT NULL"
       for col in ("usage_type", "usage_alt")),      # two equalities (an OR would not use the index)
-    f"SELECT {_OUT.format(prio=4, how='attributes', pref=_NOT_UNUSED, score=_SCORE, attrs=_ATTRS)} FROM price_keys k JOIN price_product p "
+    f"SELECT {_OUT.format(prio=4, how='attributes', pref=_NOT_UNUSED, score=_SCORE, attrs=_ATTRS, tiers=0)} FROM price_keys k JOIN price_product p "
     f"ON p.provider = k.provider AND p.instance_type = k.instance_type AND p.region = k.region AND {_USED} "
     f"AND {_SERVICE} "
     + "".join(f"AND (k.{c} IS NULL OR p.{c} IS NULL OR p.{c} = k.{c}) " for c in OPTIONAL)
@@ -124,6 +134,23 @@ def _keys_frame(keys: pd.DataFrame, columns: list[str]) -> pd.DataFrame:
     return k.where(k.notna(), None)
 
 
+def _one_tier(found: pd.DataFrame) -> pd.DataFrame:
+    """The rows of the all-tiers lookup (GCP), one per key: the first paid tier (the lowest begin_range of the
+    preferred, paid, rows; the first tier when every tier is free); more_tiers says the SKU has others. The other
+    lookups' rows (first tier only) pass as they are."""
+    all_tiers = found["all_tiers"].astype(int).eq(1)
+    found = found.assign(more_tiers=False)
+    if not all_tiers.any():
+        return found
+    tiers = found[all_tiers]
+    more = tiers.groupby("key_id")["rate_id"].transform("nunique").gt(1)
+    tiers = tiers.assign(more_tiers=more)
+    tiers = tiers[tiers["preferred"] | ~tiers.groupby("key_id")["preferred"].transform("any")]
+    start = pd.to_numeric(tiers["begin_range"], errors="coerce").fillna(0.0)
+    tiers = tiers[start == start.groupby(tiers["key_id"]).transform("min")]
+    return pd.concat([found[~all_tiers], tiers.assign(preferred=True)])
+
+
 def _key_ids(found: pd.DataFrame, keys: pd.DataFrame) -> pd.DataFrame:
     """The key ids as the caller gave them (the keys table holds text)."""
     if not found.empty:
@@ -148,7 +175,7 @@ def _typed(found: pd.DataFrame) -> pd.DataFrame:
 class PriceCatalog:
     def __init__(self, engine: Engine):
         self.engine = engine
-        self._services: tuple[str | None, set[str]] | None = None     # (version, service codes)
+        self._services: dict[str, tuple[str | None, set[str]]] = {}     # provider -> (version, service codes)
 
     @classmethod
     def load(cls, url: str | None = None) -> PriceCatalog:
@@ -194,12 +221,14 @@ class PriceCatalog:
         if found.empty:
             return found
         found["preferred"] = found["preferred"].astype(bool)          # SQLite gives 0/1
+        found = _one_tier(found)
         best = found[found["priority"] == found.groupby("key_id")["priority"].transform("min")]
         # a usage type that capacity reservations share (Outposts): the "Used" product, when the key has one
         best = best[best["preferred"] | ~best.groupby("key_id")["preferred"].transform("any")]
         best = best[best["score"] == best.groupby("key_id")["score"].transform("max")]
         g = best.groupby("key_id")
-        best = best.assign(candidates=g["unit_price"].transform("nunique"), tiered=best["end_range"].notna())
+        best = best.assign(candidates=g["unit_price"].transform("nunique"),
+                           tiered=best["end_range"].notna() | best["more_tiers"])
         varies = pd.DataFrame({c: g[f"p_{c}"].transform("nunique").gt(1) for c in OPTIONAL}, index=best.index)
         best = best.assign(differs=varies.apply(lambda r: ", ".join(c for c, v in r.items() if v) or None, axis=1))
         out = best.drop_duplicates("key_id").copy()
@@ -208,7 +237,8 @@ class PriceCatalog:
         # the matched product's region, instance type and OS: a line's printed values must agree (one candidate)
         out = out.rename(columns={f"p_{c}": f"product_{c}" for c in ("region", "instance_type", "operating_system")})
         out.loc[out["candidates"] > 1, ["product_region", "product_instance_type", "product_operating_system"]] = None
-        return _typed(out.drop(columns=["priority", "preferred", "score", "begin_range", "end_range",
+        return _typed(out.drop(columns=["priority", "preferred", "score", "begin_range", "end_range", "all_tiers",
+                                        "more_tiers",
                                         *(f"p_{c}" for c in PRODUCT_COLUMNS
                                           if c not in ("region", "instance_type", "operating_system"))])
                       .reset_index(drop=True))
@@ -217,12 +247,29 @@ class PriceCatalog:
         """The service codes the catalog has products for (cached per snapshot version): a line of another service is
         a catalog gap, not a parse error."""
         version = self.version
-        if self._services is None or self._services[0] != version:
+        cached = self._services.get(provider)
+        if cached is None or cached[0] != version:
             with self.engine.connect() as conn:
                 got = conn.execute(sa.text("SELECT DISTINCT service_code FROM price_product WHERE provider = :p"),
                                    {"p": provider}).scalars().all()
-            self._services = (version, {str(s) for s in got if s})
-        return set(self._services[1])
+            cached = self._services[provider] = (version, {str(s) for s in got if s})
+        return set(cached[1])
+
+    def unit_info(self, provider: str, skus: list[str]) -> dict[str, dict]:
+        """The units a product's attributes name (GCP: usage_unit, base_unit, base_unit_conversion_factor), per SKU:
+        a line counted in the base unit is converted with them. One query."""
+        if not skus:
+            return {}
+        stmt = sa.text("SELECT sku, attributes FROM price_product WHERE provider = :p AND sku IN :skus").bindparams(
+            sa.bindparam("skus", expanding=True))
+        with self.engine.connect() as conn:
+            rows = conn.execute(stmt, {"p": provider, "skus": sorted(set(skus))}).all()
+        out = {}
+        for sku, attrs in rows:
+            if isinstance(attrs, str):
+                attrs = json.loads(attrs)
+            out[str(sku)] = attrs or {}
+        return out
 
     def exists(self, keys: pd.DataFrame) -> set:
         """The key_ids of keys that some product has: its SKU, its usage type, or its instance type in its region (any
