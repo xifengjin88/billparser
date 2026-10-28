@@ -8,7 +8,7 @@ SERVICE ?= api
 
 .DEFAULT_GOAL := help
 .PHONY: help up dev down start stop restart build logs ps status psql migrate nightly shell destroy \
-        backup-db reset-db worker logs-worker prices samples corpus corpus-check corpus-accept corpus-agent agent-jobs test lint lint-fix typecheck web-types api-local web-local
+        backup-db reset-db worker logs-worker prices prices-azure samples corpus corpus-check corpus-accept corpus-agent agent-jobs test lint lint-fix typecheck web-types api-local web-local
 
 help:  ## Show the targets
 	@awk 'BEGIN {FS = ":.*## "} /^[a-z-]+:.*## / {printf "  %-12s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -98,6 +98,9 @@ agent-jobs:  ## List the agent's jobs in the local store
 prices:  ## Load the AWS price files (PRICE_FILES_DIR) into the price catalog (DATABASE_URL); ARGS="--only AmazonRDS"
 	uv run python scripts/refresh_prices.py $(ARGS)
 
+prices-azure:  ## Load the Azure retail prices (AZURE_PRICE_FILES_DIR) into the price catalog; ARGS='--only "Virtual Machines"'
+	uv run python scripts/refresh_prices.py --azure $(ARGS)
+
 samples:  ## Make the sample files in samples/files
 	uv run python samples/make_samples.py
 
@@ -105,8 +108,8 @@ test:  ## Run the tests
 	uv run pytest -q
 
 lint:  ## Lint the backend (Ruff) and the web app (oxlint)
-	uv run ruff check billparse/api.py billparse/webapi.py billparse/agent.py billparse/auth.py billparse/db.py billparse/store.py billparse/jobs.py billparse/worker.py billparse/headers.py billparse/detect.py \
-		billparse/settings.py billparse/bigfile.py migrations/env.py tests/test_webapi.py tests/test_jobs.py tests/test_headers.py tests/conftest.py scripts/export_openapi.py
+	uv run ruff check billparse/api.py billparse/webapi.py billparse/agent.py billparse/auth.py billparse/db.py billparse/store.py billparse/jobs.py billparse/worker.py billparse/headers.py billparse/synonyms.py billparse/detect.py \
+		billparse/settings.py billparse/bigfile.py migrations/env.py tests/test_webapi.py tests/test_jobs.py tests/test_headers.py tests/test_service_synonyms.py tests/conftest.py scripts/export_openapi.py
 	cd web && pnpm lint
 
 lint-fix:  ## Apply Ruff's safe fixes

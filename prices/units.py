@@ -42,3 +42,23 @@ def normalize(unit: object) -> tuple[str, float] | None:
     if block and block[1].lower() != s and (inner := normalize(block[1])):
         return inner[0], inner[1] * block[0]
     return None
+
+
+_PER_PERIOD = re.compile(r"^(\d+(?:\.\d+)?)\s*([kmb])?\s*/\s*(hour|day|month)$")      # Azure "1/Month", "10K/Month"
+_COUNT = re.compile(r"^(\d+(?:\.\d+)?)$")                                             # Azure "10000", "1"
+PERIODS = {"hour": "hour", "day": "count_day", "month": "count_month"}
+
+
+def azure_unit(unit: object) -> tuple[str, float] | None:
+    """An Azure unit of measure (a price's or a line's), as normalize reads it, plus Azure's other blocks: "1/Month"
+    -> ("count_month", 1) (one disk for a month), "10K/Month" -> ("count_month", 1e4), "1/Hour" -> ("hour", 1),
+    "10000" -> ("count", 1e4). Only Azure prices and lines are read with it; AWS units never are."""
+    got = normalize(unit)
+    if got or unit is None:
+        return got
+    s = re.sub(r"\s+", " ", str(unit).strip().lower())
+    if (m := _PER_PERIOD.match(s)):
+        return PERIODS[m.group(3)], float(m.group(1)) * (SCALE[m.group(2)] if m.group(2) else 1)
+    if (m := _COUNT.match(s)):
+        return "count", float(m.group(1))
+    return None

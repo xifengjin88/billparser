@@ -17,6 +17,7 @@ import pandas as pd
 
 from prices.units import normalize as unit_of
 
+from .pricing import flagged
 from .spec import Extraction
 from .transforms import map_unique, parse_number
 from .tree import bound
@@ -142,8 +143,7 @@ def _flag(df: pd.DataFrame, name: str | None) -> pd.Series:
     """A flag column of pricing (True, 1, "True", 1.0) as bool; absent: False."""
     if not name or name not in df:
         return pd.Series(False, index=df.index)
-    return df[name].map(lambda v: v is True or (isinstance(v, (int, float)) and not pd.isna(v) and v != 0)
-                        or (isinstance(v, str) and v.lower() in ("true", "1", "1.0"))).astype(bool)
+    return flagged(df[name])
 
 
 def _product_label(df: pd.DataFrame) -> pd.Series:
@@ -258,7 +258,7 @@ class RowStats:
 
     def _prices(self, df: pd.DataFrame) -> None:
         level = df["price_match_level"].astype(object)
-        usage = _usage(df) & _col(df, "provider").astype(str).str.lower().isin(("aws", "gcp"))
+        usage = _usage(df) & _col(df, "provider").astype(str).str.lower().isin(("aws", "azure", "gcp"))
         asked = usage & level.notna() & level.astype(str).ne("") & level.ne("no_catalog")
         self.catalog_lines += int(asked.sum())
         if not asked.any():
@@ -278,7 +278,8 @@ class RowStats:
                     self.g_values[v] = self.g_values.get(v, 0.0) + float(c)
             self._example("catalog_grounding", df, conflict, lambda r: str(r["price_conflict"]))
         if nosuch.any():
-            for v, c in cost[nosuch].groupby(_product_label(df.loc[nosuch])).sum().items():
+            label_cols = [c for c in df.columns if c in ("instance_type", "region", "usage_type", "sku_id")]
+            for v, c in cost[nosuch].groupby(_product_label(df.loc[nosuch, label_cols])).sum().items():
                 if v in self.g_values or len(self.g_values) < 50:
                     self.g_values[v] = self.g_values.get(v, 0.0) + float(c)
             self._example("catalog_grounding", df, nosuch, lambda r: _product_label(r.to_frame().T).iloc[0])
@@ -655,10 +656,10 @@ PRICE_CHECKS = ("catalog_grounding", "printed_list_price", "implied_unit_price",
 def price_checks(s: RowStats, rows: pd.DataFrame | None = None, text: str | None = None) -> list[Check]:
     """The catalog's list prices as an independent reference: a parse that maps real products, pays sane prices and
     agrees with the printed list prices is almost certainly right. Every check skips (weight 0) unless the catalog was
-    asked for some line of the file (no catalog, or Azure and GCP only: today's verdict). Catalog-filled values never
+    asked for some line of the file (no catalog, or no line of a provider whose prices are loaded). Catalog-filled values never
     check themselves: printed_list_price reads printed prices only, implied_unit_price the file's costs."""
     if not s.catalog_lines:
-        why = "No line was priced against the catalog (no catalog, or no AWS or GCP usage lines it has prices for)"
+        why = "No line was priced against the catalog (no catalog, or no AWS, Azure or GCP usage lines it has prices for)"
         return [Check(n, "skip", why) for n in PRICE_CHECKS]
     return [_grounding(s), _printed_list(s), _implied(s), _units(s), _hours(s), _order(s), _grounded(rows, text)]
 
@@ -681,7 +682,7 @@ def _times(f: float) -> str:
 
 
 def _grounding(s: RowStats) -> Check:
-    """catalog_grounding: of the AWS usage cost whose service the catalog has, the share whose product no catalog
+    """catalog_grounding: of the AWS and Azure usage cost whose service the catalog has, the share whose product no catalog
     row has (no_such_product), or whose exact match prints another region, instance type or OS than the product
     (price_conflict): a value read from a wrong column. At least MIN_GROUNDED lines, else skip."""
     lines = s.g_priced[0] + s.g_nosuch[0]
@@ -754,9 +755,9 @@ def _units(s: RowStats) -> Check:
         return Check("price_units", "skip", "No priced cost")
     share = bad / cost
     if share > 0.05:
-        return Check("price_units", "warn", f"{share:.0%} of the AWS usage cost has a unit the list price's cannot "
+        return Check("price_units", "warn", f"{share:.0%} of the priced usage cost has a unit the list price's cannot "
                      "be converted to: the unit column may be wrong" + _examples(s, "price_units"), -0.05)
-    return Check("price_units", "pass", f"{1 - share:.0%} of the AWS usage cost has a unit the list price's converts "
+    return Check("price_units", "pass", f"{1 - share:.0%} of the priced usage cost has a unit the list price's converts "
                  "to", 0.0)
 
 

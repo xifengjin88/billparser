@@ -19,8 +19,8 @@ make help                               # every target: logs, psql, migrate, nig
 
 The ports differ from invoice-parser's (8000/8080), so both stacks run side by side; `API_PORT` and `WEB_PORT`
 change them. The API container runs the migrations (`alembic upgrade head`) before it starts. Data stays in two
-volumes: `pgdata` (PostgreSQL) and `billparse-data` (uploads, result rows, nightly reports, the service catalog and
-the synonyms that review teaches).
+volumes: `pgdata` (PostgreSQL, with the synonyms that review teaches) and `billparse-data` (uploads, result rows,
+nightly reports, the service catalog).
 
 Without Docker (SQLite file in `store/` unless `DATABASE_URL` is set):
 
@@ -326,11 +326,18 @@ GCP_API_KEY=... python scripts/fetch_gcp.py
 python scripts/build_catalog.py --raw-dir data/raw --out data/catalog.msgpack
 ```
 
-Corrections: `python -m billparse synonym "VM Hrs" "azure:Virtual Machines"`.
+Corrections: `python -m billparse synonym "VM Hrs" "azure:Virtual Machines"`, the Mapping page (`/aliases`), and
+review approval (each corrected service code). They are synonyms in the table `service_synonym` (`synonyms.py`;
+scope `*` or a provider, the normalized label, the service key, source review or admin, who and when), shared by the
+API and every worker: one statement per change, so two approvals at once lose nothing. Each process reads the table
+again when another one changed it (at most every 60 s; at once after its own change) and drops its cached picks of
+the changed labels. The old file `CATALOG_DIR/synonyms.json` is imported once into an empty table on first use (a
+`journal` entry, stream `synonym_import`, records it) and is never changed; `svcres` on its own (without billparse)
+still keeps its synonyms in that file.
 
 ## Price catalog
 
-`prices/` keeps the public AWS list prices in billparse's own database (tables `price_snapshot`, `price_product`,
+`prices/` keeps the public AWS (and Azure: see "Azure" below) list prices in billparse's own database (tables `price_snapshot`, `price_product`,
 `price_rate`, `price_sp_plan`, `price_sp_rate`; migration `efba3358d2c4`). The source is the AWS Price List bulk files:
 public, no login, no cost.
 
@@ -400,27 +407,68 @@ operation 1.3–5.3 s (15 s without the operation: an EC2 usage type then fits e
 attributes 2.6 s (11 s when the OS is not given: then every key is ambiguous), Savings Plans 0.2–1.3 s. A usage type
 with the `USE1-` prefix also matches the price list's us-east-1 form without it.
 
+### Azure
+
+The Azure retail prices go into the same tables (provider `azure`; migration `a7d2e9c41b05` adds
+`price_product.meter_name`, `product_name`, `sku_name` and an index on the meter name). The source is the Azure Retail
+Prices API (`https://prices.azure.com/api/retail/prices`): public, no key, no cost.
+
+```bash
+python scripts/azure/fetch_azure_retail_prices.py --out ~/azure-price-files               # ~20 most billed services
+python scripts/azure/fetch_azure_retail_prices.py --out ~/azure-price-files --service "Virtual Machines" --region eastus
+make prices-azure                             # load AZURE_PRICE_FILES_DIR as one snapshot
+make prices-azure ARGS='--only "Virtual Machines"'
+```
+
+The fetcher follows `NextPageLink` (at most 1,000 items, about 590 KB of JSON, per request), waits and retries when
+the API answers 429, and writes each service and region as gzip JSON Lines (the API's items unchanged) with a
+`manifest.json` (provider `azure`). Set `PRICE_PROVIDERS=aws,azure` and the weekly refresh downloads and loads Azure
+after AWS (`AZURE_PRICE_SERVICES`, `AZURE_PRICE_REGIONS`; default `aws` only, so nothing changes until it is set).
+
+- A product is one meter of one SKU: `sku` = meterId/skuId/meterName, `usage_type` = the meter ID (a line's `MeterId`),
+  `service_code` = serviceName, `region` = armRegionName, `instance_type` = armSkuName, `meter_name`, `product_name`,
+  `sku_name`; a VM meter's OS from its product name ("... Series Windows" is the Windows meter, else Linux).
+- A rate is one price: `on_demand` (Consumption), `dev_test` (DevTestConsumption) or `reserved` (Reservation, 1yr /
+  3yr; the API prints the whole term's price, stored per hour). Tiers: `begin_range` = tierMinimumUnits. The unit of
+  measure's block is normalized: "10K" is per request (price / 10,000), "1 GB/Month" per GB-month, "1/Month" per
+  count-month. `effective_from` is effectiveStartDate.
+- Same history and sanity check as AWS; a price list is `azure:<service name>`. A full load compares only its own
+  provider's price lists and keeps the other provider's: AWS and Azure loaded on the same day are one snapshot.
+- A full download is not measured. Estimate (2026-10-27): the API answers 400 past `$skip=1,000,000`, and the
+  unfiltered list still had a full page at 999,000, so it has more than 1M items: at least 1,000 requests, about 600 MB
+  of JSON (about 50 MB gzip), 20 to 40 minutes at the API's rate limit. Each query is capped at 1M items, so the fetcher
+  asks per service (and per region when given); a query that reaches the cap is reported as an error.
+
 ## Price matching
 
-After a parse, `billparse/pricing.py` looks every AWS usage line (and every GCP usage line, once GCP prices are
-loaded) up in the price catalog at the public on-demand
-list price, as of the line's date (else the printed billing period, else today, with a warning). It runs on the
+After a parse, `billparse/pricing.py` looks every AWS usage line (and every Azure or GCP usage line, once that
+provider's prices are loaded) up in the price catalog at the public on-demand list price, as of the line's date (else
+the printed billing period, else today, with a warning). It runs on the
 normal path after the service resolution, and on the large path per chunk, with one key cache for the file. The
 catalog is called once per file with the distinct keys, never per line, and the work that depends only on the key
 (cleaning, assumptions, what is missing) is done once per key: 500,000 lines with 2,000 keys take about 1.5 s. Covered usage gets its list price too (the consumer's on-demand baseline); `coverage` and `effective_cost` are
 never changed, and no savings are estimated.
 
+What pricing adds to a parse (task 14; a 300,000-row synthetic CUR from `scripts/bench_large.py`, the test fixture
+catalog, best of 3, the time with prices less the time with no catalog): in memory 2.2 s (8.7 s against 6.5 s), was
+3.5 s; on the large path 1.2 s (7.1 s against 6.0 s), was 2.0 s. The catalog is not the cost (its lookups take about
+0.02 s per file): the time is work per line. Task 14 removed copies of every column of the priced lines, flag columns
+read with a Python call per line (pricing, the checks and the contract now call it once per distinct value), and text
+conversions of lines that cannot have a price conflict. The results are byte-identical. The accepted attempt and the
+final pass both price the lines: the final pass runs after the service resolution, which sets `service_code` and
+`provider` (the keys and R2 read them), so it cannot reuse the attempt's prices.
+
 Each line gets `price_match_level`:
 
 | Level | When |
 |---|---|
-| `exact` | rate code (`pricing/RateCode`), SKU, or usage type + operation: one price |
-| `attributes` | instance type, region, OS, tenancy, license, software, engine, deployment: one price |
+| `exact` | rate code (`pricing/RateCode`), SKU, or usage type + operation; Azure: meter ID: one price |
+| `attributes` | instance type, region, OS, tenancy, license, software, engine, deployment; Azure: meter name, region, (VM) OS: one price |
 | `assumed` | as `attributes`, with an assumption in `price_assumptions` |
 | `ambiguous` | several prices fit; `price_missing` names the empty columns that tell them apart |
 | `unmatched` | no price; `price_missing` names what is missing (`instance_type`, `region`, `sku_id`, or `catalog_row`) |
 | `unit_mismatch` | the line's unit cannot be converted to the price's unit |
-| `no_catalog` | an Azure line, or a GCP line while the catalog has no GCP prices |
+| `no_catalog` | an Azure or GCP line while the catalog has no prices of its provider |
 
 **GCP lines** are matched by their SKU ID only (`exact`): a GCP export prints it (`sku.id`, FOCUS `SkuId`). The price
 is the SKU's own, whatever its term: a Spot SKU gives the spot price, a commitment SKU (the commitment fee) its
@@ -431,6 +479,18 @@ allowance), noted `tiered`. The line's unit is converted to the price's: `hour`,
 `baseUnitConversionFactor`. A line without a SKU ID is `unmatched` with `price_missing` `sku_id`; a SKU no catalog row
 has is `no_such_product` (or `service_not_loaded` when the catalog has no SKU of its service). The price checks
 (`catalog_grounding`, `implied_unit_price`, ...) then cover GCP lines too.
+
+**Azure lines.** Exact by the line's `MeterId` (any region: the meter is the price; a printed region or size that is
+not the meter's is a `price_conflict`). Else by the meter name (`MeterName`) in the line's region, within its service
+(`MeterCategory` = the retail serviceName) and, for VM meters, the meter's OS: Windows with the license included is
+the Windows meter; Linux, RHEL, SUSE and Windows with Azure Hybrid Benefit (BYOL) are billed on the Linux meter. A VM
+line whose OS is unknown (no `MeterSubCategory`) is `ambiguous` with `price_missing=operating_system`, until the request
+says `assume_os`. The price's unit block is converted to the line's ("1 Hour" price on a "10 Hours" line: × 10).
+Spot and Low Priority lines are their own meters (their price); reservation and savings plan usage prints the on-demand
+meter, so it gets the on-demand list price, as AWS's covered usage does. An unmatched Azure line is
+`service_not_loaded` or `catalog_row`, never `no_such_product` (a meter missing from a partial download is a catalog
+gap). Azure exports print `PayGPrice`, so R1 leaves their list price as printed; `catalog_unit_price` is beside it and
+the price checks compare them.
 
 - **No silent assumptions.** An EC2 invoice line (no operation, no SKU) that names an OS and no SQL Server is looked
   up with `pre_installed_sw=NA (text)`; one that does not say Dedicated or Host with `tenancy=Shared (text)`. The
@@ -455,7 +515,7 @@ has is `no_such_product` (or `service_not_loaded` when the catalog has no SKU of
 - `implied_unit_price` (effective, else billed cost / quantity) and `price_ratio` (/ list unit price) are on each
   priced line, recomputed from the sums on rolled-up lines.
 
-`Document.pricing` has the catalog version, the match rate (share of priced AWS and GCP usage cost at `exact` and
+`Document.pricing` has the catalog version, the match rate (share of priced AWS, Azure and GCP usage cost at `exact` and
 `attributes`, and at `assumed`; also by lines), the lines and cost per level, the most common missing columns, the
 inferred discount and warnings, and `undated_as_of`: the date of lines that have none (the printed billing period,
 else the day of the first pricing; a reprice uses it again, so it gives the same prices on any day). No catalog, an empty one or a database error: the parse goes on, unpriced, with a
@@ -466,8 +526,8 @@ defaults, else the earlier ones stay.
 ## Storage
 
 `store.py` keeps rows in the database (`db.py`): documents, every version of every learned spec, each spec's
-regression set (`spec_doc`, `spec_fingerprint`), the logs (`journal`: records, labels, review) and the admitted
-users. PostgreSQL with `DATABASE_URL`, else a SQLite file in `PARSER_DATA_DIR`. Large parts are files in
+regression set (`spec_doc`, `spec_fingerprint`), the logs (`journal`: records, labels, review), the learned
+column headers (`header_synonym`) and service synonyms (`service_synonym`), and the admitted users. PostgreSQL with `DATABASE_URL`, else a SQLite file in `PARSER_DATA_DIR`. Large parts are files in
 `PARSER_DATA_DIR`: uploads (`docs/`), rows as Parquet (`results/`) and nightly reports.
 
 Schema changes go through Alembic: change `billparse/db.py`, then

@@ -37,7 +37,8 @@ def data_dir() -> Path:
 
 
 def catalog_dir() -> Path:
-    """CATALOG_DIR (default `data`): the service catalog, its raw inputs and the learned synonyms."""
+    """CATALOG_DIR (default `data`): the service catalog, its raw inputs and the resolution cache (the learned
+    synonyms are in the database: synonyms.py)."""
     path = Path(os.environ.get("CATALOG_DIR", "data"))
     return path if path.is_absolute() else ROOT / path
 

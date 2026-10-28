@@ -287,7 +287,7 @@ def test_the_price_job_skips_gcp_without_a_key(store, tmp_path, monkeypatch):  #
     monkeypatch.delenv("GCP_BILLING_API_KEY", raising=False)
     job, _ = jobs.enqueue(store, "prices", "maintenance", name="prices", dedupe_key="prices:test")
     assert _drain(store) == ["done"]
-    assert jobs.get(store, job["id"])["result"]["gcp"] == {"skipped": "GCP_BILLING_API_KEY is not set"}
+    assert jobs.get(store, job["id"])["result"] == {"skipped": "GCP_BILLING_API_KEY is not set"}
 
 
 def test_the_price_job_loads_aws_then_gcp(store, tmp_path, monkeypatch):  # noqa: F811
@@ -300,7 +300,7 @@ def test_the_price_job_loads_aws_then_gcp(store, tmp_path, monkeypatch):  # noqa
     job, _ = jobs.enqueue(store, "prices", "maintenance", name="prices", dedupe_key="prices:test")
     assert _drain(store) == ["done"]
     result = jobs.get(store, job["id"])["result"]
-    assert result["status"] == "current" and result["gcp"]["rates"] == 13
+    assert result["status"] == "current" and result["providers"]["gcp"]["rates"] == 13
     assert PriceCatalog(store.engine).services("gcp") == set(fx.SERVICES)
 
 

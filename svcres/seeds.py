@@ -5,7 +5,7 @@
 - Aliases seen on invoices and Cost Explorer exports ("EC2-Other", "EC2 - Instances").
 - Keyword rules to categorize GCP services.
 
-Edit freely. Anything learned from corrections goes in data/synonyms.json instead.
+Edit freely. Anything learned from corrections is a synonym instead (billparse: table service_synonym).
 """
 
 CATEGORIES = [

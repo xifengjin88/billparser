@@ -106,3 +106,43 @@ def test_marketplace_sellers_and_an_alias_as_a_word_prefix(resolver):
     resolver.add_synonym("Acme Backup", key, provider="azure")
     r = resolver.resolve("Acme Backup Pro 10TB", "azure")
     assert (r.service, r.category, r.method) == ("Marketplace", "Marketplace", "synonym-prefix")
+
+
+def test_a_cache_file_being_written_never_breaks_a_reader(tmp_path):
+    """Several workers share resolution_cache.json: a reader never sees half a file, and a bad file is only a miss."""
+    import threading
+
+    cat = build(RAW)
+    cat.save(tmp_path / "catalog.msgpack")
+    catalog = Catalog.load(tmp_path / "catalog.msgpack")
+    writer = Resolver(catalog, tmp_path)
+    writer.cache.update({f"label {i}": {"service": "x" * 200} for i in range(2000)})
+    errors: list[Exception] = []
+    stop = threading.Event()
+
+    def write() -> None:
+        while not stop.is_set():
+            writer._dirty = True
+            writer.flush()
+
+    def read() -> None:
+        for _ in range(100):
+            try:
+                Resolver(catalog, tmp_path)
+            except Exception as e:  # noqa: BLE001 - the test counts every failure
+                errors.append(e)
+
+    t = threading.Thread(target=write)
+    t.start()
+    readers = [threading.Thread(target=read) for _ in range(3)]
+    for r in readers:
+        r.start()
+    for r in readers:
+        r.join()
+    stop.set()
+    t.join()
+    assert errors == []
+    assert not list(tmp_path.glob("*.tmp"))
+
+    (tmp_path / "resolution_cache.json").write_text('{"half": ')
+    assert Resolver(catalog, tmp_path).resolve("EC2-Other").service == "Amazon Elastic Compute Cloud"

@@ -179,7 +179,7 @@ def approve(store: Store, sha: str, doc: Document, changes: dict, note: str = ""
             if c is None or key is None:
                 continue
             label = str(c.context.service.value) if c.context.service else str(c.description.value)
-            res.add_synonym(label, key, provider=provider)
+            res.add_synonym(label, key, provider=provider, source="review", by=by)
     # 2. gold: the corrected document, and its lines as the approved lines
     store.save_part(sha, "gold", doc.model_dump_json(exclude_none=True))
     store.save_approved(sha, rows_of(doc), {"completeness": doc.completeness, "changes": changes}, by, note)

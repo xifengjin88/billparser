@@ -240,7 +240,7 @@ const LEVEL_HINT: Record<string, string> = {
   ambiguous: 'Several prices fit: a key column is missing',
   unmatched: 'No price in the catalog',
   unit_mismatch: "The line's unit cannot be converted to the price's unit",
-  no_catalog: 'Azure or GCP: no prices in the catalog yet',
+  no_catalog: 'GCP, or Azure before Azure prices are loaded: no prices in the catalog yet',
 }
 
 function PricesTab({ view }: { view: DocumentView }) {
