@@ -18,7 +18,10 @@ resolve; when they changed (here or in another process), it drops the cached pic
 from __future__ import annotations
 
 import json
+import logging
+import os
 import re
+import tempfile
 from collections.abc import Callable, Iterable
 from dataclasses import asdict, dataclass
 from pathlib import Path
@@ -28,6 +31,8 @@ from rapidfuzz import fuzz, process
 
 from .catalog import PROVIDERS, Catalog
 from .normalize import azure_head, code_key, norm, norm_loose
+
+log = logging.getLogger(__name__)
 
 CATALOG_KEY = "__catalog__"
 
@@ -97,7 +102,7 @@ class JsonSynonymStore:
                  "created": t, "updated": t, "updated_by": None} for k, v in sorted(self._map.items())]
 
     def _write(self, synonyms: dict[str, str]) -> None:
-        self.path.write_text(json.dumps(synonyms, indent=1, sort_keys=True))
+        _write_json(self.path, json.dumps(synonyms, indent=1, sort_keys=True))
         self._map = synonyms
 
 
@@ -112,7 +117,7 @@ class Resolver:
         self.store: SynonymStore = synonyms if synonyms is not None else JsonSynonymStore(data_dir / "synonyms.json")
         self.cache_path = data_dir / "resolution_cache.json"
         self._syn: dict[str, str] = self.store.current()
-        self.cache: dict[str, dict] = _read(self.cache_path)
+        self.cache: dict[str, dict] = _read_cache(self.cache_path)
         self._dirty = False
         # fuzzy and prefix picks hold only for the catalog they were made with: a new catalog can have a better
         # exact match, so a rebuilt catalog starts a new cache (reviewed picks are synonyms, kept apart)
@@ -272,7 +277,7 @@ class Resolver:
 
     def flush(self) -> None:
         if self._dirty:
-            self.cache_path.write_text(json.dumps(self.cache))
+            _write_json(self.cache_path, json.dumps(self.cache))
             self._dirty = False
 
     # ---------- internals ----------
@@ -358,6 +363,27 @@ def _split_by_provider(table: dict[str, str]) -> dict[str, tuple[list[str], list
 
 def _read(path: Path) -> dict:
     return json.loads(path.read_text()) if path.exists() else {}
+
+
+def _read_cache(path: Path) -> dict:
+    """The resolution cache, or empty when the file is unreadable: it is only a cache, rebuilt as values resolve."""
+    try:
+        return _read(path)
+    except (OSError, ValueError) as e:
+        log.warning("ignoring unreadable resolution cache %s: %s", path, e)
+        return {}
+
+
+def _write_json(path: Path, text: str) -> None:
+    """Write a whole file or nothing: several workers share these files, and a reader must never see half of one."""
+    fd, tmp = tempfile.mkstemp(dir=path.parent, prefix=f".{path.name}.", suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w") as f:
+            f.write(text)
+        os.replace(tmp, path)
+    except BaseException:
+        os.unlink(tmp)
+        raise
 
 
 def to_dict(r: Resolution) -> dict:
