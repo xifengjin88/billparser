@@ -24,7 +24,7 @@ from billparse import Pipeline, Settings, api, webapi
 from billparse.attributes import extract
 from billparse.db import engine_for
 from billparse.export import to_schema
-from billparse.pricing import KeyCache, PriceDefaults, infer_discount, match_prices
+from billparse.pricing import KeyCache, PriceDefaults, flagged, infer_discount, is_flag, match_prices
 from billparse.schema import Document
 from prices.load import load_snapshot
 from prices.store import PriceCatalog
@@ -421,6 +421,19 @@ def test_500k_lines_with_2000_keys(catalog, capsys):
         print(f"\n  priced {n:,} lines with {k:,} distinct keys in {seconds:.2f} s ({stats.lookups:,} lookups)")
     assert seconds < 10
     assert stats.levels["exact"][0] > 0 and json.dumps(stats.summary())
+
+
+def test_flagged_is_is_flag_row_by_row():
+    """flagged() calls is_flag once per distinct value and type: the same answer as a map of every row, for values
+    that compare equal with different types too (True, 1, 1.0, np.True_, Decimal 1)."""
+    values = [True, False, 1, 0, 1.0, 0.0, 2, -1.5, "True", "true", "1", "1.0", "0", "", None, np.nan, pd.NA,
+              np.True_, np.False_, Decimal(1), "yes"]
+    s = pd.Series(values * 300, dtype=object, index=range(5, 5 + len(values) * 300))
+    assert flagged(s).tolist() == s.map(is_flag).astype(bool).tolist()
+    assert flagged(s).index.equals(s.index)
+    for typed in (pd.Series([True, False] * 2000), pd.Series([1.0, 0.0, np.nan] * 2000), pd.Series([], dtype=object),
+                  pd.Series(["True", "0", None] * 2000, dtype="str")):
+        assert flagged(typed).tolist() == typed.map(is_flag).astype(bool).tolist()
 
 
 # ---------------------------------------------------------------- region default, undated lines

@@ -377,6 +377,15 @@ catalog is called once per file with the distinct keys, never per line, and the 
 (cleaning, assumptions, what is missing) is done once per key: 500,000 lines with 2,000 keys take about 1.5 s. Covered usage gets its list price too (the consumer's on-demand baseline); `coverage` and `effective_cost` are
 never changed, and no savings are estimated.
 
+What pricing adds to a parse (task 14; a 300,000-row synthetic CUR from `scripts/bench_large.py`, the test fixture
+catalog, best of 3, the time with prices less the time with no catalog): in memory 2.2 s (8.7 s against 6.5 s), was
+3.5 s; on the large path 1.2 s (7.1 s against 6.0 s), was 2.0 s. The catalog is not the cost (its lookups take about
+0.02 s per file): the time is work per line. Task 14 removed copies of every column of the priced lines, flag columns
+read with a Python call per line (pricing, the checks and the contract now call it once per distinct value), and text
+conversions of lines that cannot have a price conflict. The results are byte-identical. The accepted attempt and the
+final pass both price the lines: the final pass runs after the service resolution, which sets `service_code` and
+`provider` (the keys and R2 read them), so it cannot reuse the attempt's prices.
+
 Each line gets `price_match_level`:
 
 | Level | When |
