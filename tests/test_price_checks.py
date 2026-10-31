@@ -190,6 +190,27 @@ def test_usage_hours_skips_lines_counted_per_core_or_gpu(catalog):
     assert c["status"] == "fail" and c["detail"].startswith("1 of 1 ") and "i-1" in c["detail"]
 
 
+def test_usage_hours_reads_a_plain_end_date_as_the_whole_day(catalog):
+    """An end printed as a date ("2026-05-31") is the last day of use: 744 hours of one resource in May fit. A CUR's
+    end (2026-06-01T00:00:00Z) is exclusive, as before."""
+    rows = _priced(catalog, sku_id=[LINUX] * 3, resource_id=["i-1", "i-2", "i-3"], quantity=[744.0, 760.0, 744.0],
+                   charge_start=["2026-05-01", "2026-05-01", "2026-05-01T00:00:00Z"],
+                   charge_end=["2026-05-31", "2026-05-31", "2026-05-31T00:00:00Z"])
+    c = _both(rows)["usage_hours"]
+    assert c["status"] == "fail" and c["detail"].startswith("2 of 3 ") and "i-1:" not in c["detail"]
+
+
+def test_usage_hours_tests_an_azure_resource_only_when_it_is_one_vm(catalog):
+    """One Azure ID can bill many instances (an App Service plan, a scale set): only a VM's ID is one machine."""
+    vm = "/subscriptions/s/resourceGroups/rg/providers/Microsoft.Compute/virtualMachines/vm1"
+    plan = "/subscriptions/s/resourceGroups/rg/providers/Microsoft.Web/serverfarms/plan1"
+    rows = _priced(catalog, sku_id=[LINUX] * 4, provider=["aws", "azure", "azure", "azure"],
+                   resource_id=["i-1", vm, plan, "0c873ca2-4113-4997-8cf6-ad5df5775599"], quantity=[30.0] * 4,
+                   charge_start=["2026-10-01T00:00:00Z"] * 4, charge_end=["2026-10-02T00:00:00Z"] * 4)
+    c = _both(rows)["usage_hours"]
+    assert c["status"] == "fail" and c["detail"].startswith("2 of 2 ")
+
+
 def test_cost_order(catalog):
     rows = _priced(catalog, sku_id=[LINUX] * 10, list_cost=[1.0] * 10, effective_cost=[2.0] * 10)
     c = _both(rows)["cost_order"]
