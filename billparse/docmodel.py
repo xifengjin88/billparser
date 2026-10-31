@@ -91,6 +91,7 @@ class Region:
     header_row: int | None = None  # frame regions: detected header row offset
     scanned: bool = False          # PDF page with no text layer
     row_offset: int = 0            # frame regions: data rows before this one (a chunk of a large file, bigfile.py)
+    preamble: list[str] = field(default_factory=list)   # frame regions: the lines above the header (a title)
 
     @property
     def is_frame(self) -> bool:
@@ -257,7 +258,8 @@ def _read_csv(data: bytes, prefix: str) -> Region:
                      on_bad_lines="skip")
     df.columns = _unique_headers(df.iloc[0].tolist())
     df = df.iloc[1:].reset_index(drop=True)
-    reg = Region(kind="frame", name=prefix + "csv", df=df, header_row=hdr)
+    reg = Region(kind="frame", name=prefix + "csv", df=df, header_row=hdr,
+                 preamble=[" ".join(c for c in r if c).strip() for r in head[:hdr] if any(c.strip() for c in r)])
     return reg
 
 

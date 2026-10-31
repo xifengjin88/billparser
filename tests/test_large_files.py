@@ -129,6 +129,39 @@ def test_zip_of_one_csv_is_read_in_chunks(tmp_path, monkeypatch):
     assert r["large"]["chunks"] >= 2
 
 
+def test_zip_of_the_parts_of_one_export_reads_every_part(tmp_path, monkeypatch):
+    """A large export in a zip, split in parts (part_0.csv.gz, part_1.csv.gz, ...), each with its header: every part
+    is read in turn, and the result is the whole file's."""
+    import gzip
+    lines = (FILES / "azure_ea_usage.csv").read_text().splitlines(keepends=True)
+    head, body = lines[0], lines[1:]
+    f = tmp_path / "export.zip"
+    with zipfile.ZipFile(f, "w", zipfile.ZIP_STORED) as z:
+        for k in range(3):
+            part = body[k * len(body) // 3:(k + 1) * len(body) // 3]
+            z.writestr(f"export/part_{k}_0001.csv.gz", gzip.compress((head + "".join(part)).encode()))
+        z.writestr("__MACOSX/export/._part_0_0001.csv.gz", b"\x00\x05")          # macOS metadata: skipped
+    small = _pipe(tmp_path, "small")
+    whole = _facts(small, small.parse_path(FILES / "azure_ea_usage.csv", agent=False))
+    monkeypatch.setenv("LARGE_FILE_MB", TINY)
+    monkeypatch.setenv("CHUNK_ROWS", "100")
+    large = _pipe(tmp_path, "large")
+    r = large.parse_path(f, agent=False)
+    assert r["large"]["source_rows"] == len(body) and r["large"]["chunks"] >= 3
+    assert _facts(large, r)["analysis"]["total_billed"] == whole["analysis"]["total_billed"]
+
+
+def test_zip_parts_with_other_columns_are_refused(tmp_path, monkeypatch):
+    import gzip
+    f = tmp_path / "mixed.zip"
+    with zipfile.ZipFile(f, "w") as z:
+        z.writestr("part_0.csv.gz", gzip.compress((FILES / "azure_ea_usage.csv").read_bytes()))
+        z.writestr("part_1.csv.gz", gzip.compress(b"x,y,z\n1,2,3\n"))
+    monkeypatch.setenv("LARGE_FILE_MB", TINY)
+    r = _pipe(tmp_path, "large").parse_path(f, agent=False)
+    assert r["status"] == "unsupported" and "not one export" in " ".join(r.get("warnings") or [])
+
+
 # ---------------------------------------------------------------- chunk boundaries
 def _csv(path: Path, rows: list[dict]) -> Path:
     with path.open("w", newline="") as fh:

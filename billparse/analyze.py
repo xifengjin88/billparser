@@ -116,6 +116,8 @@ def _resolve_services(rows: pd.DataFrame, data_dir: Path) -> tuple[float, float]
     rows["service"] = rows["service"].where(rows["service"].notna(), rows.get("service_raw"))
     _fees_and_areas(rows)
     usage = ~rows.get("charge_type", pd.Series([None] * len(rows), index=rows.index)).isin(NON_USAGE)
+    if "billed_cost" not in rows:                       # usage figures with no money (a count report)
+        return 0.0, 0.0
     cost = rows["billed_cost"].abs().fillna(0).where(usage, 0)
     return float(cost[picked.notna()].sum()), float(cost.sum())
 

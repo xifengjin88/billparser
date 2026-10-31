@@ -3,7 +3,9 @@ completed within rounding, $0.00 groups, cells (quantity, unit, other amounts), 
 
 from __future__ import annotations
 
+import io
 import sys
+import zipfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -309,3 +311,64 @@ def test_a_service_whose_lines_net_to_zero_keeps_its_name():
     assert under[("Charges", 315.4)][-1] == "Amazon Route 53"
     assert not any(line["label"].startswith("Amazon") for line in t.lines)   # a service total is not a line
     assert t.evidence["reconcile"]["proved"] and t.evidence["unexplained_count"] == 0
+
+
+# ---------------------------------------------------------------- a zip of several bills: one tree per file
+def bill_pdf(client: str, lines: list[tuple[str, float]], region: str) -> bytes:
+    from reportlab.lib.pagesizes import letter
+    from reportlab.pdfgen import canvas
+    buf = io.BytesIO()
+    c = canvas.Canvas(buf, pagesize=letter)
+    total = round(sum(a for _, a in lines), 2)
+    top = max(lines, key=lambda x: x[1])
+    y = 740
+    def row(label, amount=None, bold=False):
+        nonlocal y
+        c.setFont("Helvetica-Bold" if bold else "Helvetica", 10)
+        c.drawString(50, y, label)
+        if amount is not None:
+            c.drawRightString(540, y, f"USD {amount:,.2f}")
+        y -= 16
+    row(f"Billing summary for {client}", bold=True)
+    row("Amazon Web Services, Inc. (2) Total pre-tax", total)
+    row("Highest service spend", bold=True)
+    row(f"Highest service spend {top[0]}", top[1])
+    row("Highest AWS Region spend", bold=True)
+    row(region, total)
+    y -= 10
+    row("Charges by service", bold=True)
+    for label, amount in lines:
+        row(label, amount)
+    row("Total", total, bold=True)
+    c.save()
+    return buf.getvalue()
+
+
+def bills_zip() -> bytes:
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as z:
+        z.writestr("ClientA_April.pdf", bill_pdf("Client A", [("Amazon Elastic Compute Cloud", 812.40), ("Amazon Simple Storage Service", 120.15)], "US East (N. Virginia)"))
+        z.writestr("ClientB_April.pdf", bill_pdf("Client B", [("Amazon Relational Database Service", 455.00), ("AWS Lambda", 12.31), ("Amazon CloudFront", 40.02)], "EU (Ireland)"))
+    return buf.getvalue()
+
+
+def test_a_zip_of_bills_reads_each_bill_with_its_own_tree(tmp_path):
+    """Ten monthly bills in one zip each print their own summary ("Total pre-tax", "Highest service spend", the
+    region) and total. One tree over every page matched one bill's total and lost the others (or read the summary
+    rows as lines). Each file now gets its own tree: every service line, no summary row, and the files' totals
+    together prove the lines."""
+    from billparse import Pipeline, Settings
+    path = tmp_path / "bills.zip"
+    path.write_bytes(bills_zip())
+    pipe = Pipeline(Settings(store_dir=tmp_path / "store", use_llm=False, use_agent=False))
+    r = pipe.parse_file(path)
+    rows = pipe.store.get_rows(r["sha256"])
+    assert sorted(rows["description"]) == sorted(["Amazon Elastic Compute Cloud", "Amazon Simple Storage Service",
+                                                  "Amazon Relational Database Service", "AWS Lambda",
+                                                  "Amazon CloudFront"])
+    assert r["status"] == "reconciled"
+    assert round(float(rows["billed_cost"].sum()), 2) == round(812.40 + 120.15 + 455.00 + 12.31 + 40.02, 2)
+    checks = {c["name"]: c["status"] for c in r["checks"]}
+    assert checks["stated_total"] == "pass" and checks["amounts_explained"] == "pass"
+    assert [(f["file"], f["status"], f["rows"]) for f in r["files"]] == [("ClientA_April.pdf", "reconciled", 2),
+                                                                         ("ClientB_April.pdf", "reconciled", 3)]
