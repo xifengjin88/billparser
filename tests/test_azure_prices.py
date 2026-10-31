@@ -277,6 +277,19 @@ def test_azure_lines_feed_the_price_checks(catalog):
     assert checks["catalog_grounding"]["status"] == "pass" and checks["implied_unit_price"]["status"] == "pass"
 
 
+def test_a_free_first_tier_is_not_the_price(catalog):
+    """Bandwidth's first 100 GB a month are free: a meter's price is its first paid tier, noted tiered. By name, two
+    routing products share the meter name with different paid prices: ambiguous (before, both free first tiers read
+    as one price of 0)."""
+    rows = _azure(meter_id=["9995d93a-7d35-4d3f-9c69-7a7fea447ef4", None], service_raw="Bandwidth", unit="1 GB",
+                  description=["Standard Data Transfer Out"] * 2)
+    match_prices(rows, catalog)
+    by_id, by_name = rows.loc[0], rows.loc[1]
+    assert by_id["price_match_level"] == "exact" and float(by_id["catalog_unit_price"]) == pytest.approx(0.087)
+    assert "tiered" in by_id["price_assumptions"]
+    assert by_name["price_match_level"] == "ambiguous" and by_name["price_missing"] == "product_name"
+
+
 def test_azure_auto_defaults_region_from_the_file_and_os_from_the_setting(catalog, monkeypatch):
     """A VM line by meter name with no region and no OS: the file's own region and the default OS (Linux), noted and
     counted; a line with a meter ID needs no region (the meter is the price) and assumes none."""

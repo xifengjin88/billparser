@@ -121,12 +121,14 @@ AZURE_KEYS = ["key_id", "provider", "as_of", "usage_type", "region", "service_co
 AZURE_DIFFERS = ["operating_system", "product_name"]
 _AZ_TERM = "r.term_type = k.term_type AND (k.lease_length IS NULL OR r.lease_length = k.lease_length)"
 _AZ_ATTRS = _ATTRS + ", p.meter_name AS p_meter_name, p.product_name AS p_product_name"
-_AZ_RATE = f"JOIN price_rate r ON r.provider = p.provider AND r.sku = p.sku AND {_AZ_TERM} AND {_TIER0} AND {_DATE} "
+# every tier: lookup() keeps a product's first paid one (Bandwidth's first 100 GB are free: not the price)
+_AZ_RATE = f"JOIN price_rate r ON r.provider = p.provider AND r.sku = p.sku AND {_AZ_TERM} AND {_DATE} "
 AZURE_QUERY = " UNION ALL ".join([
-    f"SELECT {_OUT.format(prio=1, how='meter_id', pref='true', score=0, attrs=_AZ_ATTRS, tiers=0)} FROM azure_keys k "
+    f"SELECT {_OUT.format(prio=1, how='meter_id', pref='r.unit_price > 0', score=0, attrs=_AZ_ATTRS, tiers=1)} "
+    f"FROM azure_keys k "
     f"JOIN price_product p ON p.provider = k.provider AND p.usage_type = k.usage_type {_AZ_RATE}"
     f"WHERE k.usage_type IS NOT NULL",
-    f"SELECT {_OUT.format(prio=2, how='attributes', pref='true', attrs=_AZ_ATTRS, tiers=0,
+    f"SELECT {_OUT.format(prio=2, how='attributes', pref='r.unit_price > 0', attrs=_AZ_ATTRS, tiers=1,
                           score='CASE WHEN p.operating_system = k.operating_system THEN 1 ELSE 0 END')} "
     f"FROM azure_keys k JOIN price_product p ON p.provider = k.provider AND p.meter_name = k.meter_name "
     f"AND p.region = k.region AND (k.service_code IS NULL OR p.service_code = k.service_code) "
@@ -157,19 +159,21 @@ def _keys_frame(keys: pd.DataFrame, columns: list[str]) -> pd.DataFrame:
 
 
 def _one_tier(found: pd.DataFrame) -> pd.DataFrame:
-    """The rows of the all-tiers lookup (GCP), one per key: the first paid tier (the lowest begin_range of the
-    preferred, paid, rows; the first tier when every tier is free); more_tiers says the SKU has others. The other
-    lookups' rows (first tier only) pass as they are."""
+    """The rows of the all-tiers lookups (GCP, Azure), one per key and product: the first paid tier (the lowest
+    begin_range of the preferred, paid, rows; the first tier when every tier is free); more_tiers says the product has
+    others. The other lookups' rows (first tier only) pass as they are."""
     all_tiers = found["all_tiers"].astype(int).eq(1)
     found = found.assign(more_tiers=False)
     if not all_tiers.any():
         return found
     tiers = found[all_tiers]
-    more = tiers.groupby("key_id")["rate_id"].transform("nunique").gt(1)
+    by = [tiers["key_id"], tiers["sku"].astype(str)]   # per product: a key that fits two stays ambiguous
+    more = tiers.groupby(by)["rate_id"].transform("nunique").gt(1)
     tiers = tiers.assign(more_tiers=more)
-    tiers = tiers[tiers["preferred"] | ~tiers.groupby("key_id")["preferred"].transform("any")]
+    by = [tiers["key_id"], tiers["sku"].astype(str)]
+    tiers = tiers[tiers["preferred"] | ~tiers.groupby(by)["preferred"].transform("any")]
     start = pd.to_numeric(tiers["begin_range"], errors="coerce").fillna(0.0)
-    tiers = tiers[start == start.groupby(tiers["key_id"]).transform("min")]
+    tiers = tiers[start == start.groupby([tiers["key_id"], tiers["sku"].astype(str)]).transform("min")]
     return pd.concat([found[~all_tiers], tiers.assign(preferred=True)])
 
 
