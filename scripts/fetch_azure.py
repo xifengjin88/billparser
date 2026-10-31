@@ -4,7 +4,8 @@ productId -> service mapping, which is far smaller.
 
 The API refuses to page past 1,000,000 rows ($skip=1000000 answers HTTP 400), so one unfiltered listing never
 finishes. The script fetches one service family at a time; a family that reaches the limit is fetched again one
-region at a time. Each listing saves a checkpoint after every page and resumes where it stopped.
+region at a time. Each listing saves a checkpoint after every page and resumes where it stopped; a complete download
+deletes the checkpoints (<out>.parts), so the next run fetches again.
 The whole list replaces the Azure rows of the table service_product (DATABASE_URL), then the service catalog is
 rebuilt (--no-db: the JSON only).
 
@@ -18,6 +19,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import shutil
 import sys
 import time
 from pathlib import Path
@@ -110,6 +112,9 @@ def fetch(out: Path, odata_filter: str | None, max_pages: int | None) -> dict[st
         products.update(got)
     out.write_text(json.dumps(products, indent=1))
     print(f"Wrote {len(products)} products to {out}")
+    # the save files served a run that stopped; a finished one must not be the next run's answer (a finished
+    # listing's save file has no next page: the next run would read it and fetch nothing)
+    shutil.rmtree(folder, ignore_errors=True)
     return products
 
 
