@@ -16,7 +16,7 @@ from dataclasses import dataclass, field
 import pandas as pd
 
 from .docmodel import Document, Region, is_numberish
-from .layout import build_columns, find_header, norm_h, _row_to_cols
+from .layout import _row_to_cols, build_columns, find_header, norm_h
 from .transforms import parse_number
 
 LEGACY_RULES: dict[str, list[tuple[str, float]]] = {

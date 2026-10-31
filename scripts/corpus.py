@@ -99,6 +99,7 @@ def sums_of(rows) -> dict:
 def lines_key(rows) -> str | None:
     """A short fingerprint of which printed rows became lines and their amounts (order does not matter)."""
     import hashlib
+
     import pandas as pd
     if "_src" not in rows:
         return None

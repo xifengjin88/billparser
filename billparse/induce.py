@@ -12,7 +12,7 @@ import re
 from collections import Counter
 
 from .docmodel import Document
-from .layout import build_columns, find_header, norm_h, _row_to_cols
+from .layout import _row_to_cols, build_columns, find_header, norm_h
 from .mapper import LINE_PATTERNS, TOTAL_FIELD_ANCHOR, _spec_from_mapping
 from .spec import run
 from .transforms import parse_number

@@ -25,6 +25,11 @@ SAMPLES = {**{n: "aws" for n in AWS}, "azure_usage_full.csv": "azure", "focus_fu
            "gcp_export_full.json": "gcp"}
 
 
+
+def _version(v: str) -> tuple[int, ...]:
+    """"1.10" -> (1, 10): versions compare as numbers ("1.10" < "1.5" as text)."""
+    return tuple(int(x) for x in v.split("."))
+
 def _pipe(tmp_path: Path, name: str = "store") -> Pipeline:
     raw = tmp_path / "data" / "raw"
     if not raw.exists():
@@ -64,7 +69,7 @@ def compute(doc: Document) -> list:
 
 
 def test_schema_version():
-    assert SCHEMA_VERSION >= "1.5"                    # 1.5 added the attribute fields
+    assert _version(SCHEMA_VERSION) >= (1, 5)          # 1.5 added the attribute fields
 
 
 @pytest.mark.parametrize("name", sorted(SAMPLES))
@@ -176,7 +181,7 @@ def test_parse_returns_the_new_fields(client):
         r = client.post("/parse", files={"file": ("aws_cur_legacy_full.csv.gz", fh)})
     assert r.status_code == 200, r.text
     doc = r.json()["document"]
-    assert doc["schema_version"] == SCHEMA_VERSION >= "1.5"
+    assert doc["schema_version"] == SCHEMA_VERSION and _version(SCHEMA_VERSION) >= (1, 5)
     ec2 = next(c for c in doc["charges"] if (c.get("usage_type") or {}).get("value") == "USE1-BoxUsage:m5.xlarge")
     for f in ("tenancy", "license_model", "resource_id", "pricing_term", "list_unit_price", "sku_id", "sku_price_id",
               "operation"):

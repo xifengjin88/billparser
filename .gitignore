@@ -35,3 +35,6 @@ web/dist/
 .vscode/*
 !.vscode/extensions.json
 .DS_Store
+
+# Claude Code worktrees (agents and local branches)
+.claude/worktrees/

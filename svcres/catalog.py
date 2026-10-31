@@ -64,7 +64,7 @@ class Catalog:
         path.write_bytes(msgpack.packb(blob))
 
     @classmethod
-    def load(cls, path: Path) -> "Catalog":
+    def load(cls, path: Path) -> Catalog:
         blob = msgpack.unpackb(path.read_bytes())
         return cls(**blob)
 

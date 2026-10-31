@@ -7,7 +7,7 @@ else goes into the review sidecar returned by `sidecar()`.
 from __future__ import annotations
 
 from decimal import Decimal
-from typing import Any, Generic, Literal, Optional, TypeVar
+from typing import Any, Generic, Literal, TypeVar
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -21,14 +21,14 @@ class _Strict(BaseModel):
 
 
 class Cite(_Strict):
-    page: Optional[int] = None      # PDF / text / slide: page + line
-    line: Optional[int] = None
-    table: Optional[str] = None     # exports: table + row + column
-    row: Optional[int] = None
-    column: Optional[str] = None
+    page: int | None = None      # PDF / text / slide: page + line
+    line: int | None = None
+    table: str | None = None     # exports: table + row + column
+    row: int | None = None
+    column: str | None = None
 
 
-class CitedValue(_Strict, Generic[T]):
+class CitedValue(_Strict, Generic[T]):  # noqa: UP046  pydantic builds generic models from Generic[T]
     value: T
     cite: Cite
     origin: Literal["printed", "inferred"]
@@ -36,8 +36,8 @@ class CitedValue(_Strict, Generic[T]):
 
 class Section(_Strict):
     id: str
-    name: Optional[CitedValue[str]] = None
-    parent_id: Optional[str] = None
+    name: CitedValue[str] | None = None
+    parent_id: str | None = None
 
 
 class StatedTotal(_Strict):
@@ -45,81 +45,80 @@ class StatedTotal(_Strict):
     label: CitedValue[str]
     amount: CitedValue[Decimal]
     level: Literal["grand", "section", "subtotal"]
-    section_id: Optional[str] = None
+    section_id: str | None = None
 
 
 class Context(_Strict):
-    service: Optional[CitedValue[str]] = None
-    region: Optional[CitedValue[str]] = None
-    account_id: Optional[CitedValue[str]] = None
+    service: CitedValue[str] | None = None
+    region: CitedValue[str] | None = None
+    account_id: CitedValue[str] | None = None
 
 
 class Charge(_Strict):
     id: str
-    section_id: Optional[str] = None
+    section_id: str | None = None
     cite: Cite
     description: CitedValue[str]
-    cost: Optional[CitedValue[Decimal]] = None
-    basis: Optional[Literal["billed", "estimated", "priced"]] = None
-    currency: Optional[CitedValue[str]] = None
+    cost: CitedValue[Decimal] | None = None
+    basis: Literal["billed", "estimated", "priced"] | None = None
+    currency: CitedValue[str] | None = None
     counted: bool
     kind: Literal["usage", "commitment_fee", "discount_or_credit", "tax", "support_fee", "marketplace_usage",
                   "marketplace_fee", "commitment_negation", "other"]
-    list_cost: Optional[CitedValue[Decimal]] = None
-    contracted_cost: Optional[CitedValue[Decimal]] = None
-    effective_cost: Optional[CitedValue[Decimal]] = None
-    coverage: Optional[CitedValue[Literal["on_demand", "reserved", "savings_plan", "committed_use", "spot",
-                                          "unknown"]]] = None
-    line_type_raw: Optional[CitedValue[str]] = None
+    list_cost: CitedValue[Decimal] | None = None
+    contracted_cost: CitedValue[Decimal] | None = None
+    effective_cost: CitedValue[Decimal] | None = None
+    coverage: CitedValue[Literal["on_demand", "reserved", "savings_plan", "committed_use", "spot", "unknown"]] | None = None
+    line_type_raw: CitedValue[str] | None = None
     context: Context
-    service_code: Optional[CitedValue[str]] = None
-    pricing_model: Optional[CitedValue[str]] = None
-    commitment_id: Optional[CitedValue[str]] = None
-    commitment_type: Optional[CitedValue[str]] = None
-    commitment_status: Optional[CitedValue[str]] = None
-    marketplace_seller: Optional[CitedValue[str]] = None
-    period_start: Optional[CitedValue[str]] = None
-    period_end: Optional[CitedValue[str]] = None
-    instance_type: Optional[CitedValue[str]] = None
-    operating_system: Optional[CitedValue[str]] = None
-    database_engine: Optional[CitedValue[str]] = None
-    deployment_option: Optional[CitedValue[str]] = None
-    usage_type: Optional[CitedValue[str]] = None
-    operation: Optional[CitedValue[str]] = None
-    quantity: Optional[CitedValue[Decimal]] = None
-    unit: Optional[CitedValue[str]] = None
-    unit_price: Optional[CitedValue[Decimal]] = None
-    sku_id: Optional[CitedValue[str]] = None
-    catalog_sku_id: Optional[CitedValue[str]] = None
-    sku_price_id: Optional[CitedValue[str]] = None
-    meter_id: Optional[CitedValue[str]] = None
-    tenancy: Optional[CitedValue[str]] = None
-    license_model: Optional[CitedValue[str]] = None
-    resource_id: Optional[CitedValue[str]] = None                # FOCUS ResourceId
-    pricing_term: Optional[CitedValue[str]] = None
-    purchase_option: Optional[CitedValue[str]] = None
-    list_unit_price: Optional[CitedValue[Decimal]] = None        # FOCUS ListUnitPrice
-    contracted_unit_price: Optional[CitedValue[Decimal]] = None  # FOCUS ContractedUnitPrice
-    commitment_term: Optional[CitedValue[str]] = None
-    pre_installed_sw: Optional[CitedValue[str]] = None
-    price_match_level: Optional[CitedValue[str]] = None
-    price_missing: Optional[CitedValue[str]] = None
-    price_assumptions: Optional[CitedValue[str]] = None
-    implied_unit_price: Optional[CitedValue[Decimal]] = None
-    price_ratio: Optional[CitedValue[Decimal]] = None
-    catalog_unit_price: Optional[CitedValue[Decimal]] = None
+    service_code: CitedValue[str] | None = None
+    pricing_model: CitedValue[str] | None = None
+    commitment_id: CitedValue[str] | None = None
+    commitment_type: CitedValue[str] | None = None
+    commitment_status: CitedValue[str] | None = None
+    marketplace_seller: CitedValue[str] | None = None
+    period_start: CitedValue[str] | None = None
+    period_end: CitedValue[str] | None = None
+    instance_type: CitedValue[str] | None = None
+    operating_system: CitedValue[str] | None = None
+    database_engine: CitedValue[str] | None = None
+    deployment_option: CitedValue[str] | None = None
+    usage_type: CitedValue[str] | None = None
+    operation: CitedValue[str] | None = None
+    quantity: CitedValue[Decimal] | None = None
+    unit: CitedValue[str] | None = None
+    unit_price: CitedValue[Decimal] | None = None
+    sku_id: CitedValue[str] | None = None
+    catalog_sku_id: CitedValue[str] | None = None
+    sku_price_id: CitedValue[str] | None = None
+    meter_id: CitedValue[str] | None = None
+    tenancy: CitedValue[str] | None = None
+    license_model: CitedValue[str] | None = None
+    resource_id: CitedValue[str] | None = None                # FOCUS ResourceId
+    pricing_term: CitedValue[str] | None = None
+    purchase_option: CitedValue[str] | None = None
+    list_unit_price: CitedValue[Decimal] | None = None        # FOCUS ListUnitPrice
+    contracted_unit_price: CitedValue[Decimal] | None = None  # FOCUS ContractedUnitPrice
+    commitment_term: CitedValue[str] | None = None
+    pre_installed_sw: CitedValue[str] | None = None
+    price_match_level: CitedValue[str] | None = None
+    price_missing: CitedValue[str] | None = None
+    price_assumptions: CitedValue[str] | None = None
+    implied_unit_price: CitedValue[Decimal] | None = None
+    price_ratio: CitedValue[Decimal] | None = None
+    catalog_unit_price: CitedValue[Decimal] | None = None
     attributes: dict[str, Any] = Field(default_factory=dict)
 
 
 class Commitment(_Strict):
     id: str
     commitment_type: CitedValue[str]
-    commitment_id: Optional[CitedValue[str]] = None
-    status: Optional[CitedValue[str]] = None
-    term: Optional[CitedValue[str]] = None
-    payment_option: Optional[CitedValue[str]] = None
-    amount: Optional[CitedValue[Decimal]] = None
-    unused: Optional[CitedValue[Decimal]] = None
+    commitment_id: CitedValue[str] | None = None
+    status: CitedValue[str] | None = None
+    term: CitedValue[str] | None = None
+    payment_option: CitedValue[str] | None = None
+    amount: CitedValue[Decimal] | None = None
+    unused: CitedValue[Decimal] | None = None
     charge_ids: list[str] = Field(default_factory=list)
     cite: Cite
 
@@ -127,8 +126,8 @@ class Commitment(_Strict):
 class StatedFact(_Strict):
     label: str
     amount: CitedValue[Decimal]
-    currency: Optional[str] = None
-    period: Optional[str] = None
+    currency: str | None = None
+    period: str | None = None
     cite: Cite
 
 
@@ -136,10 +135,10 @@ class Gap(_Strict):
     kind: Literal["unclaimed_amount", "unreconciled_total", "missing_match_field", "failed_window",
                   "rejected_claim", "no_bill_table"]
     message: str
-    cite: Optional[Cite] = None
-    amount: Optional[Decimal] = None
-    field: Optional[str] = None
-    currency: Optional[str] = None
+    cite: Cite | None = None
+    amount: Decimal | None = None
+    field: str | None = None
+    currency: str | None = None
 
 
 class Confidence(_Strict):
@@ -174,14 +173,14 @@ class InferredDiscount(_Strict):
 
 
 class Pricing(_Strict):
-    catalog_version: Optional[str] = None
+    catalog_version: str | None = None
     defaults: dict[str, str] = Field(default_factory=dict)
     defaults_used: list[PricingDefault] = Field(default_factory=list)
-    undated_as_of: Optional[str] = None
-    match_rate: dict[str, Optional[float]] = Field(default_factory=dict)
+    undated_as_of: str | None = None
+    match_rate: dict[str, float | None] = Field(default_factory=dict)
     levels: dict[str, PricingLevel] = Field(default_factory=dict)
     missing: list[PricingMissing] = Field(default_factory=list)
-    inferred_discount: Optional[InferredDiscount] = None
+    inferred_discount: InferredDiscount | None = None
     warnings: list[str] = Field(default_factory=list)
 
 
@@ -190,12 +189,12 @@ class Document(_Strict):
     source_name: str
     sha256: str
     page_count: int
-    doc_type: Optional[CitedValue[Literal["invoice", "statement", "cost_report", "estimate", "inventory", "memo", "other"]]] = None
-    provider: Optional[CitedValue[str]] = None
-    currency: Optional[CitedValue[str]] = None
-    exchange_rate: Optional[CitedValue[Decimal]] = None
-    billing_period_start: Optional[CitedValue[str]] = None
-    billing_period_end: Optional[CitedValue[str]] = None
+    doc_type: CitedValue[Literal["invoice", "statement", "cost_report", "estimate", "inventory", "memo", "other"]] | None = None
+    provider: CitedValue[str] | None = None
+    currency: CitedValue[str] | None = None
+    exchange_rate: CitedValue[Decimal] | None = None
+    billing_period_start: CitedValue[str] | None = None
+    billing_period_end: CitedValue[str] | None = None
     stated_totals: list[StatedTotal] = Field(default_factory=list)
     sections: list[Section] = Field(default_factory=list)
     charges: list[Charge] = Field(default_factory=list)
@@ -203,15 +202,15 @@ class Document(_Strict):
     stated_facts: list[StatedFact] = Field(default_factory=list)
     completeness: Literal["reconciled", "consistent", "unchecked", "contradicted"]
     gaps: list[Gap] = Field(default_factory=list)
-    confidence: Optional[Confidence] = None
+    confidence: Confidence | None = None
     cost_types: list[Literal["billed", "list", "contracted", "effective"]] = Field(default_factory=list)
-    cost_basis: Optional[Literal["actual", "amortized", "unknown"]] = None
-    pricing: Optional[Pricing] = None
+    cost_basis: Literal["actual", "amortized", "unknown"] | None = None
+    pricing: Pricing | None = None
 
 
 # ---------------------------------------------------------------- projection
 
-def _cite(c: Optional[internal.Cite]) -> Optional[dict]:
+def _cite(c: internal.Cite | None) -> dict | None:
     if c is None:
         return None
     d = {"page": c.page, "line": c.line, "table": c.table, "row": c.row, "column": c.column}
@@ -220,7 +219,7 @@ def _cite(c: Optional[internal.Cite]) -> Optional[dict]:
     return d
 
 
-def _cv(v: Optional[internal.CitedValue]) -> Optional[dict]:
+def _cv(v: internal.CitedValue | None) -> dict | None:
     if v is None:
         return None
     return {"value": v.value, "cite": _cite(v.cite) or {}, "origin": v.origin}

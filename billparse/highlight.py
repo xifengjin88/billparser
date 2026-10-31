@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
-from typing import Optional
 
 from .schema import Cite, Document
 
@@ -29,7 +28,7 @@ LEGEND = ("Blue: charge · Orange: printed total · Amber: section heading · Te
 _LABEL = re.compile(r"^p(\d+) · line (\d+)")
 
 
-def _key(cite: Optional[Cite]):
+def _key(cite: Cite | None):
     """(page, line) of a text cite, ("table", sheet, row) of a table cite, else None."""
     if cite is None:
         return None
@@ -102,7 +101,7 @@ FOCUS = ((255, 221, 0, 85), (220, 38, 38, 255), 4)      # the clicked line: yell
 
 
 def render_page(path: Path, page: int, page_lines: list[dict], doc: Document, meta: dict, scale: float = SCALE,
-                focus: Optional[tuple] = None):
+                focus: tuple | None = None):
     """The page as an image: every line boxed in its role's style, section bars, and `focus` (page, line) in yellow."""
     import pypdfium2 as pdfium
     from PIL import Image, ImageDraw, ImageFont
@@ -118,7 +117,7 @@ def render_page(path: Path, page: int, page_lines: list[dict], doc: Document, me
     draw = ImageDraw.Draw(layer)
     found = roles(doc, meta)
     line_box = {ln["line"]: ln["bbox"] for ln in page_lines if ln.get("bbox")}
-    for d, name, top, bottom in section_bands(doc, page, line_box):
+    for d, _name, top, bottom in section_bands(doc, page, line_box):
         color = BAND_COLORS[d % len(BAND_COLORS)]
         x = 4 + d * 7
         draw.rectangle((x, top * scale - 2, x + 4, bottom * scale + 2), fill=(*color, 170))
