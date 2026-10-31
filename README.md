@@ -318,26 +318,29 @@ Manage specs: `python -m billparse specs [list | show ID | approve ID | rollback
 ## Service catalog
 
 `svcres/` resolves product codes and labels to canonical services (code, synonym, exact name,
-word prefix, fuzzy, optional LLM). The catalog (`CATALOG_DIR/catalog.msgpack`) comes from the providers' own lists in
-the price catalog (`billparse/service_catalog.py`), so it is as new as the prices: every price load (the weekly
-refresh, `make prices`, `make prices-azure`) rebuilds it, and each process loads it again when the file changes.
+word prefix, fuzzy, optional LLM). The catalog (`CATALOG_DIR/catalog.msgpack`) is built from the database
+(`billparse/service_catalog.py`), and each process loads it again when the file changes. It is rebuilt after every
+price load (the weekly refresh, `make prices`, `make prices-azure`) and every code-list load (`make service-products`).
 
-| Provider | From the price catalog (`price_product`) |
+| Source (in this order; a later one wins for the same product) | Holds |
 |---|---|
-| Azure | productId, productName, serviceName, serviceId, serviceFamily (the services downloaded) |
-| AWS | each service code and its name (the price files' `serviceName`), the most used name first |
-| GCP | each service ID and its display name |
+| table `service_product` | the provider's whole code list, without prices: Azure productId, productName, serviceId, serviceName, serviceFamily; AWS service codes and names; GCP service IDs and names. Each load replaces the provider's rows |
+| table `price_product` | the products of the prices loaded (the same fields, as new as the prices) |
+| `CATALOG_DIR/raw/*.json` | the last fallback, for a provider with neither (a new database) |
 
-What the price catalog lacks (a provider whose prices are not loaded, Azure services not downloaded) comes from the
-fetch scripts' JSON in `CATALOG_DIR/raw`, as before; where both name a service or product, the price catalog wins.
-The seeds (AWS categories and aliases, Azure aliases, Marketplace sellers) are added to both. `stats()["sources"]`
-(and the price job's result, `service_catalog`) counts the entries from each.
+A known service keeps its name (it is its key, which synonyms point to); new names are added to it.
+`stats()["sources"]` counts the entries from the database and from the JSON.
 
 ```bash
-python scripts/build_catalog.py               # by hand: the price catalog (DATABASE_URL) and data/raw
-python scripts/build_catalog.py --raw-only    # data/raw only
-python scripts/fetch_azure.py && python scripts/fetch_aws.py   # the JSON fallback (GCP: GCP_API_KEY=... fetch_gcp.py)
+python scripts/fetch_azure.py --out data/raw/azure_products.json   # every Azure product (public, no key; resumes)
+python scripts/fetch_aws.py                                         # AWS codes and names (GCP: GCP_API_KEY=... fetch_gcp.py)
+make service-products                      # data/raw into service_product (DATABASE_URL), then rebuild the catalog
+python scripts/build_catalog.py            # rebuild by hand (--raw-only: the JSON alone)
 ```
+
+The built-in aliases (`svcres/seeds.py`: AWS short names, Azure aliases, Marketplace sellers) are added once to the
+synonyms table (below) with source `seed`, so they can be seen and changed on the Mapping page like the learned ones;
+a label a person already has keeps its row, and a seed alias a person removed is not added again.
 
 Corrections: `python -m billparse synonym "VM Hrs" "azure:Virtual Machines"`, the Mapping page (`/aliases`), and
 review approval (each corrected service code). They are synonyms in the table `service_synonym` (`synonyms.py`;

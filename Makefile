@@ -8,7 +8,7 @@ SERVICE ?= api
 
 .DEFAULT_GOAL := help
 .PHONY: help up dev down start stop restart build logs ps status psql migrate nightly shell destroy \
-        backup-db reset-db worker logs-worker prices prices-azure samples corpus corpus-check corpus-accept corpus-agent agent-jobs test lint lint-fix typecheck web-types api-local web-local
+        backup-db reset-db worker logs-worker prices prices-azure service-products samples corpus corpus-check corpus-accept corpus-agent agent-jobs test lint lint-fix typecheck web-types api-local web-local
 
 help:  ## Show the targets
 	@awk 'BEGIN {FS = ":.*## "} /^[a-z-]+:.*## / {printf "  %-12s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -100,6 +100,9 @@ prices:  ## Load the AWS price files (PRICE_FILES_DIR) into the price catalog (D
 
 prices-azure:  ## Load the Azure retail prices (AZURE_PRICE_FILES_DIR) into the price catalog; ARGS='--only "Virtual Machines"'
 	uv run python scripts/refresh_prices.py --azure $(ARGS)
+
+service-products:  ## Load the providers' code lists (data/raw JSON) into service_product and rebuild the service catalog
+	uv run python scripts/load_service_products.py $(ARGS)
 
 samples:  ## Make the sample files in samples/files
 	uv run python samples/make_samples.py
