@@ -378,9 +378,11 @@ def _read_xlsx(data: bytes, prefix: str) -> list[Region]:
                     merged[(r, c)] = v
         computed = _evaluate_formulas(ws, wsf)            # formulas saved without a result (files written by programs)
         rows: list[Row] = []
-        for r in range(1, (ws.max_row or 0) + 1):
+        # the sheet's size once: max_row and max_column scan every cell (asked per row, 11,000 rows took minutes)
+        last_row, last_col = ws.max_row or 0, ws.max_column or 0
+        for r in range(1, last_row + 1):
             cells: list[Cell] = []
-            for c in range(1, (ws.max_column or 0) + 1):
+            for c in range(1, last_col + 1):
                 cell = ws.cell(r, c)
                 val = merged.get((r, c), cell.value)
                 fv = wsf.cell(r, c).value

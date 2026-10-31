@@ -49,6 +49,7 @@ LEGACY_RULES: dict[str, list[tuple[str, float]]] = {
 }
 LEGACY_NEGATIVE = {
     "billed_cost": r"\b(unit|rate|list|tax|qty|quantity|per|code|id|date|currency|type)\b",
+    "charge_type": r"\bresource\b",        # Azure's Resource Type is a service family (Compute), not a charge type
     "quantity": r"\b(price|cost|amount|rate)\b",
     "description": r"\b(id|code|date|price|cost|amount)\b",
     "service_raw": r"\b(id|code|price|cost|amount)\b",
@@ -66,12 +67,15 @@ HEADER_RULES: dict[str, list[tuple[str, float]]] = {
     "unit": [(r"\b(unit of measure|uom|usage unit|unit)\b", 2.5)],
     "service_raw": [(r"\b(service name|service|svc|product name|meter category|category|offering)\b", 3.0),
                     (r"\b(product|item)\b", 2.0)],
-    "description": [(r"\b(description|desc|details?|line item|item|sku name|meter name|meter|name)\b", 2.5)],
+    # the meter's or the SKU's name says what was used (and Azure prices by it); a resource's name says which one
+    "description": [(r"\b(description|desc|sku name|meter name)\b", 3.5),
+                    (r"\b(details?|line item|item|meter|name)\b", 2.5)],
     "product_code": [(r"\b(product code|product id|productid|service code|code)\b", 3.0)],
     "charge_start": [(r"\b(usage date|start date|from|date|period|month|billing period)\b", 2.0)],
     "charge_end": [(r"\b(end date|to date|end|through)\b", 2.5)],
     "region": [(r"\b(region|location)\b", 3.0)],
-    "account_id": [(r"\b(account id|subscription id|project id|account number|subscription|project)\b", 2.5)],
+    "account_id": [(r"\b(account id|subscription id|project id|account number)\b", 3.5),
+                   (r"\b(subscription|project)\b", 2.5)],
     "account_name": [(r"\b(account name|subscription name|project name|customer|account)\b", 2.0)],
     "currency": [(r"\b(currency|ccy)\b", 3.0)],
     "charge_type": [(r"\b(charge type|line item type|cost type|type)\b", 2.5)],
@@ -87,7 +91,7 @@ HEADER_RULES: dict[str, list[tuple[str, float]]] = {
     "effective_cost": [(r"\b(effective cost|amorti[sz]ed cost|net amorti[sz]ed)\b", 3.5)],
     "contracted_cost": [(r"\b(contracted cost|negotiated cost)\b", 3.5)],
     "list_unit_price": [(r"\b(list unit price|list price|public price|on ?demand rate|on ?demand price|retail price|"
-                         r"payg price)\b", 3.5)],
+                         r"payg price|msrp)\b", 3.5)],
     "contracted_unit_price": [(r"\b(contracted unit price|contracted price|negotiated price|ea price)\b", 3.5)],
     "credits": [(r"\b(credits?|promotions?|promo)\b", 3.0)],
     "resource_id": [(r"\b(resource id|instance id|resource uri|arn)\b", 3.0), (r"\bresource\b", 2.0)],
@@ -114,11 +118,11 @@ NEGATIVE = {
     "description": r"\b(id|code|date|price|cost|amount)\b",
     "service_raw": r"\b(id|code|price|cost|amount|charge)\b",     # ChargeCategory is the line type
     "unit": r"\b(price|cost|rate)\b",
-    "unit_price": r"\b(list|public|on ?demand|retail|payg|contracted|negotiated)\b",
+    "unit_price": r"\b(list|public|on ?demand|retail|payg|contracted|negotiated|msrp)\b",
     "list_cost": _COST_NOT, "effective_cost": _COST_NOT, "contracted_cost": _COST_NOT, "credits": _COST_NOT,
     "resource_id": r"\b(group|type|name|tags?)\b",
     "commitment_term": r"\b(pricing|type)\b",
-    "charge_type": r"\b(record|category|commitment|discount)\b",
+    "charge_type": r"\b(record|category|commitment|discount|resource)\b",      # Azure's Resource Type
 }
 COST_FIELDS = {"billed_cost", "list_cost", "effective_cost", "contracted_cost", "credits", "tax"}
 PRICE_FIELDS = ("unit_price", "list_unit_price", "contracted_unit_price")

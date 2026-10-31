@@ -325,3 +325,37 @@ def test_with_nothing_settled_the_prompt_is_unchanged(make, tmp_path, monkeypatc
     pipe.parse_file(f)
     assert "Settled columns" not in llm.calls[0][1]
 
+
+
+def _reseller_columns(n: int = 40) -> dict[str, list]:
+    """An Azure reseller (CSP) usage export, values made up: the meter's name, the subscription, retail price."""
+    guid = "{:08x}-1111-2222-3333-444444444444".format
+    return {
+        "Customer#": [str(6000000 + i % 3) for i in range(n)], "Customer Name": ["Contoso"] * n,
+        "Tenant Id": [guid(1)] * n, "Domain Name": ["contoso.com"] * n,
+        "Subscription Id": [guid(2 + i % 2) for i in range(n)], "Subscription Name": ["Prod", "Dev"] * (n // 2),
+        "Resource Id": [f"/subscriptions/{guid(2)}/resourceGroups/rg/providers/Microsoft.Compute/virtualMachines/vm{i}"
+                        for i in range(n)],
+        "Resource Group": ["rg"] * n, "Resource Name": [f"vm-prod-web-{i:03d}" for i in range(n)],
+        "Meter Name": ["D4s v5", "P10 LRS Disk", "Standard Data Transfer Out", "Total Requests"] * (n // 4),
+        "Resource Type": ["Compute", "Storage"] * (n // 2),
+        "Tags": [""] * n, "Consumed Qty": [24.0] * n, "Unit": ["1 Hour"] * n, "MSRP": [0.192] * n,
+        "Extended MSRP": [4.608] * n, "Usage Plan": ["Consumption"] * n,
+        "Usage Start Date": ["2026-05-01"] * n, "Usage End Date": ["2026-05-31"] * n, "Invoiced": ["Yes"] * n,
+        "Invoice Number": ["G012345678"] * n,
+    }
+
+
+def test_an_azure_reseller_export_maps_meter_subscription_and_retail_price():
+    """The meter's name is what Azure prices by (not the resource's name); the subscription is the account (the
+    tenant is not, and no subscription or tenant GUID is a meter ID); MSRP is the retail list price; a resource type
+    is not a charge type."""
+    m = mapping(_reseller_columns())
+    c = m.chosen
+    assert c["description"] == "Meter Name"
+    assert c["account_id"] == "Subscription Id" and c["account_name"] == "Subscription Name"
+    assert c["list_unit_price"] == "MSRP" and c["billed_cost"] == "Extended MSRP"
+    assert c["quantity"] == "Consumed Qty" and c["unit"] == "Unit" and c["resource_id"] == "Resource Id"
+    assert "meter_id" not in c and c.get("charge_type") != "Resource Type"
+    legacy = mapping({"Resource Type": ["Compute", "Storage"] * 20}, legacy=True).chosen      # the interpreter's guess
+    assert "charge_type" not in legacy

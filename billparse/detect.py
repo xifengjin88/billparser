@@ -124,8 +124,9 @@ def fields(header: str, values: list, ctx=None) -> list[str]:
         out.append("operation")
     if _fits(vals, lambda v: bool(RESOURCE.match(v))):
         out.append("resource_id")
-    if _fits(vals, lambda v: bool(GUID.match(v))):
-        out.append("meter_id")                     # mapper.mapping proposes it only for an Azure file
+    if (MEANINGLESS.fullmatch(h) or re.search(r"\bmeter\b", h)) and _fits(vals, lambda v: bool(GUID.match(v))):
+        out.append("meter_id")                     # mapper.mapping proposes it only for an Azure file; a GUID under
+        # another name (a subscription, a tenant, a resource) is not a meter
     if _fits(vals, lambda v: bool(DATE.match(v))):
         out.append("charge_start")                 # a date is the line's start (a header says when it is the end)
     if not any(f in out for f in ("instance_type", "region", "account_id", "currency", "usage_type", "operation",
