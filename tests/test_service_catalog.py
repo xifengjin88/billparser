@@ -206,3 +206,22 @@ def test_a_name_several_azure_services_share_is_never_guessed(tmp_path):
     fam = r.resolve("Databases", "azure")                     # a service family, not one service
     assert fam.service is None and fam.method == "ambiguous"
     assert r.resolve("General Purpose Data Stored", "azure").service == "SQL Database"
+
+
+def test_a_finished_azure_fetch_deletes_its_save_files(tmp_path, monkeypatch):
+    """A stopped run continues from its save files; a finished one deletes them, so the next run fetches again
+    (a finished listing's save file has no next page: read again, it would return the old products)."""
+    mod = _script("fetch_azure")
+    pages = {"n": 0}
+
+    def get(session, url, params, tries=6):
+        pages["n"] += 1
+        return {"Items": [{"productId": "P1", "productName": "Azure Shiny", "serviceName": "Shiny",
+                           "serviceId": "S1", "serviceFamily": "Compute"}], "NextPageLink": None}
+    monkeypatch.setattr(mod, "_get", get)
+    monkeypatch.setattr(mod, "FAMILIES", ["Compute"])
+    out = tmp_path / "azure_products.json"
+    assert set(mod.fetch(out, None, None)) == {"P1"} and pages["n"] == 1
+    assert not out.with_suffix(".parts").exists()
+    mod.fetch(out, None, None)
+    assert pages["n"] == 2                                    # fetched again, not read from a save file
