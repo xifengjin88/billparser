@@ -6,7 +6,7 @@ from typing import Any, Generic, Literal, Optional, TypeVar, cast
 
 from pydantic import BaseModel, Field
 
-SCHEMA_VERSION = "1.9"            # 1.2: database_engine, deployment_option on charges; 1.3: confidence;
+SCHEMA_VERSION = "1.10"           # 1.2: database_engine, deployment_option on charges; 1.3: confidence;
                                   # 1.4: typed list/contracted/effective cost, coverage, line_type_raw on charges,
                                   #      kind commitment_negation, cost_types and cost_basis on documents
                                   # 1.5: tenancy, license_model, resource_id, pricing_term, purchase_option,
@@ -20,6 +20,8 @@ SCHEMA_VERSION = "1.9"            # 1.2: database_engine, deployment_option on c
                                   #      analysis.commitment_opportunity removed
                                   # 1.9: catalog_unit_price on charges; unmatched reasons service_not_loaded and
                                   #      no_such_product in price_missing; price checks (validate.py)
+                                  # 1.10: pricing.defaults_used: the values assumed for what lines do not print
+                                  #       (request, the file's own, or the default setting), with their lines
 
 T = TypeVar("T")
 
@@ -208,6 +210,17 @@ class PricingMissing(BaseModel):
     cost: float
 
 
+class PricingDefault(BaseModel):
+    """A value the lines did not print, assumed to price them: from the request, the file's own most common value, or
+    the default setting."""
+    provider: str
+    field: str
+    value: str
+    source: str                     # request | file | default
+    lines: int
+    cost: float
+
+
 class InferredDiscount(BaseModel):
     value: float                    # 1 - the steady ratio of billed to list price (rule R2)
     estimate: bool = True
@@ -218,6 +231,7 @@ class Pricing(BaseModel):
     """How the usage lines matched the public list prices (pricing.py)."""
     catalog_version: Optional[str] = None
     defaults: dict[str, str] = Field(default_factory=dict)          # what the request said to assume
+    defaults_used: list[PricingDefault] = Field(default_factory=list)  # every assumed value, with its lines
     undated_as_of: Optional[str] = None     # the date of lines without one: kept, so a reprice uses it again
     match_rate: dict[str, Optional[float]] = Field(default_factory=dict)   # sure, assumed (by cost); *_lines
     levels: dict[str, PricingLevel] = Field(default_factory=dict)

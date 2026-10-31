@@ -16,6 +16,8 @@ def _sqlite_only(monkeypatch, tmp_path):
     monkeypatch.delenv("AUTH", raising=False)
     # the default store (and so the service synonyms' database): the test's own, never the project's store/
     monkeypatch.setenv("PARSER_DATA_DIR", str(tmp_path / "default-store"))
+    # pricing assumes only what a test's request gives (the tests of automatic defaults turn them on)
+    monkeypatch.setenv("PRICE_AUTO_DEFAULTS", "0")
 
 
 @pytest.fixture(autouse=True)

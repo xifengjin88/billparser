@@ -158,6 +158,15 @@ class PricingMissing(_Strict):
     cost: float
 
 
+class PricingDefault(_Strict):
+    provider: str
+    field: str
+    value: str
+    source: str
+    lines: int
+    cost: float
+
+
 class InferredDiscount(_Strict):
     value: float
     estimate: bool = True
@@ -167,6 +176,7 @@ class InferredDiscount(_Strict):
 class Pricing(_Strict):
     catalog_version: Optional[str] = None
     defaults: dict[str, str] = Field(default_factory=dict)
+    defaults_used: list[PricingDefault] = Field(default_factory=list)
     undated_as_of: Optional[str] = None
     match_rate: dict[str, Optional[float]] = Field(default_factory=dict)
     levels: dict[str, PricingLevel] = Field(default_factory=dict)

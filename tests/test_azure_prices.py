@@ -277,6 +277,21 @@ def test_azure_lines_feed_the_price_checks(catalog):
     assert checks["catalog_grounding"]["status"] == "pass" and checks["implied_unit_price"]["status"] == "pass"
 
 
+def test_azure_auto_defaults_region_from_the_file_and_os_from_the_setting(catalog, monkeypatch):
+    """A VM line by meter name with no region and no OS: the file's own region and the default OS (Linux), noted and
+    counted; a line with a meter ID needs no region (the meter is the price) and assumes none."""
+    monkeypatch.setenv("PRICE_AUTO_DEFAULTS", "1")
+    rows = _azure(meter_id=[None, None, D4S_LINUX], description=["D4s v5"] * 3, region=[None, "eastus", None])
+    stats = match_prices(rows, catalog)
+    first = rows.loc[0]
+    assert first["price_match_level"] == "assumed" and float(first["catalog_unit_price"]) == pytest.approx(0.192)
+    assert "region=eastus (file)" in first["price_assumptions"]
+    assert "operating_system=Linux (default)" in first["price_assumptions"]
+    assert rows.loc[2, "price_match_level"] == "exact" and not isinstance(rows.loc[2, "price_assumptions"], str)
+    used = {(d["provider"], d["field"], d["source"]): d["lines"] for d in stats.summary()["defaults_used"]}
+    assert used == {("azure", "region", "file"): 1, ("azure", "operating_system", "default"): 2}
+
+
 # ---------------------------------------------------------------- whole Azure samples
 def _pipe(tmp_path: Path, name: str = "store"):
     pipe = _aws_pipe(tmp_path, name)

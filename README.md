@@ -499,6 +499,13 @@ the price checks compare them.
   invoices often print no region). Each is in `price_assumptions`; the line's own columns stay
   as parsed. A first-tier price (`tiered`) and a date before the catalog's oldest price (`before_history`) are noted
   there too.
+- **Defaults, said.** A line matched by its attributes (AWS: instance type; Azure: meter name) that prints no region
+  or OS, when the request gives none, is priced with the file's own most common value (`region=us-east-1 (file)`),
+  else a setting: `PRICE_DEFAULT_REGION_AWS` (`us-east-1`), `PRICE_DEFAULT_REGION_AZURE` (`eastus`),
+  `PRICE_DEFAULT_OS` (`Linux`; an empty value: none). Its level is `assumed`, the value is in `price_assumptions`,
+  and `pricing.defaults_used` (the "Defaults used" table of the Prices tab) lists each one with its source, lines and
+  cost. A line with its own SKU, rate code, usage type or meter ID assumes nothing; GCP lines never do.
+  `PRICE_AUTO_DEFAULTS=0` keeps only the request's.
 - **Currency.** The catalog's prices are in USD. A line that prints another currency is priced in its own currency
   with the rate it prints (`currency_conversion_rate`: units of its currency per USD; GCP exports print
   `currency_conversion_rate`, FOCUS `x_CurrencyConversionRate`, Azure cost details `ExchangeRatePricingToBilling`,
@@ -518,7 +525,7 @@ the price checks compare them.
 
 `Document.pricing` has the catalog version, the match rate (share of priced AWS, Azure and GCP usage cost at `exact` and
 `attributes`, and at `assumed`; also by lines), the lines and cost per level, the most common missing columns, the
-inferred discount and warnings, and `undated_as_of`: the date of lines that have none (the printed billing period,
+inferred discount, the defaults used (`defaults_used`) and warnings, and `undated_as_of`: the date of lines that have none (the printed billing period,
 else the day of the first pricing; a reprice uses it again, so it gives the same prices on any day). No catalog, an empty one or a database error: the parse goes on, unpriced, with a
 warning. `POST /documents/{sha256}/reprice` (the web app's "Price again") prices a stored result again with the
 current catalog, never parsing the file again (a large file: its stored rows, in batches); its optional body gives new

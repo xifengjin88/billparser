@@ -240,7 +240,13 @@ const LEVEL_HINT: Record<string, string> = {
   ambiguous: 'Several prices fit: a key column is missing',
   unmatched: 'No price in the catalog',
   unit_mismatch: "The line's unit cannot be converted to the price's unit",
-  no_catalog: 'GCP, or Azure before Azure prices are loaded: no prices in the catalog yet',
+  no_catalog: "The catalog has no prices of this line's provider (Azure or GCP prices not loaded)",
+}
+
+const DEFAULT_SOURCE: Record<string, string> = {
+  request: 'Your request',
+  file: "The file's most common value",
+  default: 'The default setting',
 }
 
 function PricesTab({ view }: { view: DocumentView }) {
@@ -261,7 +267,24 @@ function PricesTab({ view }: { view: DocumentView }) {
           {p.warnings.map((w) => <div key={w}>{w}</div>)}
         </div>
       ) : null}
-      {Object.keys(p.defaults ?? {}).length ? (
+      {!levels.length && !p.warnings?.length ? (
+        <div className="text-sm text-muted-foreground">No line was priced: the file has no usage line with a quantity
+          (a total per service or per day cannot be priced). A file with meters or SKUs and quantities can.</div>
+      ) : null}
+      {p.defaults_used?.length ? (
+        <Section title="Defaults used">
+          <DataTable rows={p.defaults_used} rowKey={(d) => `${d.provider}:${d.field}:${d.value}:${d.source}`} height="auto" columns={[
+            { key: 'provider', header: 'Provider', width: '90px', render: (d) => d.provider },
+            { key: 'field', header: 'Field', width: '160px', render: (d) => <span className="font-mono text-xs">{d.field}</span> },
+            { key: 'value', header: 'Value', width: '160px', render: (d) => d.value },
+            { key: 'source', header: 'From', width: '200px', render: (d) => <span title={DEFAULT_SOURCE[d.source]}>{DEFAULT_SOURCE[d.source] ?? d.source}</span> },
+            { key: 'lines', header: 'Lines', width: '100px', align: 'right', render: (d) => d.lines.toLocaleString() },
+            { key: 'cost', header: 'Cost', width: '140px', align: 'right', render: (d) => money(String(d.cost)) },
+          ]} />
+          <div className="mt-1 text-xs text-muted-foreground">The lines did not print these values, so they were assumed to find a price; those lines are
+            "assumed". Price the document again with your own values to change them.</div>
+        </Section>
+      ) : Object.keys(p.defaults ?? {}).length ? (
         <div className="text-sm text-muted-foreground">Assumed by request: {Object.entries(p.defaults ?? {}).map(([k, x]) => `${k}=${x}`).join(', ')}</div>
       ) : null}
       <Section title="Match levels">
