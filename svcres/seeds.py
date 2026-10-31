@@ -98,7 +98,12 @@ AWS_SEED = {
     "AmazonSES": ("Integration", ["SES", "Simple Email Service"]),
     "AWSSupportBusiness": ("Support", ["AWS Support (Business)", "Business Support"]),
     "AWSSupportEnterprise": ("Support", ["AWS Support (Enterprise)", "Enterprise Support"]),
-    "ComputeSavingsPlans": ("Compute", ["Savings Plans for AWS Compute usage", "Compute Savings Plans"]),
+    "ComputeSavingsPlans": ("Compute", ["Savings Plans for AWS Compute usage", "Compute Savings Plans",
+                                        "Compute Savings Plan"]),
+    # Database Savings Plans (2025); the code is AWS's naming pattern, not yet seen in a CUR here
+    "DatabaseSavingsPlans": ("Databases", ["Savings Plans for AWS Database Usage", "Database Savings Plans",
+                                           "Database Savings Plan"]),
+    "AWSDatabaseMigrationSvc": ("Databases", ["AWS Database Migration Service", "Database Migration Service", "DMS"]),
     "MachineLearningSavingsPlans": ("AI + Machine Learning", ["Savings Plans for AWS Machine Learning",
                                                               "Machine Learning Savings Plans",
                                                               "SageMaker Savings Plans"]),

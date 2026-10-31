@@ -10,7 +10,8 @@ Per provider, the rows the catalog is built from, in this order (a later one win
     service_product   the provider's whole list (scripts/fetch_*.py output, loaded by scripts/load_service_products.py)
     price_product     the products of the prices loaded: azure productId, productName, serviceName, serviceId,
                       serviceFamily; aws the service code and its serviceName (the most used first); gcp the service
-                      ID and its display name
+                      ID and its display name; and the Azure meter names that belong to one service only (what
+                      reseller and invoice files print: "D8s v5", "P30 LRS Disk")
 A provider with neither comes from the fetch scripts' JSON in catalog_dir/raw, as before.
 
 The built-in aliases (svcres.seeds: AWS short names, Azure aliases, Marketplace sellers) are added to service_synonym
@@ -55,6 +56,34 @@ def _insert(engine: Engine, table: sa.Table):
 
 
 # ---------------------------------------------------------------- the providers' code lists
+def azure_rows(products: dict[str, dict]) -> list[dict]:
+    """fetch_azure.py's products (productId -> productName, serviceName, serviceId, serviceFamily) as table rows."""
+    return [{"product_id": pid, "product_name": p.get("productName") or "", "service_id": p.get("serviceId"),
+             "service_name": p.get("serviceName"), "family": p.get("serviceFamily")}
+            for pid, p in products.items() if p.get("serviceName")]
+
+
+def aws_rows(names: dict[str, list[str]]) -> list[dict]:
+    """fetch_aws.py's codes and names (code -> names, the display name first) as table rows."""
+    return [{"product_id": code, "product_name": n, "service_id": code, "service_name": n or None}
+            for code, ns in names.items() for n in (ns or [""])]
+
+
+def aws_price_names(engine: Engine) -> dict[str, list[str]]:
+    """Each AWS service code's names in the loaded price files (serviceName), the most used first: AWS's own names,
+    no credentials needed."""
+    aws_name = _attr("serviceName")
+    q = (sa.select(P.c.service_code, aws_name.label("name"), sa.func.count().label("n"))
+         .where(P.c.provider == "aws").group_by(P.c.service_code, aws_name)
+         .order_by(P.c.service_code, sa.func.count().desc()))
+    out: dict[str, list[str]] = {}
+    with engine.connect() as c:
+        for code, name, _n in c.execute(q):
+            if name:
+                out.setdefault(code, []).append(name)
+    return out
+
+
 def products_from_json(raw_dir: Path, providers: tuple[str, ...] = tuple(RAW_FILES)) -> dict[str, list[dict]]:
     """The fetch scripts' JSON (scripts/fetch_azure.py, fetch_aws.py, fetch_gcp.py) as service_product rows."""
     out: dict[str, list[dict]] = {}
@@ -64,13 +93,9 @@ def products_from_json(raw_dir: Path, providers: tuple[str, ...] = tuple(RAW_FIL
             continue
         data = json.loads(path.read_text())
         if provider == "azure":
-            out[provider] = [{"product_id": pid, "product_name": p.get("productName") or "",
-                              "service_id": p.get("serviceId"), "service_name": p.get("serviceName"),
-                              "family": p.get("serviceFamily")}
-                             for pid, p in data.items() if p.get("serviceName")]
+            out[provider] = azure_rows(data)
         elif provider == "aws":
-            out[provider] = [{"product_id": code, "product_name": name, "service_id": code, "service_name": name}
-                             for code, v in data.items() for name in ((v or {}).get("names") or [""])]
+            out[provider] = aws_rows({code: (v or {}).get("names") or [] for code, v in data.items()})
         else:
             out[provider] = [{"product_id": sid, "product_name": s.get("displayName") or "", "service_id": sid,
                               "service_name": s.get("displayName")}
@@ -130,6 +155,21 @@ def catalog_rows(engine: Engine) -> dict[str, list[dict]]:
                     out[r.provider].append({"code": r.product_id, "name": r.product_name or None})
             for provider, q in prices.items():
                 out[provider] += [dict(r._mapping) for r in conn.execute(q)]
+            # Azure meter names ("D8s v5", "P30 LRS Disk"): what reseller and invoice files print; each one that
+            # belongs to one service only
+            meters = (sa.select(P.c.meter_name.label("name"), sa.func.min(P.c.service_code).label("serviceName"))
+                      .where((P.c.provider == "azure") & P.c.meter_name.isnot(None))
+                      .group_by(P.c.meter_name).having(sa.func.count(sa.distinct(P.c.service_code)) == 1))
+            out["azure_meters"] = [dict(r._mapping) for r in conn.execute(meters)]
+            shared = (sa.select(P.c.meter_name, P.c.service_code)
+                      .where((P.c.provider == "azure") & P.c.meter_name.in_(
+                          sa.select(P.c.meter_name).where(P.c.provider == "azure").group_by(P.c.meter_name)
+                          .having(sa.func.count(sa.distinct(P.c.service_code)) > 1)))
+                      .distinct())
+            amb: dict[str, list[str]] = {}
+            for name, svc in conn.execute(shared):
+                amb.setdefault(name, []).append(svc)
+            out["azure_meters_ambiguous"] = [{"name": k, "services": sorted(v)} for k, v in amb.items()]
     except DBAPIError as e:                         # no tables (a store without the migrations): JSON only
         log.warning("service catalog: the database could not be read (%s); the JSON lists only", type(e).__name__)
         return {}

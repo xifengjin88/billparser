@@ -140,3 +140,69 @@ def test_the_built_in_aliases_are_seeded_once_and_never_overwrite(tmp_path):
     store.remove(rows[1]["scope"], rows[1]["label"])                # removed by a person: not seeded again
     assert service_catalog.seed_synonyms(e, cat) == 0
     assert (rows[1]["scope"], rows[1]["label"]) not in {(r["scope"], r["label"]) for r in store.entries()}
+
+
+# ---------------------------------------------------------------- the fetch scripts write the table
+def _script(name: str):
+    import importlib.util
+    spec = importlib.util.spec_from_file_location(f"{name}_test", ROOT / "scripts" / f"{name}.py")
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def test_fetch_aws_writes_codes_and_names_to_the_table(tmp_path, monkeypatch):
+    """Codes from the offer index; names from the Query API, else the loaded price files, else the built-in ones."""
+    url = f"sqlite:///{tmp_path / 'p.db'}"
+    monkeypatch.setenv("DATABASE_URL", url)
+    load_snapshot(engine_for(url), AWS)                      # its price files name AmazonEC2
+    mod = _script("fetch_aws")
+    monkeypatch.setattr(mod, "fetch_codes", lambda: ["AmazonEC2", "AmazonS3", "AWSNewThing"])
+    monkeypatch.setattr(mod, "fetch_names", lambda codes: {"AmazonS3": ["Amazon Simple Storage Service"]})
+    out = tmp_path / "aws.json"
+    assert mod.main(["--json", str(out)]) == 0
+    rows = {r["code"]: r["name"] for r in service_catalog.catalog_rows(engine_for(url))["aws"] if "n" not in r}
+    assert rows["AmazonS3"] == "Amazon Simple Storage Service"            # the Query API
+    assert rows["AmazonEC2"] == "Amazon Elastic Compute Cloud"            # the price files
+    assert "AWSNewThing" in rows                                          # a code with no name is still listed
+    assert json.loads(out.read_text())["AmazonS3"] == {"names": ["Amazon Simple Storage Service"]}
+    assert (Path(os.environ["CATALOG_DIR"]) / "catalog.msgpack").is_file()
+
+
+def test_fetch_azure_writes_the_whole_list_and_never_a_part(tmp_path, monkeypatch):
+    url = f"sqlite:///{tmp_path / 'p.db'}"
+    monkeypatch.setenv("DATABASE_URL", url)
+    mod = _script("fetch_azure")
+    got = {"P1": {"productId": "P1", "productName": "Azure Shiny", "serviceName": "Shiny", "serviceId": "S1",
+                  "serviceFamily": "Compute"}}
+    monkeypatch.setattr(mod, "fetch", lambda out, flt, pages: got)
+    assert mod.main(["--out", str(tmp_path / "az.json")]) == 0
+    assert [r["productId"] for r in service_catalog.catalog_rows(engine_for(url))["azure"]] == ["P1"]
+    monkeypatch.setattr(mod, "fetch", lambda out, flt, pages: {})
+    assert mod.main(["--out", str(tmp_path / "az.json"), "--max-pages", "1"]) == 0   # a part: the table stays
+    assert [r["productId"] for r in service_catalog.catalog_rows(engine_for(url))["azure"]] == ["P1"]
+
+
+def test_an_azure_meter_name_resolves_to_its_service(engine, tmp_path):
+    """Reseller and invoice files print the meter's name ("D4s v5", "P10 LRS Disk"); the price catalog knows each
+    meter's service. A name that two services share is left out (it would be a guess)."""
+    rows = service_catalog.catalog_rows(engine)
+    meters = {r["name"]: r["serviceName"] for r in rows["azure_meters"]}
+    assert meters["D4s v5"] == "Virtual Machines"
+    cat = build(tmp_path, rows)
+    r = Resolver(cat, tmp_path).resolve("D4s v5", "azure")
+    assert r.service == "Virtual Machines" and r.method == "name"
+    assert cat.sources["azure"]["meters"] == len(meters)
+
+
+def test_a_name_several_azure_services_share_is_never_guessed(tmp_path):
+    db = {"azure": [{"productId": f"P{i}", "productName": f"{s} product", "serviceName": s, "serviceId": f"S{i}",
+                     "serviceFamily": "Databases"} for i, s in enumerate(["SQL Database", "Azure Database for MySQL"])],
+          "azure_meters": [{"name": "General Purpose Data Stored", "serviceName": "SQL Database"}],
+          "azure_meters_ambiguous": [{"name": "vCore", "services": ["Azure Database for MySQL", "SQL Database"]}]}
+    r = Resolver(build(tmp_path, db), tmp_path)
+    got = r.resolve("vCore", "azure")
+    assert got.service is None and got.method == "ambiguous" and len(got.candidates) == 2
+    fam = r.resolve("Databases", "azure")                     # a service family, not one service
+    assert fam.service is None and fam.method == "ambiguous"
+    assert r.resolve("General Purpose Data Stored", "azure").service == "SQL Database"

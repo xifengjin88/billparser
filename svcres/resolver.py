@@ -206,6 +206,11 @@ class Resolver:
             if len(hits) > 1:
                 return Resolution(raw=raw, service_key=None, method="ambiguous",
                                   candidates=[(k, 100.0) for k in sorted(hits)])
+            # a name known to fit several services (a shared Azure meter name, a service family): no guess
+            if (amb := next((self.cat.ambiguous[f"{p}:{n}"] for p in provs
+                             if f"{p}:{n}" in self.cat.ambiguous), None)):
+                return Resolution(raw=raw, service_key=None, method="ambiguous",
+                                  candidates=[(k, 100.0) for k in amb[:5]])
 
         # 4a. a person's alias as a word prefix: an alias "Veeam" covers "Veeam Veeam Data Cloud Vault"
         if (key := self._synonym_prefix(raw, provs)):

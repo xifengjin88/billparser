@@ -5,6 +5,8 @@ productId -> service mapping, which is far smaller.
 The API refuses to page past 1,000,000 rows ($skip=1000000 answers HTTP 400), so one unfiltered listing never
 finishes. The script fetches one service family at a time; a family that reaches the limit is fetched again one
 region at a time. Each listing saves a checkpoint after every page and resumes where it stopped.
+The whole list replaces the Azure rows of the table service_product (DATABASE_URL), then the service catalog is
+rebuilt (--no-db: the JSON only).
 
 Usage:
     python scripts/fetch_azure.py                      # every family (20 to 60 minutes)
@@ -16,10 +18,16 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 import time
 from pathlib import Path
 
 import requests
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from billparse.db import default_url, engine_for  # noqa: E402
+from billparse.service_catalog import azure_rows, load_products, rebuild  # noqa: E402
+from billparse.settings import catalog_dir, data_dir, load_env  # noqa: E402
 
 API = "https://prices.azure.com/api/retail/prices"
 API_VERSION = "2023-01-01-preview"
@@ -75,7 +83,7 @@ def listing(session: requests.Session, ckpt: Path, odata_filter: str | None, max
             raise SkipLimit(odata_filter or "all")
 
 
-def fetch(out: Path, odata_filter: str | None, max_pages: int | None) -> None:
+def fetch(out: Path, odata_filter: str | None, max_pages: int | None) -> dict[str, dict]:
     session = requests.Session()
     folder = out.with_suffix(".parts")
     folder.mkdir(parents=True, exist_ok=True)
@@ -102,6 +110,7 @@ def fetch(out: Path, odata_filter: str | None, max_pages: int | None) -> None:
         products.update(got)
     out.write_text(json.dumps(products, indent=1))
     print(f"Wrote {len(products)} products to {out}")
+    return products
 
 
 def _safe(s: str) -> str:
@@ -123,11 +132,30 @@ def _get(session: requests.Session, url: str, params: dict | None, tries: int = 
     raise RuntimeError(f"Giving up on {url}")
 
 
-if __name__ == "__main__":
+def main(argv: list[str] | None = None) -> int:
+    load_env()
     ap = argparse.ArgumentParser()
-    ap.add_argument("--out", type=Path, default=Path("data/raw/azure_products.json"))
+    ap.add_argument("--out", type=Path, default=Path("data/raw/azure_products.json"),
+                    help="the JSON, and beside it the save files a stopped run continues from (<out>.parts)")
     ap.add_argument("--filter", dest="odata_filter")
     ap.add_argument("--max-pages", type=int)
-    a = ap.parse_args()
+    ap.add_argument("--no-db", action="store_true", help="do not write the table service_product")
+    ap.add_argument("--no-rebuild", action="store_true", help="do not rebuild CATALOG_DIR/catalog.msgpack")
+    a = ap.parse_args(argv)
     a.out.parent.mkdir(parents=True, exist_ok=True)
-    fetch(a.out, a.odata_filter, a.max_pages)
+    products = fetch(a.out, a.odata_filter, a.max_pages)
+    if a.no_db:
+        return 0
+    if a.odata_filter or a.max_pages:                   # a part of the list must not replace the whole one
+        print("A filtered or limited download is not written to the table (it would replace the whole list)")
+        return 0
+    engine = engine_for(default_url(data_dir()))
+    n = load_products(engine, "azure", azure_rows(products), "azure-retail-prices")
+    print(f"service_product: {n} Azure rows")
+    if not a.no_rebuild:
+        print(f"service catalog rebuilt: {rebuild(engine, catalog_dir())}")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
