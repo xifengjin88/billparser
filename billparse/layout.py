@@ -126,8 +126,8 @@ def extract_table(regions: list[Region], tspec: dict, amount_headers: list[str],
         if sheet_rx and not sheet_rx.search(region.name):
             continue
         hdr = find_header(region, start_anchor, expect_headers)
-        if hdr is None and cols is None:
-            continue
+        if hdr is None and (cols is None or region.kind == "sheet"):
+            continue                       # a sheet without the table's header is another table, not a next page
         if hdr is not None and (cols is None or region.kind == "sheet"):
             cols = build_columns(region, hdr, header_rows)
             header_texts = {c.name.lower() for c in cols}

@@ -29,14 +29,17 @@ def features(row: Row, amount_text: str, label_text: str, header_texts: set[str]
              median_x: float, prev_label: str | None) -> dict:
     texts = [c.text for c in row.cells if c.text]
     lowered = {t.lower() for t in texts}
+    # a total row is a label and an amount: a row that fills most of the table's columns is a line, even when a
+    # name in it says "total" (an Azure meter "... Total ...", a resource "vm-total-backup")
+    wide = bool(header_texts) and len(texts) >= max(4, 0.6 * len(header_texts))
     return {
         "n_cells": len(texts),
         "has_amount": bool(amount_text) and is_numberish(amount_text),
         "has_label": bool(label_text),
         "bold": row.bold,
         "indent_delta": round(row.first_x - median_x, 1),
-        "total_kw": bool(TOTAL_RX.search(row.text)),
-        "subtotal_kw": bool(SUBTOTAL_RX.search(row.text)),
+        "total_kw": bool(TOTAL_RX.search(row.text)) and not wide,
+        "subtotal_kw": bool(SUBTOTAL_RX.search(row.text)) and not wide,
         "tax_kw": bool(TAX_RX.search(label_text or row.text)),
         "has_formula_sum": any(_vertical_sum(c.formula) for c in row.cells if c.formula),
         "header_overlap": (len(lowered & header_texts) / max(1, len(header_texts))) if header_texts else 0.0,
