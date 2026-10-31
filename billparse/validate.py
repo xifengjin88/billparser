@@ -340,8 +340,12 @@ class RowStats:
         """usage_hours: hourly usage of one resource within its line's window."""
         factor = map_unique(df["unit"], lambda u: (n[1] if (n := unit_of(u)) and n[0] == "hour" else None)
                             if isinstance(u, str) else None)
-        start = pd.to_datetime(df["charge_start"], errors="coerce", utc=True)
-        end = pd.to_datetime(df["charge_end"], errors="coerce", utc=True)
+        start = pd.to_datetime(df["charge_start"], errors="coerce", utc=True, format="mixed")
+        end = pd.to_datetime(df["charge_end"], errors="coerce", utc=True, format="mixed")
+        # an end printed as a date ("2026-05-31") is the last day of use: its whole day counts (a CUR's end has a
+        # time, 2026-06-01T00:00:00Z, and is exclusive)
+        plain = map_unique(df["charge_end"], lambda v: isinstance(v, str) and bool(PLAIN_DATE.match(v.strip())))
+        end = end + pd.to_timedelta(plain.astype(bool).astype(int), unit="D")
         hours = (end - start).dt.total_seconds() / 3600
         qty = pd.to_numeric(df["quantity"], errors="coerce")
         # hours counted per core or GPU (GCP core SKUs, Azure vCore meters, Fargate vCPU) are hours times the
@@ -350,8 +354,11 @@ class RowStats:
         for c in ("description", "usage_type", "meter_name"):
             per_unit |= map_unique(_col(df, c), lambda v: bool(PER_CORE.search(v)) if isinstance(v, str)
                                    else False).astype(bool)
+        # one Azure ID can bill many instances (an App Service plan, a scale set): only a VM's is one machine
+        azure = _col(df, "provider").astype(str).str.lower().eq("azure")
+        one_vm = map_unique(df["resource_id"], lambda v: isinstance(v, str) and bool(AZURE_VM_ID.search(v)))
         m = (_usage(df) & factor.notna() & df["resource_id"].notna() & df["resource_id"].astype(str).ne("")
-             & hours.gt(0) & qty.notna() & ~per_unit)
+             & hours.gt(0) & qty.notna() & ~per_unit & (~azure | one_vm.astype(bool)))
         if not m.any():
             return
         used = qty[m] * factor[m].astype(float)
@@ -655,6 +662,8 @@ def _plausibility(s: RowStats) -> list[Check]:
 
 
 # ---------------------------------------------------------------- the price checks
+PLAIN_DATE = re.compile(r"^\d{4}-\d{2}-\d{2}$|^\d{1,2}/\d{1,2}/\d{4}$")       # usage_hours: an end with no time
+AZURE_VM_ID = re.compile(r"/virtualmachines/[^/]+$", re.I)                       # one VM (a scale set's instance too)
 PER_CORE = re.compile(r"(?<![a-z])(?:v?cpus?|v?cores?|gpus?)(?![a-z])", re.I)   # usage_hours: per core or GPU
 PRICE_CHECKS = ("catalog_grounding", "printed_list_price", "implied_unit_price", "price_units", "usage_hours",
                 "cost_order", "grounding_values")

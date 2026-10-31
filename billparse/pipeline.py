@@ -36,8 +36,10 @@ from .attributes import normalize_regions
 from .docmodel import Document, load_bytes
 from .fingerprint import fingerprint, similarity, table_headers
 from .induce import derive_spec
+from .layout import find_header
 from .mapper import MapContext, propose, propose_all
 from .pricing import KeyCache, PriceDefaults, PriceStats, apply_discount, drop_prices, infer_discount, match_prices
+from .provider import detect_provider, fill_provider
 from .settings import catalog_dir, data_dir
 from .spec import Extraction, SpecError, check_spec, detect_score, run
 from .store import Store
@@ -216,8 +218,13 @@ class Pipeline:
                            "feedback": ["No route produced rows"]}
                 return self._finish(doc, None, attempts, verdict, fp, None, t0)
 
-            # final pass: resolve services, re-validate with resolution share, analyze
+            # final pass: the document's provider for the lines that do not say, resolve services, re-validate with
+            # resolution share, analyze
             rows = best.ext.rows
+            found = detect_provider(rows, _headers(doc), doc.name)
+            if found:
+                found["lines_filled"] = fill_provider(rows, found)
+                best.ext.provider = found
             share = resolve_services(rows, self.s.catalog_dir)
             if best.verdict.get("status") == "auxiliary":           # an inventory, a price sheet: not cost lines
                 return self._finish(doc, best, attempts, dict(best.verdict, completeness="consistent"), fp, share, t0)
@@ -733,6 +740,7 @@ class Pipeline:
             "status": verdict["status"], "confidence": verdict["confidence"],
             "completeness": verdict.get("completeness"),
             "evidence": (best.ext.evidence if best and best.ext and big is None else {}),
+            "provider_detected": best.ext.provider if best and best.ext else None,
             "spec": spec_info, "rows": n_rows,
             "service_resolution": round(share, 3) if share is not None else None,
             "stated_totals": [{k: (v if k != "src" or v is None else str(v)) for k, v in t.items()} for t in stated][:10],
@@ -834,6 +842,17 @@ def doc_text(doc: Document, max_chars: int = 20000) -> str:
 
 
 # ---------------------------------------------------------------- previews
+def _headers(doc: Document, max_regions: int = 6) -> list[str]:
+    """The column headers the document prints (frames' columns, each sheet's header row): evidence of its provider."""
+    out: list[str] = []
+    for r in doc.regions[:max_regions]:
+        if r.is_frame:
+            out += [str(c) for c in r.df.columns]
+        elif r.rows and (i := find_header(r)) is not None:
+            out += [c.text for c in r.rows[i].cells if c.text]
+    return list(dict.fromkeys(out))
+
+
 def build_preview(doc: Document, max_rows: int = 40, max_regions: int = 4) -> dict:
     regions = []
     for r in doc.regions[:max_regions]:
