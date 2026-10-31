@@ -193,6 +193,27 @@ class ServiceSynonymRow(SQLModel, table=True):
     updated_by: str | None = None
 
 
+class ServiceProductRow(SQLModel, table=True):
+    """A product or service a provider publishes (service_catalog.py): the code lists the service catalog resolves
+    against, without prices. One table for every provider; each download of a provider replaces its rows.
+        azure  product_id productId, product_name productName, service_id serviceId, service_name serviceName,
+               family serviceFamily
+        aws    product_id and service_id the service code (AmazonEC2), product_name and service_name its name
+        gcp    product_id and service_id the service ID, product_name and service_name its display name"""
+    __tablename__: ClassVar[str] = "service_product"
+    __table_args__ = (sa.UniqueConstraint("provider", "product_id", "product_name", name="service_product_key"),)
+    id: int | None = Field(default=None, primary_key=True)
+    provider: str = Field(index=True)
+    product_id: str
+    product_name: str = ""                            # "": none (part of the unique key, so never null)
+    service_id: str | None = None
+    service_name: str | None = None
+    family: str | None = None
+    attributes: dict[str, Any] | None = Field(default=None, sa_type=JSON)   # what only one provider has
+    source: str                                       # the download: azure-retail-prices, aws-price-list, ...
+    fetched_at: float
+
+
 class AppUserRow(SQLModel, table=True):
     """A person admitted to the web app: a Google account of the allowed domain that gave a valid invite code once."""
     __tablename__: ClassVar[str] = "app_users"

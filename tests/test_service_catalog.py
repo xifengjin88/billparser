@@ -94,3 +94,49 @@ def test_resolution_finds_a_service_only_the_price_catalog_has(engine, tmp_path,
     analyze_mod.resolve_services(rows, data)
     monkeypatch.setattr(analyze_mod, "_RESOLVER", None)
     assert rows["service_code"].notna().all()
+
+
+# ---------------------------------------------------------------- the code lists (service_product) and seed aliases
+def test_a_code_list_in_the_table_resolves_and_a_new_download_replaces_it(tmp_path):
+    e = engine_for(f"sqlite:///{tmp_path / 'p.db'}")
+    rows = [{"product_id": "P1", "product_name": "Azure Shiny Product", "service_id": "S1",
+             "service_name": "Shiny Service", "family": "Compute"}]
+    assert service_catalog.load_products(e, "azure", rows) == 1
+    data = tmp_path / "svc"
+    (data / "raw").mkdir(parents=True)
+    service_catalog.rebuild(e, data)
+    cat = Catalog.load(data / "catalog.msgpack")
+    assert Resolver(cat, data).resolve("Azure Shiny Product", "azure").service == "Shiny Service"
+    assert cat.sources["azure"]["db"] == 1
+    # the next download replaces the list; an empty one changes nothing
+    service_catalog.load_products(e, "azure", [dict(rows[0], product_id="P2", product_name="Azure Other")])
+    assert service_catalog.load_products(e, "azure", []) == 0
+    got = service_catalog.catalog_rows(e)["azure"]
+    assert [r["productId"] for r in got] == ["P2"]
+
+
+def test_the_json_lists_load_into_the_table(tmp_path):
+    rows = service_catalog.products_from_json(FX / "raw")
+    assert rows["azure"] and rows["aws"] and all(r["product_id"] for p in rows.values() for r in p)
+    e = engine_for(f"sqlite:///{tmp_path / 'p.db'}")
+    for p, r in rows.items():
+        assert service_catalog.load_products(e, p, r) == len({(x["product_id"], x["product_name"]) for x in r})
+
+
+def test_the_built_in_aliases_are_seeded_once_and_never_overwrite(tmp_path):
+    e = engine_for(f"sqlite:///{tmp_path / 'p.db'}")
+    from billparse.synonyms import ServiceSynonymStore
+    store = ServiceSynonymStore(e)
+    cat = build(FX / "raw")
+    rows = service_catalog.seed_rows(cat)
+    assert rows and {r["scope"] for r in rows} >= {"aws"}
+    mine = rows[0]
+    store.add(mine["scope"], mine["label"], "aws:Something Else", source="admin", by="me")   # a person's first
+    added = service_catalog.seed_synonyms(e, cat)
+    assert added == len(rows) - 1
+    by = {(r["scope"], r["label"]): r for r in store.entries()}
+    assert by[(mine["scope"], mine["label"])]["service_key"] == "aws:Something Else"
+    assert {r["source"] for k, r in by.items() if k != (mine["scope"], mine["label"])} == {"seed"}
+    store.remove(rows[1]["scope"], rows[1]["label"])                # removed by a person: not seeded again
+    assert service_catalog.seed_synonyms(e, cat) == 0
+    assert (rows[1]["scope"], rows[1]["label"]) not in {(r["scope"], r["label"]) for r in store.entries()}
