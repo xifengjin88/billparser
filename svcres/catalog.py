@@ -43,6 +43,9 @@ class Catalog:
     products: dict[str, str] = field(default_factory=dict)
     built_at: float = 0.0
     sources: dict[str, dict[str, int]] = field(default_factory=dict)   # provider -> {"db": n, "raw": n} entries
+    # "provider:normalized name" -> candidate service keys: names that are known to fit several services (an Azure
+    # meter name two services share, an Azure service family): never guessed (fuzzy, prefix), always ambiguous
+    ambiguous: dict[str, list[str]] = field(default_factory=dict)
 
     # ---------- building ----------
     def add_service(self, provider: str, name: str, category: str, family: str | None = None,
@@ -69,7 +72,8 @@ class Catalog:
     # ---------- persistence ----------
     def save(self, path: Path) -> None:
         blob = {"services": self.services, "codes": self.codes, "names": self.names,
-                "products": self.products, "built_at": self.built_at, "sources": self.sources}
+                "products": self.products, "built_at": self.built_at, "sources": self.sources,
+                "ambiguous": self.ambiguous}
         tmp = path.with_name(path.name + ".tmp")           # whole or not at all: workers load it while it changes
         tmp.write_bytes(msgpack.packb(blob))
         tmp.replace(path)
@@ -90,6 +94,8 @@ def build(raw_dir: Path, db: dict[str, list[dict]] | None = None) -> Catalog:
     db = db or {}
     cat = Catalog(built_at=time.time())
     _build_azure(cat, raw_dir / "azure_products.json", db.get("azure") or [])
+    _azure_meters(cat, db.get("azure_meters") or [])
+    _azure_ambiguous(cat, db.get("azure_meters_ambiguous") or [])
     _azure_aliases(cat)
     _build_aws(cat, raw_dir / "aws_services.json", db.get("aws") or [])
     _build_gcp(cat, raw_dir / "gcp_services.json", db.get("gcp") or [])
@@ -129,6 +135,36 @@ def _build_azure(cat: Catalog, path: Path, rows: list[dict]) -> None:
         # Product names ("Virtual Machines Dv3 Series") are what invoices often show.
         if p.get("productName"):
             cat.add_name("azure", p["productName"], key, product=True)
+
+
+def _azure_meters(cat: Catalog, rows: list[dict]) -> None:
+    """rows: name, serviceName: Azure meter names that belong to one service ("D8s v5": Virtual Machines), as product
+    names of that service (a product name already there keeps its service)."""
+    n = 0
+    for r in rows:
+        key = f"azure:{r.get('serviceName')}"
+        if r.get("name") and key in cat.services:
+            cat.add_name("azure", r["name"], key, product=True)
+            n += 1
+    if rows:
+        cat.sources.setdefault("azure", {})["meters"] = n
+
+
+def _azure_ambiguous(cat: Catalog, rows: list[dict]) -> None:
+    """Names that fit several Azure services: meter names services share ("vCore": SQL Database, MySQL, ...), from
+    rows (name, services), and the service families ("Analytics"), with the catalog's services of that family."""
+    for r in rows:
+        keys = sorted(k for s in r.get("services") or [] if (k := f"azure:{s}") in cat.services)
+        if r.get("name") and len(keys) > 1:
+            cat.ambiguous[f"azure:{norm(r['name'])}"] = keys
+    by_family: dict[str, list[str]] = {}
+    for key, s in cat.services.items():
+        if s["provider"] == "azure" and s.get("family"):
+            by_family.setdefault(s["family"], []).append(key)
+    for fam, keys in by_family.items():
+        n = f"azure:{norm(fam)}"
+        if len(keys) > 1 and n not in cat.names:               # a family that is also a service's name stays it
+            cat.ambiguous[n] = sorted(keys)
 
 
 def _azure_aliases(cat: Catalog) -> None:
