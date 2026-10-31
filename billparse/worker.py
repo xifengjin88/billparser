@@ -265,7 +265,7 @@ def download_prices(dest: Path) -> int:
 def download_azure_prices(dest: Path) -> int:
     """The Azure fetcher's download into dest (its exit code): AZURE_PRICE_SERVICES (comma separated; empty: the
     fetcher's default services; "all": every service) in AZURE_PRICE_REGIONS (comma separated; empty: every region)."""
-    args = ["--out", str(dest)]
+    args = ["--out", str(dest), "--progress-every", "0"]
     services = [s.strip() for s in (os.environ.get("AZURE_PRICE_SERVICES") or "").split(",") if s.strip()]
     if [s.lower() for s in services] == ["all"]:
         args.append("--all-services")
