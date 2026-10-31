@@ -104,13 +104,22 @@ class Running:
         self._thread.start()
 
     def _beat(self) -> None:
-        renewed = time.monotonic()
+        renewed, failed = time.monotonic(), 0
         while not self._done.wait(STATE_SECONDS):
             renew = time.monotonic() - renewed >= HEARTBEAT_SECONDS
             try:
                 state = jobs.heartbeat(self.store, self.job["id"], self.worker, renew=renew)
-            except Exception:                               # noqa: BLE001  a database hiccup: try again next second
+            except Exception as e:                          # noqa: BLE001  a database hiccup: try again next second
+                # said, so a lost lease (another worker runs the job again) has a cause in the log: the first
+                # failure, then every 10th while they go on
+                if failed % 10 == 0:
+                    log.warning("job %s: heartbeat failed %d time(s) in a row, lease %.0f s old: %s: %s",
+                                self.job["id"], failed + 1, time.monotonic() - renewed, type(e).__name__, e)
+                failed += 1
                 continue
+            if failed:
+                log.warning("job %s: heartbeat works again after %d failure(s)", self.job["id"], failed)
+                failed = 0
             if renew:
                 renewed = time.monotonic()
             if state is None:

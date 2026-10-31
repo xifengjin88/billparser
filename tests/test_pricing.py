@@ -352,7 +352,7 @@ def test_the_contract_carries_the_price_fields(tmp_path):
     r = pipe.parse_file(_cur(tmp_path, list_cost=False))
     doc = _doc(pipe, r["sha256"])
     out = to_schema(doc)
-    assert out.schema_version == "1.9" and out.pricing is not None
+    assert out.schema_version == "1.10" and out.pricing is not None
     priced = [c for c in doc.charges if c.price_match_level]
     assert priced and all(c.price_match_level.origin == "inferred" and c.price_match_level.source == "price_catalog"
                           for c in priced)
@@ -386,7 +386,7 @@ def test_post_parse_returns_the_price_fields(tmp_path, monkeypatch):
             res = client.post("/parse?assume_os=Linux", files={"file": ("cur.csv.gz", fh)})
         assert res.status_code == 200, res.text
         doc = res.json()["document"]
-        assert doc["schema_version"] == "1.9" and doc["pricing"]["defaults"] == {"operating_system": "Linux"}
+        assert doc["schema_version"] == "1.10" and doc["pricing"]["defaults"] == {"operating_system": "Linux"}
         assert any(c.get("price_match_level") for c in doc["charges"])
         sha = res.json()["sha256"]
         task = client.post(f"/documents/{sha}/reprice", json={"tenancy": "Shared"}).json()
@@ -448,6 +448,52 @@ def test_assume_region_prices_lines_without_a_region(catalog):
     assert rows.loc[0, "price_match_level"] == "assumed" and rows.loc[0, "catalog_sku_id"] == LINUX
     assert "region=us-east-1 (request)" in rows.loc[0, "price_assumptions"]
     assert pd.isna(rows.loc[0, "region"])                        # the line's own column stays as parsed
+
+
+def test_auto_defaults_take_the_files_region_else_the_setting_and_say_so(catalog, monkeypatch):
+    """With PRICE_AUTO_DEFAULTS on, a line that prints no region or OS is priced with the file's own most common
+    value, else the setting; each one is noted on its lines and counted in pricing.defaults_used, and the request's
+    value still wins."""
+    monkeypatch.setenv("PRICE_AUTO_DEFAULTS", "1")
+    desc = "Amazon EC2 m5.xlarge Instance Hour"
+    rows = _lines(description=[desc] * 3, region=[None, "us-east-1", "us-east-1"], billed_cost=[1.92, 1.0, 1.0])
+    extract(rows)
+    stats = match_prices(rows, catalog)
+    first = rows.loc[0]
+    assert first["price_match_level"] == "assumed" and first["catalog_sku_id"] == LINUX
+    assert "region=us-east-1 (file)" in first["price_assumptions"]
+    assert "operating_system=Linux (default)" in first["price_assumptions"]
+    used = {(d["field"], d["value"], d["source"]): d["lines"] for d in stats.summary()["defaults_used"]}
+    assert used == {("region", "us-east-1", "file"): 1, ("operating_system", "Linux", "default"): 3}
+    assert pd.isna(rows.loc[0, "region"]) and ("operating_system" not in rows or pd.isna(rows.loc[0, "operating_system"]))
+    # no line prints a region: the setting; an empty setting assumes nothing
+    rows = _lines(description=[desc], region=[None])
+    extract(rows)
+    match_prices(rows, catalog)
+    assert "region=us-east-1 (default)" in rows.loc[0, "price_assumptions"]
+    monkeypatch.setenv("PRICE_DEFAULT_OS", "")
+    rows = _lines(description=[desc])
+    extract(rows)
+    match_prices(rows, catalog)
+    assert rows.loc[0, "price_match_level"] != "assumed" or "operating_system" not in rows.loc[0, "price_assumptions"]
+    # the request wins over both
+    rows = _lines(description=[desc], region=[None])
+    extract(rows)
+    stats = match_prices(rows, catalog, PriceDefaults(region="us-east-1", operating_system="Linux"))
+    assert [(d["source"]) for d in stats.summary()["defaults_used"]] == ["request", "request"]
+
+
+def test_a_line_with_its_own_identifier_assumes_nothing(catalog, monkeypatch):
+    monkeypatch.setenv("PRICE_AUTO_DEFAULTS", "1")
+    rows = _lines(sku_id=[LINUX], region=[None])
+    match_prices(rows, catalog)
+    assert rows.loc[0, "price_match_level"] == "exact" and not isinstance(rows.loc[0, "price_assumptions"], str)
+
+
+def test_lines_without_a_quantity_say_why_they_are_not_priced(catalog):
+    rows = _lines(quantity=[None, None], description=["Amazon EC2", "Amazon S3"])
+    stats = match_prices(rows, catalog)
+    assert not stats.levels and any("No usage line prints a quantity" in w for w in stats.summary()["warnings"])
 
 
 class _Day:

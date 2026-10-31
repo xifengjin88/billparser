@@ -34,6 +34,11 @@ def pipe(tmp_path):
     analyze_mod._RESOLVER = None
 
 
+
+def _version(v: str) -> tuple[int, ...]:
+    """"1.10" -> (1, 10): versions compare as numbers ("1.10" < "1.5" as text)."""
+    return tuple(int(x) for x in v.split("."))
+
 def parse(pipe: Pipeline, path: Path) -> tuple[dict, Document]:
     r = pipe.parse_file(path)
     return r, Document.model_validate_json(pipe.store.part(r["sha256"], "doc"))
@@ -220,7 +225,7 @@ def test_rollup_keeps_coverage_apart_and_sums_effective_cost(pipe, monkeypatch):
 
 
 def test_schema_version():
-    assert SCHEMA_VERSION >= "1.4"                    # 1.4 added the cost types (task 03 moved it to 1.5)
+    assert _version(SCHEMA_VERSION) >= (1, 4)          # 1.4 added the cost types (task 03 moved it to 1.5)
 
 
 def test_cur_effective_function():

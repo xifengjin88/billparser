@@ -493,3 +493,29 @@ def test_the_schedules_endpoint_shows_each_schedule(client, store, monkeypatch):
     r = client.post("/nightly")
     assert r.status_code == 202 and r.json()["kind"] == "nightly"
     assert client.get("/jobs/schedules").json()[1]["last_job"]["state"] == "queued"
+
+
+def test_heartbeat_failures_are_logged(store, monkeypatch, caplog):
+    """A heartbeat that cannot reach the database is retried, and said in the log: a lease lost that way (the job then
+    runs again on another worker) has a cause to find."""
+    monkeypatch.setattr(worker, "STATE_SECONDS", 0.02)
+    monkeypatch.setattr(worker, "HEARTBEAT_SECONDS", 0.0)
+    real, calls = jobs.heartbeat, {"n": 0}
+
+    def flaky(*a, **k):
+        calls["n"] += 1
+        if calls["n"] <= 2:
+            raise TimeoutError("QueuePool limit reached")
+        return real(*a, **k)
+    monkeypatch.setattr(jobs, "heartbeat", flaky)
+    jobs.enqueue(store, "parse", "small", name="x", sha256="a" * 64)
+    job = jobs.claim(store, ["small"], "w")
+    with caplog.at_level("WARNING", logger="billparse.worker"):
+        run = worker.Running(store, job, "w")
+        deadline = time.monotonic() + 5
+        while calls["n"] < 4 and time.monotonic() < deadline:
+            time.sleep(0.02)
+        run.close()
+    text = caplog.text
+    assert "heartbeat failed 1 time(s) in a row" in text and "TimeoutError: QueuePool limit reached" in text
+    assert "heartbeat works again after 2 failure(s)" in text and not run.lost

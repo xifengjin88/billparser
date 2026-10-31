@@ -37,7 +37,9 @@ from __future__ import annotations
 
 import datetime as dt
 import logging
+import os
 import re
+from collections import Counter
 from dataclasses import asdict, dataclass, field
 from typing import TYPE_CHECKING
 
@@ -92,12 +94,70 @@ class PriceDefaults:
         return {k: v for k, v in asdict(self).items() if v}
 
 
+# defaults for what a line does not print, when the request gives none: the file's own most common value, else these
+# settings (an empty one: none). Each is noted on its lines ("region=eastus (default)") and in pricing.defaults_used,
+# and its lines are `assumed`. PRICE_AUTO_DEFAULTS=0: only the request's.
+AUTO_FIELDS = ("region", "operating_system")
+CONFIG_DEFAULTS = {("aws", "region"): ("PRICE_DEFAULT_REGION_AWS", "us-east-1"),
+                   ("azure", "region"): ("PRICE_DEFAULT_REGION_AZURE", "eastus"),
+                   ("aws", "operating_system"): ("PRICE_DEFAULT_OS", "Linux"),
+                   ("azure", "operating_system"): ("PRICE_DEFAULT_OS", "Linux")}
+
+
+def auto_defaults_on() -> bool:
+    return os.environ.get("PRICE_AUTO_DEFAULTS", "1").strip().lower() not in ("0", "false", "no", "off")
+
+
+def _fallbacks(rows: pd.DataFrame, mask: pd.Series, provider: str, defaults: PriceDefaults,
+               cache: KeyCache) -> dict[str, tuple[str, str]]:
+    """field -> (value, source) for the fields the request does not give: the most common value the provider's
+    priced lines print (source "file"), else the setting (source "default")."""
+    if not auto_defaults_on():
+        return {}
+    given = defaults.given()
+    out = {}
+    for f in AUTO_FIELDS:
+        if f in given:
+            continue
+        key = (provider, f)
+        if key not in cache.inferred:
+            vals = _text(_col(rows, f))[mask].dropna()
+            vals = vals[vals.astype(str).str.strip().ne("")]
+            cache.inferred[key] = str(Counter(vals.tolist()).most_common(1)[0][0]).strip() if len(vals) else None
+        if cache.inferred[key]:
+            out[f] = (cache.inferred[key], "file")
+        else:
+            env, dflt = CONFIG_DEFAULTS[key]
+            v = os.environ.get(env, dflt).strip()
+            if v:
+                out[f] = (v, "default")
+    return out
+
+
+NOTE_RX = re.compile(r"^([a-z_]+)=(.+) \((request|file|default)\)$")
+
+
+def _count_defaults(stats: PriceStats, provider: str, notes: np.ndarray, cost: np.ndarray) -> None:
+    """Every default a line was priced with (its price_assumptions), by provider, field, value and source."""
+    for text in pd.unique(notes):
+        if not text:
+            continue
+        m = notes == text
+        for item in str(text).split("; "):
+            if (hit := NOTE_RX.match(item)):
+                got = stats.defaults_used.setdefault((provider, hit[1], hit[2], hit[3]), [0, 0.0])
+                got[0] += int(m.sum())
+                got[1] += float(cost[m].sum())
+
+
 class KeyCache:
     """Lookup results by (key, date), shared by the chunks of one large file: a key is looked up once per file."""
 
     def __init__(self) -> None:
         self.results: dict[tuple[str, str], dict | None] = {}
         self.exists: dict[str, bool] = {}                 # key text -> some product has its SKU, usage or type
+        self.inferred: dict[tuple[str, str], str | None] = {}   # (provider, field) -> the file's value: the first
+        # chunk decides, so every chunk of a large file assumes the same
 
     def __contains__(self, k: tuple[str, str]) -> bool:
         return k in self.results
@@ -121,6 +181,7 @@ class PriceStats:
     warnings: list = field(default_factory=list)
     lookups: int = 0                                  # keys sent to the catalog
     undated_as_of: str | None = None                  # the date of lines without one (period start, or the day priced)
+    defaults_used: dict = field(default_factory=dict)  # (provider, field, value, source) -> [lines, |billed cost|]
 
     def note(self, msg: str) -> None:
         if msg not in self.warnings:
@@ -140,6 +201,10 @@ class PriceStats:
             got[1] += s
             got[2] |= svc
         self.below_list += other.below_list
+        for k, (n, c) in other.defaults_used.items():
+            got = self.defaults_used.setdefault(k, [0, 0.0])
+            got[0] += n
+            got[1] += c
         self.lookups += other.lookups
         self.undated_as_of = self.undated_as_of or other.undated_as_of
         for w in other.warnings:
@@ -162,6 +227,9 @@ class PriceStats:
         return {
             "catalog_version": self.catalog_version,
             "defaults": self.defaults,
+            "defaults_used": [{"provider": pv, "field": f, "value": v, "source": src, "lines": n, "cost": round(c, 2)}
+                              for (pv, f, v, src), (n, c) in sorted(self.defaults_used.items(),
+                                                                    key=lambda kv: (-kv[1][1], -kv[1][0]))],
             "undated_as_of": self.undated_as_of,
             "match_rate": {"sure": share(("exact", "attributes"), 1, cost), "assumed": share(("assumed",), 1, cost),
                            "sure_lines": share(("exact", "attributes"), 0, lines),
@@ -233,6 +301,11 @@ def match_prices(rows: pd.DataFrame, catalog: PriceCatalog | None, defaults: Pri
     priced = usage & (provider.eq("aws") | (gcp & gcp_on)) & qty.notna()
     azure_priced = azure & qty.notna() if azure_on else pd.Series(False, index=rows.index)
     if not priced.any() and not azure_priced.any():
+        # usage lines of a provider the catalog has, none with a quantity: say why nothing was priced
+        known = usage & (provider.eq("aws") | (azure & azure_on) | (gcp & gcp_on))
+        if known.any() and qty[known].isna().all():
+            stats.note("No usage line prints a quantity, so no line can be priced (a total per service or per day "
+                       "has no list price)")
         return stats
     try:
         version = catalog.version if catalog is not None else None
@@ -246,9 +319,12 @@ def match_prices(rows: pd.DataFrame, catalog: PriceCatalog | None, defaults: Pri
     cache = cache or KeyCache()
     try:
         if priced.any():
-            _price(rows, priced, qty, cost, catalog, defaults, cache, stats, period_start)
+            aws = priced & provider.eq("aws")
+            _price(rows, priced, qty, cost, catalog, defaults, cache, stats, period_start,
+                   fallback=_fallbacks(rows, aws, "aws", defaults, cache) if aws.any() else {})
         if azure_priced.any():
-            _price(rows, azure_priced, qty, cost, catalog, defaults, cache, stats, period_start, kind="azure")
+            _price(rows, azure_priced, qty, cost, catalog, defaults, cache, stats, period_start, kind="azure",
+                   fallback=_fallbacks(rows, azure_priced, "azure", defaults, cache))
     except Exception as e:                       # noqa: BLE001  the parse never fails because of pricing
         log.exception("price matching failed")
         for c in PRICE_COLUMNS:
@@ -269,7 +345,8 @@ def _has_gcp(catalog: PriceCatalog | None) -> bool:
         return False
 
 
-def _keys(p: pd.DataFrame, defaults: PriceDefaults) -> tuple[pd.DataFrame, pd.Series, pd.Series]:
+def _keys(p: pd.DataFrame, defaults: PriceDefaults,
+          fallback: dict[str, tuple[str, str]] | None = None) -> tuple[pd.DataFrame, pd.Series, pd.Series]:
     """(catalog keys, assumptions as text, whether an attribute was assumed) of the priced lines."""
     keys = pd.DataFrame(index=p.index)
     keys["rate_code"] = _text(_col(p, "sku_price_id"))
@@ -298,6 +375,9 @@ def _keys(p: pd.DataFrame, defaults: PriceDefaults) -> tuple[pd.DataFrame, pd.Se
     open_ = keys["instance_type"].notna() & keys[["rate_code", "sku", "usage_type"]].isna().all(axis=1)
     for col, value in defaults.given().items():
         assume(open_ & keys[col].isna(), col, value, "request")
+    # then the file's own value, else the setting (_fallbacks); never on a GCP key (its SKU is its price)
+    for col, (value, why) in (fallback or {}).items():
+        assume(open_ & ~gcp & keys[col].isna(), col, value, why)
     # an OS (named, or the request's) and no SQL Server in the words: no pre-installed software
     assume(ec2 & keys["pre_installed_sw"].isna() & keys["operating_system"].notna(), "pre_installed_sw", "NA", "text")
     text = pd.Series("", index=p.index)
@@ -330,8 +410,8 @@ def _azure_os(os_: object, lic: object) -> str | None:
     return "Windows" if o == "Windows" and lic_ != "Bring your own license" else "Linux"
 
 
-def _azure_keys(p: pd.DataFrame, defaults: PriceDefaults,
-                services: set[str]) -> tuple[pd.DataFrame, pd.Series, pd.Series]:
+def _azure_keys(p: pd.DataFrame, defaults: PriceDefaults, services: set[str],
+                fallback: dict[str, tuple[str, str]] | None = None) -> tuple[pd.DataFrame, pd.Series, pd.Series]:
     """(catalog keys, assumptions as text, whether an attribute was assumed) of Azure lines: the meter ID, else the
     meter name (meter_name, else the description: MeterName) in the line's region, within its service (MeterCategory
     = the retail serviceName, when the catalog has it), and for VM meters the meter's OS."""
@@ -359,6 +439,17 @@ def _azure_keys(p: pd.DataFrame, defaults: PriceDefaults,
         keys.loc[m, "operating_system"] = _azure_os(given["operating_system"], given.get("license_model"))
         notes.append(pd.Series(np.where(m, f"operating_system={given['operating_system']} (request)", ""),
                                index=p.index))
+    fallback = fallback or {}
+    if "region" in fallback:              # a meter ID is matched in any region: only lines without one need it
+        value, why = fallback["region"]
+        m = keys["region"].isna() & keys["usage_type"].isna()
+        keys.loc[m, "region"] = nz.region(value).lower()
+        notes.append(pd.Series(np.where(m, f"region={value} ({why})", ""), index=p.index))
+    if "operating_system" in fallback:
+        value, why = fallback["operating_system"]
+        m = vm & keys["operating_system"].isna() & keys["usage_type"].isna()
+        keys.loc[m, "operating_system"] = _azure_os(value, None)
+        notes.append(pd.Series(np.where(m, f"operating_system={value} ({why})", ""), index=p.index))
     text = pd.Series("", index=p.index)
     for n in notes:
         text = text.str.cat(n, sep="; ").str.strip("; ")
@@ -416,8 +507,9 @@ REGION_CODE = re.compile(r"^[a-z]{2}(?:-[a-z]+)+-\d+$")
 
 def _price(rows: pd.DataFrame, priced: pd.Series, qty: pd.Series, cost: pd.Series, catalog: PriceCatalog,
            defaults: PriceDefaults, cache: KeyCache, stats: PriceStats, period_start: str | None,
-           kind: str = "aws") -> None:
-    """kind: aws, or azure (the meter ID, else the meter name in its region: _azure_keys)."""
+           kind: str = "aws", fallback: dict[str, tuple[str, str]] | None = None) -> None:
+    """kind: aws, or azure (the meter ID, else the meter name in its region: _azure_keys). fallback: field -> (value,
+    source) for what a line does not print and the request does not give (_fallbacks)."""
     azure = kind == "azure"
     source, key_columns = (AZURE_SOURCE, AZURE_KEYS) if azure else (SOURCE_COLUMNS, KEY_COLUMNS)
     # the priced lines, with only the columns read here (a copy of every column of a large file costs seconds)
@@ -429,10 +521,10 @@ def _price(rows: pd.DataFrame, priced: pd.Series, qty: pd.Series, cost: pd.Serie
     first = pd.Series(np.arange(len(raw))).groupby(codes).first().to_numpy()
     uniq = raw.iloc[first].reset_index(drop=True)
     if azure:
-        keys, notes, assumed = _azure_keys(uniq, defaults, catalog.services("azure"))
+        keys, notes, assumed = _azure_keys(uniq, defaults, catalog.services("azure"), fallback or {})
         guessed = np.zeros(len(keys), dtype=bool)
     else:
-        keys, notes, assumed = _keys(uniq, defaults)
+        keys, notes, assumed = _keys(uniq, defaults, fallback or {})
         # a key whose identifier (usage type, else instance type) the parser guessed from the words: never
         # no_such_product
         how_usage = uniq[HOW + "usage_type"].isin(GUESSED) & keys["usage_type"].notna()
@@ -471,6 +563,7 @@ def _price(rows: pd.DataFrame, priced: pd.Series, qty: pd.Series, cost: pd.Serie
         res = res.astype(object)
         res.loc[p.index[mask], per_key.columns] = rows_split.to_numpy()
     fix = _base_units(catalog, p, res, gcp_rows) if gcp_rows.any() else None
+    _count_defaults(stats, kind, notes.to_numpy()[codes], cost[p.index].to_numpy())
     _apply(rows, p.index, keys, codes, notes.to_numpy()[codes], assumed.to_numpy()[codes], dates, res,
            qty[p.index], cost[p.index], stats, reasons, kind, fix)
 

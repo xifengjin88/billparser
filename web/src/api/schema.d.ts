@@ -1835,6 +1835,8 @@ export interface components {
             defaults?: {
                 [key: string]: string;
             };
+            /** Defaults Used */
+            defaults_used?: components["schemas"]["PricingDefault"][];
             /** Undated As Of */
             undated_as_of?: string | null;
             /** Match Rate */
@@ -1850,6 +1852,25 @@ export interface components {
             inferred_discount?: components["schemas"]["InferredDiscount"] | null;
             /** Warnings */
             warnings?: string[];
+        };
+        /**
+         * PricingDefault
+         * @description A value the lines did not print, assumed to price them: from the request, the file's own most common value, or
+         *     the default setting.
+         */
+        PricingDefault: {
+            /** Provider */
+            provider: string;
+            /** Field */
+            field: string;
+            /** Value */
+            value: string;
+            /** Source */
+            source: string;
+            /** Lines */
+            lines: number;
+            /** Cost */
+            cost: number;
         };
         /** PricingLevel */
         PricingLevel: {

@@ -5484,6 +5484,13 @@
       "type": "object",
       "title": "Defaults"
      },
+     "defaults_used": {
+      "items": {
+       "$ref": "#/components/schemas/PricingDefault"
+      },
+      "type": "array",
+      "title": "Defaults Used"
+     },
      "undated_as_of": {
       "anyOf": [
        {
@@ -5544,6 +5551,45 @@
     "type": "object",
     "title": "Pricing",
     "description": "How the usage lines matched the public list prices (pricing.py)."
+   },
+   "PricingDefault": {
+    "properties": {
+     "provider": {
+      "type": "string",
+      "title": "Provider"
+     },
+     "field": {
+      "type": "string",
+      "title": "Field"
+     },
+     "value": {
+      "type": "string",
+      "title": "Value"
+     },
+     "source": {
+      "type": "string",
+      "title": "Source"
+     },
+     "lines": {
+      "type": "integer",
+      "title": "Lines"
+     },
+     "cost": {
+      "type": "number",
+      "title": "Cost"
+     }
+    },
+    "type": "object",
+    "required": [
+     "provider",
+     "field",
+     "value",
+     "source",
+     "lines",
+     "cost"
+    ],
+    "title": "PricingDefault",
+    "description": "A value the lines did not print, assumed to price them: from the request, the file's own most common value, or\nthe default setting."
    },
    "PricingLevel": {
     "properties": {

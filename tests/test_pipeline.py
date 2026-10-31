@@ -13,14 +13,16 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "samples"))
 
+from make_samples import german_xlsx  # noqa: E402
+
 import billparse.analyze as analyze_mod  # noqa: E402
 import billparse.headers as headers_mod  # noqa: E402
 from billparse import Pipeline, Settings  # noqa: E402
+from billparse.expr import ExprError  # noqa: E402
 from billparse.learn import regression_gate, run_nightly  # noqa: E402
 from billparse.llm import redact  # noqa: E402
 from billparse.spec import SpecError, check_spec  # noqa: E402
 from billparse.transforms import parse_number  # noqa: E402
-from make_samples import german_xlsx  # noqa: E402
 
 FILES = ROOT / "samples" / "files"
 
@@ -236,7 +238,7 @@ def test_candidate_promoted_after_clean_files(make_pipe, tmp_path, no_seed):
 def test_spec_safety():
     with pytest.raises(SpecError):
         check_spec({"columns": {"billed_cost": {"from": ["x"]}}, "exec": "rm -rf /"})
-    with pytest.raises(Exception):
+    with pytest.raises(ExprError):                          # a call is not an expression a spec may use
         check_spec({"columns": {"billed_cost": {"from": ["x"]}}, "derive": {"list_cost": "__import__('os')"}})
     with pytest.raises(SpecError):
         check_spec({"columns": {"made_up_field": {"from": ["x"]}}})
@@ -293,8 +295,9 @@ def test_a_spec_keeps_the_columns_it_does_not_map():
 
 def test_lines_carry_the_service_code_and_name(tmp_path):
     """Every matched line has the catalog's service code and name; a label no service matches has neither."""
-    from billparse.analyze import resolve_services
     import pandas as pd
+
+    from billparse.analyze import resolve_services
     rows = pd.DataFrame({"service_raw": ["Amazon Elastic Compute Cloud", "AmazonS3", "Team lunch"],
                          "billed_cost": [10.0, 5.0, 1.0]})
     raw = tmp_path / "data" / "raw"

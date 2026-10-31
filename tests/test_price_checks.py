@@ -298,7 +298,7 @@ def test_catalog_unit_price_in_the_contract(tmp_path):
     r = pipe.parse_file(_cur(tmp_path))
     out = to_schema(_doc(pipe, r["sha256"]))
     priced = [c for c in out.charges if c.catalog_unit_price is not None]
-    assert out.schema_version == "1.9" and priced
+    assert out.schema_version == "1.10" and priced
     assert all(c.catalog_unit_price.origin == "inferred" for c in priced)
 
 
