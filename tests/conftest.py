@@ -18,6 +18,15 @@ def _sqlite_only(monkeypatch, tmp_path):
     monkeypatch.setenv("PARSER_DATA_DIR", str(tmp_path / "default-store"))
     # pricing assumes only what a test's request gives (the tests of automatic defaults turn them on)
     monkeypatch.setenv("PRICE_AUTO_DEFAULTS", "0")
+    # the service catalog: the project's, through links in the test's own folder, so a price load's rebuild (which
+    # replaces catalog.msgpack) never writes the project's data/
+    project = Path(__file__).resolve().parents[1] / "data"
+    own = tmp_path / "catalog"
+    own.mkdir()
+    for name in ("catalog.msgpack", "raw"):
+        if (project / name).exists():
+            (own / name).symlink_to(project / name)
+    monkeypatch.setenv("CATALOG_DIR", str(own))
 
 
 @pytest.fixture(autouse=True)

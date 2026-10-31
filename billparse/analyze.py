@@ -21,6 +21,7 @@ from svcres.resolver import Resolver
 from svcres.seeds import AZURE_FAMILY_TO_CATEGORY, FEE_SERVICES
 
 from .db import default_url
+from .service_catalog import rows_for_url
 from .settings import data_dir as settings_data_dir
 from .synonyms import synonym_store
 from .transforms import map_unique
@@ -33,26 +34,33 @@ NON_USAGE = {"Tax", "Credit", "Refund", "Purchase", "Fee", "Support", "Adjustmen
 # ---------------------------------------------------------------- services
 _RESOLVER: Resolver | None = None
 _RESOLVER_DB: str | None = None
+_RESOLVER_BUILT: float | None = None     # the catalog file's mtime the resolver was loaded from
 # the resolver's in-memory cache and its cache file are not safe to change from two threads (the API parses in a pool)
 RESOLVER_LOCK = threading.RLock()
 
 
 def get_resolver(data_dir: Path) -> Resolver:
-    """Load the catalog once per process (again if the database changed). Without fetched catalogs, seeds still cover
-    common AWS names. The synonyms come from the database (synonyms.py)."""
-    global _RESOLVER, _RESOLVER_DB
+    """Load the catalog once per process, again when the database changed or the catalog file was rebuilt (a price
+    load rebuilds it: service_catalog.py). Without any catalog, seeds still cover common AWS names. The synonyms come
+    from the database (synonyms.py)."""
+    global _RESOLVER, _RESOLVER_DB, _RESOLVER_BUILT
     url = default_url(settings_data_dir())
+    cat_path = data_dir / "catalog.msgpack"
     with RESOLVER_LOCK:
-        if _RESOLVER is None or _RESOLVER_DB != url:
+        built = cat_path.stat().st_mtime if cat_path.exists() else None
+        if _RESOLVER is None or _RESOLVER_DB != url or (built is not None and built != _RESOLVER_BUILT):
+            if _RESOLVER is not None:
+                _RESOLVER.flush()                  # keep what this one resolved (the cache file is shared)
             _RESOLVER, _RESOLVER_DB = _load_resolver(data_dir, url), url
+            _RESOLVER_BUILT = cat_path.stat().st_mtime if cat_path.exists() else None
     return _RESOLVER
 
 
 def _load_resolver(data_dir: Path, url: str | None = None) -> Resolver:
     data_dir.mkdir(parents=True, exist_ok=True)
     cat_path = data_dir / "catalog.msgpack"
-    if not cat_path.exists():
-        build(data_dir / "raw").save(cat_path)
+    if not cat_path.exists():                     # the price catalog's lists, the fetch scripts' JSON for the rest
+        build(data_dir / "raw", rows_for_url(url)).save(cat_path)
     return Resolver(Catalog.load(cat_path), data_dir, synonyms=synonym_store(data_dir, url))
 
 

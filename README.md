@@ -318,12 +318,25 @@ Manage specs: `python -m billparse specs [list | show ID | approve ID | rollback
 ## Service catalog
 
 `svcres/` resolves product codes and labels to canonical services (code, synonym, exact name,
-word prefix, fuzzy, optional LLM). Build the real catalog:
+word prefix, fuzzy, optional LLM). The catalog (`CATALOG_DIR/catalog.msgpack`) comes from the providers' own lists in
+the price catalog (`billparse/service_catalog.py`), so it is as new as the prices: every price load (the weekly
+refresh, `make prices`, `make prices-azure`) rebuilds it, and each process loads it again when the file changes.
+
+| Provider | From the price catalog (`price_product`) |
+|---|---|
+| Azure | productId, productName, serviceName, serviceId, serviceFamily (the services downloaded) |
+| AWS | each service code and its name (the price files' `serviceName`), the most used name first |
+| GCP | each service ID and its display name |
+
+What the price catalog lacks (a provider whose prices are not loaded, Azure services not downloaded) comes from the
+fetch scripts' JSON in `CATALOG_DIR/raw`, as before; where both name a service or product, the price catalog wins.
+The seeds (AWS categories and aliases, Azure aliases, Marketplace sellers) are added to both. `stats()["sources"]`
+(and the price job's result, `service_catalog`) counts the entries from each.
 
 ```bash
-python scripts/fetch_azure.py && python scripts/fetch_aws.py
-GCP_API_KEY=... python scripts/fetch_gcp.py
-python scripts/build_catalog.py --raw-dir data/raw --out data/catalog.msgpack
+python scripts/build_catalog.py               # by hand: the price catalog (DATABASE_URL) and data/raw
+python scripts/build_catalog.py --raw-only    # data/raw only
+python scripts/fetch_azure.py && python scripts/fetch_aws.py   # the JSON fallback (GCP: GCP_API_KEY=... fetch_gcp.py)
 ```
 
 Corrections: `python -m billparse synonym "VM Hrs" "azure:Virtual Machines"`, the Mapping page (`/aliases`), and

@@ -13,6 +13,7 @@ import gzip
 import importlib.util
 import io
 import json
+import os
 import shutil
 import sys
 import urllib.error
@@ -498,6 +499,10 @@ def test_the_weekly_refresh_loads_aws_then_azure(store, tmp_path, monkeypatch): 
     result = jobs.get(store, job["id"])["result"]
     assert result["status"] == "current" and set(result["providers"]) == {"aws", "azure"}
     assert "azure:Virtual Machines" in result["providers"]["azure"]["price_lists"]
+    # the service catalog was rebuilt from the prices just loaded (in the test's own CATALOG_DIR)
+    assert result["providers"]["azure"]["service_catalog"]["sources"]["azure"]["db"] > 0
+    assert (Path(os.environ["CATALOG_DIR"]) / "catalog.msgpack").is_file()
+    assert not (Path(os.environ["CATALOG_DIR"]) / "catalog.msgpack").is_symlink()
     assert PriceCatalog(store.engine).services("azure") == {"Virtual Machines", "Storage", "Bandwidth",
                                                             "Azure Kubernetes Service"}
     assert (tmp_path / "azure-price-files" / "manifest.json").exists()

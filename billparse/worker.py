@@ -36,7 +36,7 @@ from pathlib import Path
 
 import requests
 
-from . import agent, contract, jobs
+from . import agent, contract, jobs, service_catalog
 from . import llm as llm_mod
 from .pipeline import Pipeline
 from .pipeline import Settings as PipelineSettings
@@ -339,9 +339,12 @@ def _refresh_prices(store, job: dict, run: Running, provider: str) -> dict:
         res = load_snapshot(store.engine, target)
     except Refused as e:
         raise RuntimeError(f"Load refused, the current snapshot stays: {e}") from e
+    # the service catalog from the prices just loaded: a bill's service names resolve with the newest lists
+    jobs.set_progress(store, job["id"], run.worker, "rebuilding the service catalog")
+    services = service_catalog.rebuild(store.engine, catalog_dir())
     return {"snapshot_id": res.snapshot_id, "status": res.status, "price_lists": sorted(res.counts),
             "products": res.products, "rates": res.rates, "sp_rates": res.sp_rates, "rates_closed": res.closed,
-            "rates_inserted": res.inserted, "seconds": res.seconds}
+            "rates_inserted": res.inserted, "seconds": res.seconds, "service_catalog": services}
 
 
 RUNNERS = {"parse": run_parse, "reprice": run_reprice, "learn": run_learn, "nightly": run_nightly,

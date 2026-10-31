@@ -31,7 +31,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from sqlmodel import create_engine  # noqa: E402
 
 from billparse.db import default_url  # noqa: E402
-from billparse.settings import data_dir, load_env  # noqa: E402
+from billparse.service_catalog import rebuild  # noqa: E402
+from billparse.settings import catalog_dir, data_dir, load_env  # noqa: E402
 from prices.load import Refused, load_snapshot  # noqa: E402
 
 DIRS = {"aws": ("PRICE_FILES_DIR", "~/aws-price-files"), "azure": ("AZURE_PRICE_FILES_DIR", "~/azure-price-files"),
@@ -54,6 +55,8 @@ def main() -> int:
     ap.add_argument("--partial", action="store_true", help="do not refuse the price lists the load does not have")
     ap.add_argument("--snapshot-id", help="default: the download date")
     ap.add_argument("--progress-every", type=int, default=100, help="print a line every N files")
+    ap.add_argument("--no-service-catalog", action="store_true",
+                    help="do not rebuild the service catalog (CATALOG_DIR/catalog.msgpack) from the loaded prices")
     a = ap.parse_args()
     if a.dir is None:
         a.dir = Path(os.environ.get(*DIRS[a.provider]))
@@ -81,6 +84,8 @@ def main() -> int:
     print(f"snapshot {res.snapshot_id} is {res.status}: {res.products:,} products, {res.rates:,} rates, "
           f"{res.sp_rates:,} savings plans rates; {res.closed:,} closed, {res.inserted:,} inserted; "
           f"seconds {res.seconds}")
+    if not a.no_service_catalog:
+        print(f"service catalog rebuilt: {rebuild(engine, catalog_dir())}")
     return 0
 
 
