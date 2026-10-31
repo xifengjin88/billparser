@@ -413,6 +413,36 @@ def test_the_fetcher_follows_next_page_links_and_retries(tmp_path, monkeypatch):
     assert res.counts == {"azure:Virtual Machines": 36}
 
 
+def test_a_stopped_download_continues_from_its_last_page(tmp_path, monkeypatch):
+    """A run stopped mid-file (Ctrl-C, a closed terminal, a network error) keeps the pages it has: the next run asks
+    only for the rest, and the file has every item once."""
+    _, items = _items(FIXTURE, "Virtual Machines")
+    pages = [items[:12], items[12:24], items[24:]]
+    urls, stop = [], {"at": 3}
+
+    def fake(url, timeout=None):
+        urls.append(url)
+        n = int(url.split("$skip=")[1]) // 12 if "$skip=" in url else 0
+        if len(urls) == stop["at"]:
+            raise KeyboardInterrupt
+        body = {"Items": pages[n], "NextPageLink": url.split("&$skip=")[0] + f"&$skip={(n + 1) * 12}"
+                if n + 1 < len(pages) else None}
+        return _Response(json.dumps(body).encode())
+    monkeypatch.setattr(urllib.request, "urlopen", fake)
+    args = ["--out", str(tmp_path / "out"), "--service", "Virtual Machines", "--region", "eastus", "--pause", "0"]
+    with pytest.raises(KeyboardInterrupt):
+        _fetcher().main(args)
+    stop["at"] = 0
+    urls.clear()
+    assert _fetcher().main(args) == 0
+    assert len(urls) == 1 and urls[0].endswith("$skip=24")                 # only the page it did not have
+    got = json.loads((tmp_path / "out" / "manifest.json").read_text())["files"]["Virtual Machines"]["eastus"]
+    assert (got["rows"], got["requests"]) == (len(items), 3)
+    res = load_snapshot(engine_for(f"sqlite:///{tmp_path / 'p.db'}"), tmp_path / "out")
+    assert res.counts == {"azure:Virtual Machines": len(items)}
+    assert not list((tmp_path / "out").rglob("*.part")) and not list((tmp_path / "out").rglob("*.resume"))
+
+
 def test_a_query_past_the_apis_cap_is_asked_again_per_region(tmp_path, monkeypatch):
     _, items = _items(FIXTURE, "Bandwidth")
     urls = []

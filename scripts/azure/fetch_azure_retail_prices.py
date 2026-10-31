@@ -29,7 +29,10 @@ What it writes (the items as the API gives them, one JSON object per line, gzipp
     <service>/<region>.jsonl.gz       (<region> "all-regions" when no region is given)
     manifest.json   provider "azure", the filters, per service and region: rows, requests, bytes, time
 
-A file already downloaded is kept on the next run (a ".done" marker), so a stopped run continues where it stopped.
+A file already downloaded is kept on the next run (a ".done" marker), and a file stopped part way continues at its
+last page saved (<file>.part and <file>.resume), so a stopped run continues where it stopped.
+While a file downloads, a line every --progress-every seconds (default 10; 0: none) says how far it is: the API gives
+no total, so rows, pages and MB so far, and the rate.
 """
 
 from __future__ import annotations
@@ -114,35 +117,71 @@ class Capped(RuntimeError):
 
 
 def fetch(flt: str, dest: Path, currency: str | None = None, api_version: str | None = None,
-          pause: float = 0.2) -> dict:
+          pause: float = 0.2, progress_every: float = 0, label: str = "") -> dict:
     """Every page of one filter, NextPageLink after NextPageLink, to dest (gzip JSON Lines). Raises Capped when the
-    query has more items than the API serves."""
-    started, rows, requests, raw = time.monotonic(), 0, 0, 0
-    regions: set[str] = set()
+    query has more items than the API serves. progress_every: seconds between two progress lines (0: none).
+    Each page is appended to <dest>.part as its own gzip member, then <dest>.resume records the next page's URL and
+    the .part's size: a run stopped mid-file (Ctrl-C, a network error) continues at that page next time, the .part
+    cut back to the last page recorded."""
+    tmp, state = dest.with_name(dest.name + ".part"), dest.with_name(dest.name + ".resume")
     url: str | None = first_url(flt, currency, api_version)
-    tmp = dest.with_suffix(".part")
+    rows, requests, raw, before = 0, 0, 0, 0.0
+    regions: set[str] = set()
+    if tmp.exists() and state.exists():
+        st = json.loads(state.read_text())
+        url, rows, requests, raw, before = st["url"], st["rows"], st["requests"], st["json_bytes"], st["seconds"]
+        regions = set(st["regions"])
+        with open(tmp, "r+b") as f:
+            f.truncate(st["size"])                     # a page written after the last record is asked again
+        print(f"    {label}: continuing at {rows:,} rows ({requests} pages)", flush=True)
+    else:
+        tmp.unlink(missing_ok=True)
+        state.unlink(missing_ok=True)
+    started = time.monotonic()
+    shown = started
     try:
-        with gzip.open(tmp, "wt", encoding="utf-8", compresslevel=6) as out:
-            while url:
-                page, n = get_page(url)
-                requests += 1
-                raw += n
-                for item in page.get("Items") or []:
+        while url:
+            page, n = get_page(url)
+            requests += 1
+            raw += n
+            items = page.get("Items") or []
+            with gzip.open(tmp, "at", encoding="utf-8", compresslevel=6) as out:
+                for item in items:
                     out.write(json.dumps(item, separators=(",", ":"), ensure_ascii=False) + "\n")
                     regions.add(item.get("armRegionName") or "")
-                    rows += 1
-                url = page.get("NextPageLink")
-                skip = re.search(r"[?&]\$skip=(\d+)", url or "")
-                if skip and int(skip.group(1)) >= MAX_SKIP:
-                    raise Capped(regions)
-                if url and pause:
-                    time.sleep(pause)                      # gentle: the API answers 429 to bursts
-        tmp.replace(dest)
-    except BaseException:
-        tmp.unlink(missing_ok=True)
+            rows += len(items)
+            url = page.get("NextPageLink")
+            skip = re.search(r"[?&]\$skip=(\d+)", url or "")
+            if skip and int(skip.group(1)) >= MAX_SKIP:
+                tmp.unlink(missing_ok=True)
+                state.unlink(missing_ok=True)
+                raise Capped(regions)
+            now = time.monotonic()
+            if url:
+                part = state.with_name(state.name + ".tmp")
+                part.write_text(json.dumps({"url": url, "rows": rows, "requests": requests, "json_bytes": raw,
+                                            "seconds": before + now - started, "regions": sorted(regions),
+                                            "size": tmp.stat().st_size}))
+                part.replace(state)
+            if progress_every and url and now - shown >= progress_every:
+                shown = now
+                print(f"    {label}: {rows:,} rows, {requests} pages, {raw / 1e6:,.1f} MB, {before + now - started:,.0f}s "
+                      f"({rows / max(before + now - started, 1e-9):,.0f} rows/s)", flush=True)
+            if url and pause:
+                time.sleep(pause)                      # gentle: the API answers 429 to bursts
+    except Capped:
         raise
+    except BaseException:
+        if not state.exists():                         # nothing recorded yet: nothing to continue from
+            tmp.unlink(missing_ok=True)
+        raise
+    if not tmp.exists():                               # a query with no items
+        with gzip.open(tmp, "wt", encoding="utf-8"):
+            pass
+    tmp.replace(dest)
+    state.unlink(missing_ok=True)
     return {"filter": flt, "rows": rows, "requests": requests, "json_bytes": raw, "gz_bytes": dest.stat().st_size,
-            "seconds": round(time.monotonic() - started, 1)}
+            "seconds": round(before + time.monotonic() - started, 1)}
 
 
 def slug(name: str) -> str:
@@ -160,10 +199,13 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--currency", help="currencyCode (default: the API's, USD)")
     ap.add_argument("--api-version", help="api-version (default: none, the API's current GA answer)")
     ap.add_argument("--pause", type=float, default=0.2, help="seconds between two pages")
+    ap.add_argument("--progress-every", type=float, default=10,
+                    help="seconds between two progress lines while a file downloads (0: none)")
     ap.add_argument("--force", action="store_true", help="download again files that are already done")
     ap.add_argument("--dry-run", action="store_true", help="print the requests' first URLs, download nothing")
     a = ap.parse_args(argv)
     started = datetime.now(UTC)
+    t0 = time.monotonic()
     services = [None] if a.all_services else (a.service or SERVICES)
     regions = a.region or [None]
     jobs = [(s, r) for s in services for r in regions]
@@ -184,8 +226,11 @@ def main(argv: list[str] | None = None) -> int:
             res = {**json.loads(done.read_text()), "skipped": True}
         else:
             dest.parent.mkdir(parents=True, exist_ok=True)
+            if a.progress_every:
+                print(f"[{i}/{len(jobs)}] {name:35} {reg:20} ...", flush=True)
             try:
-                res = fetch(odata_filter(service, region, a.filter), dest, a.currency, a.api_version, a.pause)
+                res = fetch(odata_filter(service, region, a.filter), dest, a.currency, a.api_version, a.pause,
+                            a.progress_every, f"{name} {reg}")
                 done.write_text(json.dumps(res))
             except Capped as e:
                 if region is not None:
@@ -202,7 +247,7 @@ def main(argv: list[str] | None = None) -> int:
         mark = "skipped" if res.get("skipped") else ("ERROR " + res["error"] if "error" in res else
                                                      f"{res['rows']:,} rows in {res['requests']} requests, "
                                                      f"{res['gz_bytes'] / 1e6:,.1f} MB gz, {res['seconds']}s")
-        print(f"[{i}/{len(jobs)}] {name:35} {reg:20} {mark}", flush=True)
+        print(f"[{i}/{len(jobs)}] {name:35} {reg:20} {mark}  (total {time.monotonic() - t0:,.0f}s)", flush=True)
     files = [r for regs in results.values() for r in regs.values()]
     errors = sum("error" in r for r in files)
     manifest = {
