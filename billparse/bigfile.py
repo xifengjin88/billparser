@@ -27,6 +27,7 @@ import os
 import resource
 import sys
 import zipfile
+import zlib
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -70,6 +71,10 @@ class TooLarge(ValueError):
     pass
 
 
+class NotOneExport(TooLarge):
+    """The parts of a zip have different columns: not one export split in parts."""
+
+
 def too_large_message(size: int | None = None) -> str:
     limit = f"{setting('MAX_UNCOMPRESSED_GB', 50):g} GB"
     head = f"The file is {size / 1024 / MB:,.1f} GB uncompressed; the limit is {limit}" if size is not None else \
@@ -91,7 +96,8 @@ class FileInfo:
     large: bool
     fmt: str = "csv"                # csv | parquet (large files); other formats are refused when large
     compression: str = "none"       # none | gzip | zip
-    member: str | None = None       # the zip member read
+    member: str | None = None       # the zip member read (the first, when there are several)
+    members: list[str] | None = None  # a zip of several parts of one CSV export (each may be gzip): read in turn
     size: int = 0                   # uncompressed bytes (a large gzip: at least this many)
     refused: str | None = None      # why the large path cannot read the file
 
@@ -127,6 +133,21 @@ def _members(z: zipfile.ZipFile) -> list[zipfile.ZipInfo]:
             and not Path(i.filename).name.startswith("._")]
 
 
+def _ungz(head: bytes) -> bytes:
+    """The first bytes of a member, decompressed when it is gzip (as much as the head holds)."""
+    if head[:2] != b"\x1f\x8b":
+        return head
+    try:
+        return zlib.decompressobj(16 + zlib.MAX_WBITS).decompress(head)
+    except zlib.error:
+        return b""
+
+
+def _member_kind(z: zipfile.ZipFile, i: zipfile.ZipInfo) -> str:
+    with z.open(i) as m:
+        return _kind_of(_ungz(m.read(64 * 1024)), i.filename.removesuffix(".gz"))
+
+
 def classify(path: str | Path, name: str | None = None) -> FileInfo:
     """Small or large, and how a large file is read. The cost is bounded: a gzip is decompressed only until it passes
     LARGE_FILE_MB; its full size is checked while it is read (scan)."""
@@ -159,12 +180,22 @@ def classify(path: str | Path, name: str | None = None) -> FileInfo:
         if not info.large:
             return info
         if len(members) != 1:
-            info.refused = (f"This zip holds {len(members)} files ({total / MB:,.0f} MB uncompressed). A zip this "
-                            "large is read when it holds one CSV or Parquet file: upload each file on its own.")
-            return info
-        info.member = members[0].filename
-        with zipfile.ZipFile(path) as z, z.open(members[0]) as m:
-            kind = _kind_of(m.read(64 * 1024), info.member)
+            # the parts of one CSV export (part_0.csv.gz, part_1.csv.gz, ...): read one after another, each header
+            # skipped; anything else is refused
+            with zipfile.ZipFile(path) as z:
+                kinds = {_member_kind(z, i) for i in members}
+            if kinds != {"csv"}:
+                info.refused = (f"This zip holds {len(members)} files ({total / MB:,.0f} MB uncompressed). A zip "
+                                "this large is read when it holds one CSV or Parquet file, or the CSV parts of one "
+                                "export: upload each file on its own.")
+                return info
+            info.members = [i.filename for i in sorted(members, key=lambda i: i.filename)]
+            if any(m.lower().endswith(".gz") for m in info.members):
+                # a gzip part's size is its stored size: the uncompressed total is checked while it is read
+                info.size = max(total, sum(i.compress_size for i in members))
+        info.member = (info.members or [members[0].filename])[0]
+        with zipfile.ZipFile(path) as z, z.open(info.member) as m:
+            kind = _kind_of(_ungz(m.read(64 * 1024)), info.member.removesuffix(".gz"))
     else:
         info = FileInfo(path, name, size > limit, size=size)
         kind = _kind_of(head, name)
@@ -256,11 +287,17 @@ class Source:
     def open(self) -> io.BufferedReader:
         """The decompressed bytes, from the start. self.raw counts the stored bytes read (a gzip, a plain file) or the
         uncompressed bytes (a zip member, whose size is known), for the progress."""
+        return self._open_member(self.info.member)
+
+    def _open_member(self, member: str | None) -> io.BufferedReader:
         info = self.info
         if info.compression == "zip":
             z = zipfile.ZipFile(info.path)
-            self.raw = _Counted(z.open(info.member or ""), max_uncompressed_bytes())
+            self.raw = _Counted(z.open(member or ""), max_uncompressed_bytes())
             self.total = info.size
+            if (member or "").lower().endswith(".gz"):                # a gzip part inside the zip
+                g = gzip.GzipFile(fileobj=io.BufferedReader(self.raw, 1 * MB))
+                return io.BufferedReader(_Counted(g, max_uncompressed_bytes()), 8 * MB)
             return io.BufferedReader(self.raw, 8 * MB)
         self.raw = _Counted(info.path.open("rb", buffering=0))
         self.total = info.path.stat().st_size
@@ -272,7 +309,8 @@ class Source:
     @property
     def fraction(self) -> float:
         """How much of the file was read."""
-        return min(1.0, self.raw.n / self.total) if self.raw and getattr(self, "total", 0) else 0.0
+        done = getattr(self, "_done", 0) + (self.raw.n if self.raw else 0)
+        return min(1.0, done / self.total) if getattr(self, "total", 0) else 0.0
 
     def _dialect(self) -> None:
         with self.open() as f:
@@ -310,17 +348,35 @@ class Source:
             self.skipped += 1
             return "skip"
         keep = columns if columns is not None else self.columns
-        with self.open() as f:
-            self.recode = _Recode(f, self.encoding)
-            reader = pacsv.open_csv(
-                pa.PythonFile(io.BufferedReader(self.recode, 8 * MB), mode="r"),
-                read_options=pacsv.ReadOptions(skip_rows=self.header_row + 1, column_names=self.columns,
-                                               encoding="utf8", block_size=8 * MB),
-                parse_options=pacsv.ParseOptions(delimiter=self.sep, newlines_in_values=True, invalid_row_handler=bad),
-                convert_options=pacsv.ConvertOptions(column_types={c: pa.string() for c in keep},
-                                                     include_columns=keep, null_values=[""],
-                                                     strings_can_be_null=True, quoted_strings_can_be_null=True))
-            yield from _batched(reader, chunk_rows, lambda t: t.to_pandas())
+        done = 0                                           # the parts read before this one (for the progress)
+        for member in self.info.members or [self.info.member]:
+            if member != self.info.member:
+                self._same_header(member)
+            with self._open_member(member) as f:
+                self.recode = _Recode(f, self.encoding)
+                reader = pacsv.open_csv(
+                    pa.PythonFile(io.BufferedReader(self.recode, 8 * MB), mode="r"),
+                    read_options=pacsv.ReadOptions(skip_rows=self.header_row + 1, column_names=self.columns,
+                                                   encoding="utf8", block_size=8 * MB),
+                    parse_options=pacsv.ParseOptions(delimiter=self.sep, newlines_in_values=True,
+                                                     invalid_row_handler=bad),
+                    convert_options=pacsv.ConvertOptions(column_types={c: pa.string() for c in keep},
+                                                         include_columns=keep, null_values=[""],
+                                                         strings_can_be_null=True, quoted_strings_can_be_null=True))
+                self._done = done
+                yield from _batched(reader, chunk_rows, lambda t: t.to_pandas())
+                done += self.raw.n if self.raw else 0
+
+    def _same_header(self, member: str) -> None:
+        """A later part of a zip export must have the first part's header (one export split in parts)."""
+        with self._open_member(member) as f:
+            head = f.read(64 * 1024)
+        text = head.decode(self.encoding, errors="ignore").lstrip("\ufeff")
+        rows = list(csv.reader(io.StringIO(text[:20000]), delimiter=self.sep))[:HEADER_SCAN_ROWS]
+        cols = _unique_headers(rows[self.header_row] if self.header_row < len(rows) else [])
+        if cols != list(self.columns):
+            raise NotOneExport(f"The parts of this zip are not one export: {member} has other columns than "
+                           f"{self.info.member}. Upload each file on its own.")
 
     @property
     def replaced(self) -> bool:
@@ -762,4 +818,7 @@ def unsupported_spec(route: str, spec: dict | None) -> str | None:
         return "The spec reshapes the table (unpivot): a file this large is read in parts, which a reshape cannot do"
     if spec.get("source", "auto") not in ("auto", "frame") or spec.get("table") is not None or spec.get("lines"):
         return f"The spec reads a {spec.get('source') or 'grid'} source: a file this large is read as a table only"
+    if any("keep_first_present" in f for f in spec.get("filters") or []):
+        return ("The spec keeps the first record type the file has: a file this large is read in parts, and a part "
+                "cannot tell which the whole file has")
     return None

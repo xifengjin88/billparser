@@ -21,7 +21,7 @@ from .mapper import map_columns
 from .transforms import CANONICAL, TRANSFORMS, apply_transforms, default_transforms, map_unique, parse_number
 
 ALLOWED_TOP = {"id", "version", "trust", "extends", "detect", "meta", "source", "table", "columns",
-               "derive", "reshape", "filters", "fields", "lines", "totals", "fingerprint", "stats",
+               "derive", "reshape", "filters", "fields", "lines", "totals", "total_rows", "fingerprint", "stats",
                "created_at", "parent", "notes", "tree", "context", "maps"}
 
 
@@ -64,6 +64,10 @@ def check_spec(spec: dict) -> None:
         expr.validate(e)
     for p in spec.get("lines") or []:
         re.compile(p["pattern"])
+    for t in spec.get("total_rows") or []:
+        if not (isinstance(t, dict) and {"field", "match", "amount"} <= set(t)):
+            raise SpecError('total_rows: [{"field": column, "match": regex, "amount": column, "label": column}]')
+        re.compile(t["match"])
     maps = spec.get("maps")
     if maps is not None and not (isinstance(maps, dict) and all(isinstance(k, str) and isinstance(v, str)
                                                                 for k, v in maps.items())):
@@ -165,12 +169,16 @@ def run(spec: dict, doc: Document, catalog_dir=None) -> Extraction:
 
     raw = _expand_maps(spec, raw)
     raw, reshape_totals = _reshape(spec, raw)
-    ext.stated_totals += reshape_totals
+    ext.stated_totals += reshape_totals + _total_rows(spec, raw)
     if (spec.get("reshape") or {}).get("unpivot"):
         ext.source_rows = len(raw)
     rows = _map_columns(spec, raw, ext)
     rows = _derive(spec, rows, raw)
+    before = len(rows)
     rows = _filter(spec, rows)
+    if any("keep_first_present" in f for f in spec.get("filters") or []):
+        # the rows left out are the same money at another level, or the file's totals: accounted for, not missed
+        ext.source_rows = max(0, (ext.source_rows or 0) - (before - len(rows)))
     meta = spec.get("meta") or {}
     if meta.get("provider") and "provider" not in (spec.get("columns") or {}):
         rows["provider"] = meta["provider"]
@@ -488,11 +496,37 @@ def _filter(spec: dict, rows: pd.DataFrame) -> pd.DataFrame:
             col, vals = f["keep_if_in"]["field"], {str(v).lower() for v in f["keep_if_in"]["values"]}
             if col in rows:
                 keep &= rows[col].astype(str).str.lower().isin(vals)
+        elif "keep_first_present" in f:
+            # the rows of the first of these values the file has: the same money printed at two levels (an AWS
+            # eCSV's LinkedLineItem and PayerLineItem) is read once, at the finest level the file prints
+            col, vals = f["keep_first_present"]["field"], [str(v).lower() for v in f["keep_first_present"]["values"]]
+            if col in rows:
+                have = rows[col].astype(str).str.lower()
+                first = next((v for v in vals if have.eq(v).any()), None)
+                keep &= have.eq(first) if first is not None else False
     return rows[keep]
 
 
-AUTO_TOTAL = re.compile(r"^\s*(?:grand\s*total|total\s*(?:due|amount|charges)?|amount\s*due|balance\s*due|"
-                        r"invoice\s*total|grand)\s*:?\s*$", re.I)
+def _total_rows(spec: dict, raw: pd.DataFrame) -> list[dict]:
+    """total_rows: the printed totals a column file prints as rows of its own ("RecordType": "StatementTotal"):
+    {"field": column, "match": regex, "amount": column, "label": column}."""
+    out = []
+    for t in spec.get("total_rows") or []:
+        col, amt = _find_col(raw, [t["field"]]), _find_col(raw, [t["amount"]])
+        if col is None or amt is None:
+            continue
+        rx = re.compile(t["match"], re.I)
+        lab = _find_col(raw, [t["label"]]) if t.get("label") else None
+        hit = raw[map_unique(raw[col], lambda v, rx=rx: v is not None and bool(rx.search(str(v)))).astype(bool)]
+        for _, r in hit.iterrows():
+            if parse_number(r[amt]) is not None:
+                out.append({"label": str(r[lab] if lab else r[col])[:80], "amount": r[amt], "kind": "total",
+                            "src": r.get("_src")})
+    return out
+
+
+AUTO_TOTAL = re.compile(r"^\s*(?:grand\s*total|total\s*(?:amount\s*due|amount|due|charges)?|amount\s*due|"
+                        r"balance\s*due|invoice\s*total|grand)\s*:?\s*$", re.I)
 
 
 def _auto_totals(doc: Document) -> list[dict]:

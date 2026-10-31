@@ -406,6 +406,8 @@ def _propose_frame(region: Region, ctx: MapContext | None = None,
     cols = _samples_frame(region)
     pivot = _propose_pivot(cols, source="frame")
     if pivot:
+        if _counts_report(region, cols):
+            return (*_as_counts(pivot[0]), None)
         return (*pivot, None)
     m = mapping(cols, ctx, legacy)
     if "billed_cost" not in m.chosen:
@@ -490,6 +492,29 @@ def _propose_pivot(cols: dict[str, list], source: str) -> tuple[dict, float] | N
                         {"drop_if_match": {"field": "service_raw", "regex": r"^\s*(sub)?total\b"}}]}
     if source == "grid":
         spec["table"] = {"group_header": {"carry_to": "_group"}, "continuation": "drop", "stop_at_total": False}
+    return spec, 0.8
+
+
+COUNT_WORDS = re.compile(r"(^|\s)#\s*\w|\b(counts?|number of|instances?|hours|units|quantity)\b", re.I)
+MONEY_WORDS = re.compile(r"[$€£¥]|\b(costs?|spend|amounts?|charges?|usd|eur|gbp|price|billed|invoice)\b", re.I)
+
+
+def _counts_report(region: Region, cols: dict[str, list]) -> bool:
+    """A month table of counts, not money ("# Instances", "# Instance Hours" by coverage type and month): its title
+    or its section lines say counts, and nothing in it names money."""
+    label = next(iter(cols), "")
+    text = " ".join([*region.preamble, *map(str, cols), *(str(v) for v in cols.get(label, []) if v is not None)])
+    values = [v for h, vs in cols.items() if h != label for v in vs if v not in (None, "")]
+    return bool(COUNT_WORDS.search(text)) and not MONEY_WORDS.search(text) and profile(values).currency_sym == 0
+
+
+def _as_counts(spec: dict) -> tuple[dict, float]:
+    """The month table read as usage figures (kind inventory: never money, never summed as a bill)."""
+    spec = dict(spec, meta={"kind": "inventory", "cost_basis": "none", "layout": "month_pivot_counts"})
+    spec["columns"] = {"description": {"from": ["_id"]}, "quantity": {"from": ["_value"]},
+                       "charge_start": {"from": ["_var"]}}
+    spec["filters"] = [{"drop_if_blank": "quantity"},
+                       {"drop_if_match": {"field": "description", "regex": r"^\s*(sub)?total\b|^sheet:"}}]
     return spec, 0.8
 
 

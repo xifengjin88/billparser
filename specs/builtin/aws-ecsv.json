@@ -1,0 +1,46 @@
+{
+ "id": "aws-ecsv",
+ "version": 1,
+ "trust": "builtin",
+ "detect": {
+  "required": [
+   "RecordType",
+   "LinkedAccountId",
+   "ItemDescription",
+   "TotalCost"
+  ]
+ },
+ "meta": {
+  "provider": "aws",
+  "kind": "cost_lines",
+  "cost_basis": "billed",
+  "format": "AWS monthly cost allocation report (eCSV): RecordType LinkedLineItem / PayerLineItem lines, AccountTotal, InvoiceTotal and StatementTotal rows",
+  "exact_columns": true
+ },
+ "notes": "The same money is printed at each level: LinkedLineItem (per linked account), PayerLineItem (the payer's sum of them), AccountTotal, InvoiceTotal and StatementTotal. The lines are the first of LinkedLineItem, PayerLineItem the file has (a payer-only account prints PayerLineItem only); StatementTotal proves them.",
+ "columns": {
+  "invoice_id": {"from": ["InvoiceID"]},
+  "account_id": {"from": ["LinkedAccountId", "PayerAccountId"], "coalesce": true},
+  "account_name": {"from": ["LinkedAccountName", "PayerAccountName"], "coalesce": true},
+  "line_type_raw": {"from": ["RecordType"]},
+  "product_code": {"from": ["ProductCode"]},
+  "service_raw": {"from": ["ProductName", "ProductCode"], "coalesce": true},
+  "description": {"from": ["ItemDescription", "UsageType"], "coalesce": true},
+  "usage_type": {"from": ["UsageType"]},
+  "operation": {"from": ["Operation"]},
+  "charge_start": {"from": ["UsageStartDate", "BillingPeriodStartDate"], "coalesce": true},
+  "charge_end": {"from": ["UsageEndDate", "BillingPeriodEndDate"], "coalesce": true},
+  "quantity": {"from": ["UsageQuantity"]},
+  "unit_price": {"from": ["BlendedRate"]},
+  "currency": {"from": ["CurrencyCode"]},
+  "credits": {"from": ["Credits"]},
+  "tax": {"from": ["TaxAmount"]},
+  "billed_cost": {"from": ["TotalCost"]}
+ },
+ "filters": [
+  {"keep_first_present": {"field": "line_type_raw", "values": ["LinkedLineItem", "PayerLineItem"]}}
+ ],
+ "total_rows": [
+  {"field": "RecordType", "match": "^StatementTotal$", "amount": "TotalCost", "label": "ItemDescription"}
+ ]
+}

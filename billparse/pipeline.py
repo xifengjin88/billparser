@@ -33,7 +33,7 @@ from . import llm as llm_mod
 from .analyze import analyze, resolve_services
 from .attributes import extract as extract_attributes
 from .attributes import normalize_regions
-from .docmodel import Document, load_bytes
+from .docmodel import Document, Region, load_bytes
 from .fingerprint import fingerprint, similarity, table_headers
 from .induce import derive_spec
 from .layout import find_header
@@ -212,7 +212,11 @@ class Pipeline:
         token = _PRICING.set(_PriceContext(self.catalog(), KeyCache(), price_defaults or self.s.price_defaults))
         try:
             fp = fingerprint(doc)
-            attempts, best = self._route(doc, fp)
+            files = file_parts(doc)
+            if len(files) > 1:            # a zip of bills: each file read on its own (its own total and summary)
+                attempts, best = self._route_files(doc, files)
+            else:
+                attempts, best = self._route(doc, fp)
             if best is None:
                 verdict = {"status": "needs_review", "confidence": 0.0, "checks": [],
                            "feedback": ["No route produced rows"]}
@@ -229,6 +233,9 @@ class Pipeline:
             if best.verdict.get("status") == "auxiliary":           # an inventory, a price sheet: not cost lines
                 return self._finish(doc, best, attempts, dict(best.verdict, completeness="consistent"), fp, share, t0)
             pricing = self._price(rows, best.ext.fields, price_defaults)
+            if best.route == "files":                           # each file was checked on its own: their verdicts
+                verdict = dict(best.verdict)
+                return self._finish(doc, best, attempts, verdict, fp, share, t0, pricing=pricing)
             alt = self._alt_extraction(doc, best)
             verdict = validate(best.ext, alt=alt, resolved_share=share,
                                text=doc_text(doc) if best.route == "llm_extract_direct" else None)
@@ -322,6 +329,51 @@ class Pipeline:
         discount = infer_discount(stats)
         apply_discount(rows, discount)
         return stats.summary(discount)
+
+    def _route_files(self, doc: Document, files: list[Document]) -> tuple[list[Attempt], Attempt | None]:
+        """A zip of several bills: each file routed as if it was uploaded alone; the lines joined; the result as good
+        as its worst file (status, confidence), each check its worst file's, with how many files pass it."""
+        attempts: list[Attempt] = []
+        picked: list[tuple[Document, Attempt]] = []
+        for f in files:
+            atts, best = self._route(f, fingerprint(f))
+            attempts += atts
+            if best is not None and best.ext is not None and not best.ext.rows.empty:
+                picked.append((f, best))
+        if not picked:
+            return attempts, None
+        rows = pd.concat([b.ext.rows for _, b in picked], ignore_index=True)
+        ext = Extraction(rows=rows, fields=picked[0][1].ext.fields, source_rows=sum(b.ext.source_rows or 0
+                                                                                    for _, b in picked))
+        ext.stated_totals = [dict(t, label=f"{f.name}: {t.get('label', '')}") for f, b in picked
+                             for t in b.ext.stated_totals]
+        ext.warnings = [f"{f.name}: {w}" for f, b in picked for w in b.ext.warnings]
+        missing = [f.name for f in files if f.name not in {g.name for g, _ in picked}]
+        rank = {"reconciled": 0, "unreconciled": 1, "auxiliary": 1, "needs_review": 2, "unsupported": 3}
+        worst = max((b.verdict.get("status", "needs_review") for _, b in picked), key=lambda st: rank.get(st, 2))
+        if missing:
+            worst = "needs_review"
+        order = {"fail": 3, "warn": 2, "pass": 1, "skip": 0}
+        checks: dict[str, dict] = {}
+        for f, b in picked:
+            for c in b.verdict.get("checks", []):
+                cur = checks.get(c["name"])
+                if cur is None or order.get(c["status"], 0) > order.get(cur["status"], 0):
+                    checks[c["name"]] = dict(c, detail=f"{f.name}: {c.get('detail', '')}")
+        for name, c in checks.items():
+            ok = sum(1 for _, b in picked if any(x["name"] == name and x["status"] == "pass"
+                                                 for x in b.verdict.get("checks", [])))
+            c["detail"] = f"{ok} of {len(picked)} files pass; worst {c['detail']}"
+        comp = {"reconciled": 0, "consistent": 1, "unchecked": 2, "contradicted": 3, None: 2}
+        completeness = max((b.verdict.get("completeness") for _, b in picked), key=lambda x: comp.get(x, 2))
+        feedback = [f"{n}: no reader produced lines" for n in missing]
+        verdict = {"status": worst, "confidence": min(b.confidence for _, b in picked), "checks": list(checks.values()),
+                   "completeness": completeness, "feedback": feedback,
+                   "files": [{"file": f.name, "route": b.route, "status": b.verdict.get("status"),
+                              "confidence": b.confidence, "rows": len(b.ext.rows)} for f, b in picked]}
+        spec = {"id": "zip-of-files", "version": 1, "trust": "derived",
+                "meta": {"kind": "cost_lines", "format": f"a zip of {len(files)} files, each read on its own"}}
+        return attempts, Attempt(route="files", spec=spec, ext=ext, verdict=verdict)
 
     def _route(self, doc: Document, fp: dict) -> tuple[list[Attempt], Attempt | None]:
         """Every route, cheapest first, until one is accepted; else the most confident attempt with rows."""
@@ -739,6 +791,7 @@ class Pipeline:
             "file": doc.name, "sha256": doc.sha256, "file_type": doc.file_type, "kind": kind,
             "status": verdict["status"], "confidence": verdict["confidence"],
             "completeness": verdict.get("completeness"),
+            **({"files": verdict["files"]} if verdict.get("files") else {}),   # a zip of bills: each file's result
             "evidence": (best.ext.evidence if best and best.ext and big is None else {}),
             "provider_detected": best.ext.provider if best and best.ext else None,
             "spec": spec_info, "rows": n_rows,
@@ -842,6 +895,21 @@ def doc_text(doc: Document, max_chars: int = 20000) -> str:
 
 
 # ---------------------------------------------------------------- previews
+def file_parts(doc: Document) -> list[Document]:
+    """A zip's files that are each a bill on its own (two or more PDF files), one document per file; else []. Other
+    files in a zip belong together (Terraform: a variable in one file, its use in another). Region names start with
+    "<file>:" in a zip only."""
+    if not doc.regions or not all(":" in r.name for r in doc.regions):
+        return []
+    by: dict[str, list[Region]] = {}
+    for r in doc.regions:
+        by.setdefault(r.name.split(":", 1)[0], []).append(r)
+    if len(by) < 2 or not all(name.lower().endswith(".pdf") and any(r.kind == "page" and r.rows for r in g)
+                              for name, g in by.items()):
+        return []
+    return [Document(name, "pdf", doc.sha256, regions) for name, regions in by.items()]
+
+
 def _headers(doc: Document, max_regions: int = 6) -> list[str]:
     """The column headers the document prints (frames' columns, each sheet's header row): evidence of its provider."""
     out: list[str] = []
