@@ -66,7 +66,7 @@ class TreeOptions:
                                             # (a later part that prints the same money again, by another dimension)
     section: str | None = None              # regex: text rows that always start a section
     auto_sections: bool = True              # a text row right before an amount row starts a section when no group is open
-    repeated_header: str | None = None      # regex: a column header printed again above items, dropped when seen 3+ times
+    repeated_header: str | None = None      # regex: a column header printed above items (again on each page), dropped
     informational: str | None = None        # regex: rows that are information, not money ("Highest service spend")
     furniture_share: float = 0.6            # text at a page's top or bottom on this share of the pages is furniture
     furniture_top: int = 3                  # ... within this many rows from the top
@@ -79,6 +79,9 @@ class TreeOptions:
     min_total: float = 1.0                  # smallest amount that can be a total over the rows before it
     link_runs: bool = True                  # runs of sections that add up to a printed row break it down
     max_combo: int = 3                      # largest set of top rows tried as the breakdown of a total
+    line_rounding: bool = False             # every printed total is the sum of the unrounded amounts of its lines
+                                            # (an AWS bill; amounts converted line by line): a total may differ
+                                            # from its printed parts by the rounding of every line under it
     blocks: bool = False                    # a charge is the rows up to its trailer row (its period): its text rows
                                             # are its name (in order), a part number its code; a column header row
                                             # starts a new block (a Microsoft invoice by product)
@@ -133,6 +136,7 @@ class Record:
     children: list[Record] = field(default_factory=list)
     parent: Record | None = None
     views: list[list[Record]] = field(default_factory=list)   # breakdowns found outside its own children
+    by_line: set[int] = field(default_factory=set)   # ids of views that add up within the rounding of their lines
     section: int = 0
     role: str = ""                          # leaf | subtotal | total | text | unbalanced | gap
     gap: Record | None = None               # an unbalanced group's difference line
@@ -227,6 +231,13 @@ def tol(n: int = 1, amount: float = 0.0) -> float:
     return min(0.011 + 0.006 * max(0, n - 1) ** 0.5, 0.5) + 1e-6 * abs(amount)
 
 
+def line_tol(n: int, amount: float = 0.0) -> float:
+    """How far a total of the unrounded amounts of n lines may be from the sum of the n rounded lines (tree option
+    line_rounding): each line's rounding is uniform in half a cent either way (a standard deviation of 0.29 cents),
+    so four standard deviations of the sum, and never more than half a cent per line."""
+    return min(0.011 + 0.0116 * max(0, n) ** 0.5, bound(n)) + 1e-6 * abs(amount)
+
+
 def close(a: float, b: float, n: int = 1) -> bool:
     return abs(a - b) <= tol(n, max(abs(a), abs(b)))
 
@@ -272,14 +283,13 @@ def records_from(regions: list[Region], opt: TreeOptions) -> tuple[list[Record],
         skip = re.compile(opt.skip_from, re.I)
         cut = next((i for i, (_, _, t) in enumerate(rows) if skip.search(t)), None)
         rows = rows if cut is None else rows[:cut]
-    # a column header printed again above every item (the spec says what it looks like) is not content
-    seen = Counter(_mask(t) for _, _, t in rows if t and not money_in(t))
-    repeated = {k for k, n in seen.items() if n >= 3}
+    # a column header printed above the items (the spec says what it looks like) is not content: on a short bill it
+    # is printed once, and as a text row it would cut a total from its items
     parsed = []
     for reg, row, text in rows:
         if not text or NOISE.match(text) or (ignore and ignore.search(text)) or _mask(text) in furn:
             continue
-        if header and _mask(text) in repeated and header.search(text):
+        if header and not money_in(text) and header.search(text):
             continue
         parsed.append((reg, row, text, money_in(text, [c.text for c in row.cells if c.text])))
     # the main currency: the most common one among rows whose amounts are all in one currency
@@ -508,13 +518,14 @@ def _join_blocks(recs: list[Record], trailer: re.Pattern) -> list[Record]:
 
 def _wraps(rec: Record, r: Record) -> bool:
     """r is the rest of rec's name, wrapped to the next line: one text cell on the line just below, at the name's
-    indent, and the name is not finished (a bracket still open) or r goes on in lower case."""
+    indent, and the name is not finished (a bracket still open) or r goes on in lower case or is a part in brackets
+    ("... Asia Pacific" over "(Mumbai)")."""
     if rec.amount is None or not rec.cells or len(r.cells) > 1 or r.region != rec.region or r.row != rec.row + 1:
         return False
     text, name = r.label.strip(), rec.cells[0]
     if not text or abs(r.x - rec.x) > 2.0 or money_in(text):
         return False
-    return name.count("(") > name.count(")") or text[0].islower()
+    return name.count("(") > name.count(")") or text[0].islower() or bool(re.fullmatch(r"\([^()]{1,40}\)", text))
 
 
 def _append_name(rec: Record, text: str) -> None:
@@ -673,7 +684,7 @@ def _exact_heads(recs: list[Record]) -> set[int]:
             if _cancel_under(r, recs[j + 1:j + 400]):
                 out.add(id(r))
             continue
-        x1, s = recs[j + 1].x, 0.0
+        x1, s, over = recs[j + 1].x, 0.0, False
         for k in recs[j + 1:j + 400]:
             if k.amount is None:
                 continue
@@ -685,15 +696,32 @@ def _exact_heads(recs: list[Record]) -> set[int]:
             if abs(s - r.value) < ZERO:
                 out.add(id(r))
                 break
-            if abs(s) > abs(r.value) + ZERO:
-                break
+            if over and abs(k.value) >= ZERO and (k.value > 0) != (r.value > 0):
+                break                                   # past the row, the first discount or credit must close it
+            over = over or abs(s) > abs(r.value) + ZERO     # (the regions of a service, then the service's discount)
     return out
 
 
 def _cancel_under(r: Record, after: list[Record]) -> bool:
-    """The rows indented under r, at the indent of the first one, add up to $0.00 and are not all $0.00."""
+    """The rows indented under r, at the indent of the first one, add up to $0.00 and are not all $0.00. Or, when r
+    is bold, rows at its own indent, from a nonzero one, come back to $0.00 (a credit and the charge it cancels,
+    under a service)."""
     first = next((k for k in after if k.amount is not None), None)
-    if first is None or first.x <= r.x + 2.0 or first.region != r.region:
+    if first is None or first.region != r.region:
+        return False
+    if abs(first.x - r.x) <= 2.0 and abs(first.value) >= ZERO and r.bold:     # (a heading: a bold service row)
+        total = 0.0
+        for k in after:
+            if k.amount is None:
+                continue
+            if k.x < r.x - 2.0 or k.region != r.region:
+                return False
+            if abs(k.x - r.x) <= 2.0:
+                total += k.value
+                if abs(total) < ZERO:
+                    return True
+        return False
+    if first.x <= r.x + 2.0:
         return False
     total, nonzero = 0.0, False
     for k in after:
@@ -714,26 +742,27 @@ def _fits(r: Record, top: Record, opt: TreeOptions, heads: set[int] = frozenset(
         return False                                    # a table row (several amounts) never heads a group
     if abs(top.value) < ZERO:
         if id(top) in heads:                            # a $0.00 heading whose rows cancel out: every row under it
-            return r.x > top.x + 2.0
+            return r.x > top.x + 2.0 or (abs(r.x - top.x) <= 2.0 and (not top.children or abs(top.acc) >= ZERO))
         return abs(r.value) < ZERO and (r.x > top.x + 2.0 or     # else only $0.00 rows indented under it (the
                                         bool(top.children) and r.x >= top.children[-1].x - 2.0)   # sums cannot tell more)
     if top.children and _complete(top):
-        if abs(r.value) < ZERO:
-            return r.x >= top.children[-1].x - 2.0      # a zero row after a complete group
+        if abs(r.value) < ZERO:                         # a zero row after a complete group (not a $0.00 heading
+            if id(top) in heads and abs(r.x - top.x) <= 2.0 and abs(top.acc - top.value) < ZERO:
+                return False                            # (rows at top's own indent that added up to it exactly are
+            #                                             all its parts: the next one is the next service)
+            return r.x >= top.children[-1].x - 2.0 and (id(r) not in heads or r.x > top.x + 2.0)   # at its indent)
         # complete within rounding only: a row that brings the sum nearer is still its part when it is indented
         # under top, or when top is a heading that the rows after it add up to exactly (regions at a service's indent)
         nearer = abs(top.acc + r.value - top.value) < abs(top.acc - top.value) - ZERO
         return nearer and (r.x > top.x + 2.0 or (id(top) in heads and abs(r.x - top.x) <= 2.0))
     same = abs(r.x - top.x) <= 2.0
     heading = opt.heading_bold and top.bold and len(top.amounts) <= opt.heading_max_amounts
-    if same and not top.children and (not heading or abs(r.value) > abs(top.value) + tol()):
+    if same and not top.children and (not heading or (abs(r.value) > abs(top.value) + tol() and id(top) not in heads)):
         return False                                    # the same indent: a sibling, unless top is a bold heading
     if not top.children and r.x <= top.x + 2.0 and top.parent is not None and _complete(top.parent) \
-            and top.parent.children[-1] is top \
-            and (id(top) not in heads or abs(top.parent.acc - top.parent.value) < ZERO):
-        return False                                    # top completed its group: it is a leaf (unless the group
-        #                                                 is complete within rounding only and the rows after top
-        #                                                 add up to it exactly: then top heads them)
+            and top.parent.children[-1] is top and id(top) not in heads:
+        return False                                    # top completed its group: it is a leaf (unless the rows
+        #                                                 after top add up to it exactly: then top heads them)
     if abs(r.value) < ZERO:
         return True
     if r.x > top.x + opt.max_indent:
@@ -742,6 +771,8 @@ def _fits(r: Record, top: Record, opt: TreeOptions, heads: set[int] = frozenset(
     if r.x > top.x + 2.0:
         return True                                     # clearly indented under an open group: its child, even if
         #                                                 it passes the total (a discount can follow)
+    if same and heading and id(top) in heads:
+        return True                                     # rows that add up to top exactly, a discount last
     room = top.value - top.acc
     if (r.value > 0) != (room > 0):
         return same and heading                         # a credit or a negative region under a bold heading
@@ -888,6 +919,8 @@ def link(sections: list[Section], opt: TreeOptions) -> tuple[Classes, list[Recor
     free = sorted((r for r in top if abs(r.value) >= ZERO), key=lambda r: -abs(r.value))
     ex = Expander(cls)
     for big in free[:40]:
+        if opt.line_rounding and big.children and _complete(big):
+            continue                                    # its own rows add up: a sum of other rows is a chance one
         # a part is smaller than the total by more than rounding (else it is another view of the total)
         cands = [r for r in free if abs(r.value) < abs(big.value) - tol() and cls.find(r) != cls.find(big)
                  and not _view_close(r.value, big.value, 1)][:40]
@@ -898,7 +931,8 @@ def link(sections: list[Section], opt: TreeOptions) -> tuple[Classes, list[Recor
                 if len({cls.find(x) for x in c}) < k:
                     continue
                 err = abs(sum(x.value for x in c) - big.value)
-                if err <= tol(k, big.value):
+                if err <= (line_tol(sum(ex.leaves(cls.find(x)) for x in c), big.value) if opt.line_rounding
+                           else tol(k, big.value)):
                     score = (round(err, 2), -sum(ex.leaves(cls.find(x)) for x in c))
                     if best is None or score < best[0]:
                         best = (score, c)
@@ -906,6 +940,8 @@ def link(sections: list[Section], opt: TreeOptions) -> tuple[Classes, list[Recor
                 break
         if best is not None:
             big.views.append(sorted(best[1], key=lambda x: x.i))
+            if opt.line_rounding:
+                big.by_line.add(id(big.views[-1]))
     return cls, recs
 
 
@@ -1037,7 +1073,8 @@ def _own_breakdowns(r: Record) -> list[list[Record]]:
         out.append(r.children)
     elif r.role == "unbalanced" and r.gap is not None:
         out.append(r.children + [r.gap])
-    out += [v for v in r.views if len(v) >= 2 and _view_close(sum(x.value for x in v), r.value, len(v))]
+    out += [v for v in r.views if len(v) >= 2 and (id(v) in r.by_line
+                                                    or _view_close(sum(x.value for x in v), r.value, len(v)))]
     return out
 
 
@@ -1120,7 +1157,22 @@ def read(regions: list[Region], options: dict | None = None) -> Tree:
     used: set[int] = set()
     pairs: list[tuple[Record, list[Record]]] = []
     # the main groups: from the largest class with a breakdown down, then any other class that adds money
-    order = sorted({cls.find(r): r for r in amounts}.items(), key=lambda kv: (-abs(kv[1].value), -ex.leaves(kv[0])))
+    # (a part of another's breakdown is never the top, though a region or a credit can be larger than the bill's
+    # total; a breakdown whose other parts are $0.00 is the same money, not a total over it)
+    classes = {cls.find(r): r for r in amounts}
+    parts = [(k, b) for k in classes for b in ex.breakdowns(k)]
+    inner = {cls.find(x) for k, b in parts for x in b
+             if cls.find(x) != k and any(y is not x and abs(y.value) >= ZERO for y in b)}
+    grew = True
+    while grew:                                         # the whole of an inner row's breakdown is inner too
+        grew = False
+        for k, b in parts:
+            if k in inner:
+                for x in b:
+                    if cls.find(x) not in inner and cls.find(x) != k:
+                        inner.add(cls.find(x))
+                        grew = True
+    order = sorted(classes.items(), key=lambda kv: (kv[0] in inner, -abs(kv[1].value), -ex.leaves(kv[0])))
     covered: set[int] = set()
     groups: list[dict] = []
     group_rows: list[tuple[set[int], set[int]]] = []    # each group's classes and leaves
@@ -1135,9 +1187,10 @@ def read(regions: list[Region], options: dict | None = None) -> Tree:
             so_far = sum(g["amount_used"] for g in groups)
             # (a few cents prove nothing: they match some printed amount by chance; a $0.00 group adds no money,
             # and its lines are kept)
+            pad = line_tol(sum(g["lines"] for g in groups) + ex.leaves(k), so_far + r.value) if opt.line_rounding \
+                and abs(r.value) >= ZERO else bound(len(groups) + 1)
             if ZERO <= abs(r.value) < opt.min_total or _within(k, ex, covered, cls) \
-                    or not any(abs(so_far + r.value - a.value) <= bound(len(groups) + 1)
-                                                       for a in amounts if abs(a.value) >= 1.0):
+                    or not any(abs(so_far + r.value - a.value) <= pad for a in amounts if abs(a.value) >= 1.0):
                 continue
         sub: list[tuple[Record, list[Record]]] = []
         ex.expand(cls.rec[k], [], sub, used)
@@ -1145,7 +1198,7 @@ def read(regions: list[Region], options: dict | None = None) -> Tree:
             continue                                    # a lone $0.00 row ("Total tax 0.00") is a total, not a line
         groups.append({"label": cls.rec[k].label[:60], "amount": cls.rec[k].amount, "src": cls.rec[k].src,
                        "lines": len(sub), "sum": round(sum(x.value for x, _ in sub), 2),
-                       **_rounding(sub, cls, ex)})
+                       **_rounding(sub, cls, ex, opt.line_rounding)})
         pairs += sub
         closure = _closure(k, ex, cls)
         covered |= closure
@@ -1189,7 +1242,7 @@ def read(regions: list[Region], options: dict | None = None) -> Tree:
               "x": leaf.x, "amounts": leaf.amounts, "cells": leaf.cells, "columns": leaf.columns}
              for leaf, path in pairs]
     total = round(sum(leaf.value for leaf, _ in pairs), 2)
-    evidence = {"reconcile": _reconcile(groups, amounts, total),
+    evidence = {"reconcile": _reconcile(groups, amounts, total, opt.line_rounding),
         "records": len(amounts), "lines": len(pairs), "sum": total, "currency": currency, "groups": groups,
         "top_total": None if main is None else {"label": main.label, "amount": main.amount, "src": main.src},
         "subtotals_ok": len(subtotals) - len(failed), "subtotals_failed": [_brief(r) for r in failed][:20],
@@ -1210,7 +1263,7 @@ def read(regions: list[Region], options: dict | None = None) -> Tree:
     return Tree(recs, sections, lines, evidence, currency, facts_from(regions))
 
 
-def _reconcile(groups: list[dict], amounts: list[Record], total: float) -> dict | None:
+def _reconcile(groups: list[dict], amounts: list[Record], total: float, by_line: bool = False) -> dict | None:
     """The proof of the lines: the printed total, the lines, and the rounding at each printed total between them.
     printed = lines + rounding to the cent when the lines are exactly the leaves of the totals; any other difference is
     money counted twice or not at all ("unexplained")."""
@@ -1223,7 +1276,8 @@ def _reconcile(groups: list[dict], amounts: list[Record], total: float) -> dict 
     label, amount, src = groups[0]["label_used"], groups[0]["amount_used"], groups[0]["src_used"]
     if len(groups) > 1:                                 # several groups: the printed amount that is their sum
         hit = min((a for a in amounts if abs(a.value) >= 1.0), key=lambda a: abs(a.value - parts), default=None)
-        if hit is not None and abs(hit.value - parts) <= bound(len(groups)):
+        pad = line_tol(sum(g["lines"] for g in groups), parts) if by_line else bound(len(groups))
+        if hit is not None and abs(hit.value - parts) <= pad:
             label, amount, src = hit.label[:80], hit.value, hit.src
             rounding += hit.value - parts
         else:
@@ -1234,16 +1288,19 @@ def _reconcile(groups: list[dict], amounts: list[Record], total: float) -> dict 
             "proved": abs(unexplained) < ZERO and not over and src is not None}
 
 
-def _rounding(sub: list[tuple[Record, list[Record]]], cls: Classes, ex: Expander) -> dict:
+def _rounding(sub: list[tuple[Record, list[Record]]], cls: Classes, ex: Expander, by_line: bool = False) -> dict:
     """Account for every cent between a group's printed total and its lines. Each printed total above the lines
     differs from the sum of its direct parts by its rounding; added up over the tree, the roundings are exactly the
     printed total minus the lines. A total printed more than once with different cents (a total by account and a
     grand total) is one total: it is tested with the printing nearest its parts, and that printing is also its value
-    as a part of the total above it. A rounding above bound() is not rounding."""
+    as a part of the total above it. A rounding above bound() is not rounding (by_line: above the rounding of
+    the lines under the total, tol())."""
     kids: dict[int, dict[tuple, Record]] = defaultdict(dict)   # class -> its parts: ("node", class) or ("leaf", id)
     rep: dict[int, Record] = {}
+    under: Counter = Counter()                          # class -> how many lines are under it
     for leaf, path in sub:
         keys = [cls.find(a) for a in path]
+        under.update(set(keys))
         for k, a in zip(keys, path):
             rep.setdefault(k, a)
         for k, nxt in zip(keys, keys[1:]):
@@ -1273,7 +1330,7 @@ def _rounding(sub: list[tuple[Record, list[Record]]], cls: Classes, ex: Expander
             item = {"label": p.label[:80], "amount": p.amount, "src": p.src, "parts": len(parts),
                     "children": round(s, 2), "rounding": d}
             at.append(item)
-            if abs(d) > bound(len(parts)):
+            if abs(d) > (max(bound(len(parts)), line_tol(under[k], p.value)) if by_line else bound(len(parts))):
                 over.append(item)
     at.sort(key=lambda x: -abs(x["rounding"]))
     used = printed(top_key) if top_key is not None else (sub[0][0] if sub else None)

@@ -258,11 +258,13 @@ More spec keys:
   {"ignore": regex of rows to drop, "skip_from": regex of the row from which the rest of the file is left out (a
    later part that prints the same money again by another dimension, e.g. per account after a by-service detail),
    "section": regex of rows that start a section, "auto_sections": bool,
-   "repeated_header": regex of a column header printed again above items, "informational": regex of rows that are
+   "repeated_header": regex of a column header printed above items (dropped), "informational": regex of rows that are
    information not money ("Highest service spend"), "trailer": regex of text rows that belong to the amount row above
    (a period), "currency": "USD", "amount": "last"|"first", "furniture_share": 0.6, "furniture_top": 3,
    "furniture_bottom": 12, "heading_bold": bool, "heading_max_amounts": 1, "table_row_amounts": 3, "min_total": 1.0,
-   "link_runs": bool, "max_combo": 3}
+   "link_runs": bool, "max_combo": 3, "max_indent": 150, "blocks": bool, "line_rounding": bool (the printed totals
+   add up unrounded or converted line amounts, as on an AWS bill: a total may differ from its parts by the rounding of
+   every line under it)}
 - "context" (tree source): {"account": regex with named groups id and name, "region": regex of region headings,
   "not_service": regex of headings that are not services, "label_split": " / " for labels printed in two languages,
   "charge_types": [["Tax", regex], ["Credit", regex], ...] matched on a line's label, then the labels above it}
