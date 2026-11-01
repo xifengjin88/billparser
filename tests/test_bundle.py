@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import gzip
 import io
+import json
 import sys
 import zipfile
 from pathlib import Path
@@ -17,6 +18,7 @@ sys.path.insert(0, str(ROOT / "tests"))
 from test_jobs import client, store  # noqa: E402,F401 - the fixtures
 
 from billparse import bundle  # noqa: E402
+from billparse.pipeline import Pipeline, Settings  # noqa: E402
 
 LIMIT = 50 * 1024 * 1024
 
@@ -71,3 +73,18 @@ def test_an_upload_of_a_zip_of_bills_starts_a_parse_of_each_file(client, store, 
     assert job.status_code == 200 and len(job.json()["split"]) == 2                 # the same files: their jobs
     r = client.post("/parse", files={"file": ("bills.zip", io.BytesIO(z.read_bytes()))})
     assert r.status_code == 422 and "2 separate files" in r.json()["detail"]
+
+
+def test_a_builtin_specs_notes_are_a_reconciliation_note_not_a_doubt(tmp_path):
+    """The notes of a builtin spec say how it reads its layout: shown as a note, never as an uncertain decision."""
+    pipe = Pipeline(Settings(store_dir=tmp_path / "store", use_llm=False, use_agent=False))
+    files = {"cost.csv": b"ResourceGroup,Resource,ResourceId,ResourceType,ResourceLocation,Cost,CostUSD,Currency\n"
+                         b"rg,vm1,/subscriptions/s/vm1,Virtual machine,US East,10.00,10.00,USD\n"}
+    path = tmp_path / "cost.csv"
+    path.write_bytes(files["cost.csv"])
+    r = pipe.parse_file(path)
+    assert r["spec"]["id"] == "azure-cost-by-resource"
+    meta = json.loads(pipe.store.part(r["sha256"], "meta"))
+    note = "the service is the resource type"
+    assert any(note in n["message"] for n in meta["notes"])
+    assert not any(note in f["message"] for f in meta["flags"])

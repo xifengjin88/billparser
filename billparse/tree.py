@@ -702,19 +702,25 @@ def _exact_heads(recs: list[Record]) -> set[int]:
     return out
 
 
+def _same_flow(r: Record, k: Record) -> bool:
+    """k is on r's page or on the next page of the same document (a heading at the foot of a page, its rows on the
+    next one)."""
+    return k.region == r.region or (bool(r.page) and bool(k.page) and 0 <= k.page - r.page <= 1)
+
+
 def _cancel_under(r: Record, after: list[Record]) -> bool:
     """The rows indented under r, at the indent of the first one, add up to $0.00 and are not all $0.00. Or, when r
     is bold, rows at its own indent, from a nonzero one, come back to $0.00 (a credit and the charge it cancels,
-    under a service)."""
+    under a service). The rows may go on to the next page."""
     first = next((k for k in after if k.amount is not None), None)
-    if first is None or first.region != r.region:
+    if first is None or not _same_flow(r, first):
         return False
     if abs(first.x - r.x) <= 2.0 and abs(first.value) >= ZERO and r.bold:     # (a heading: a bold service row)
         total = 0.0
         for k in after:
             if k.amount is None:
                 continue
-            if k.x < r.x - 2.0 or k.region != r.region:
+            if k.x < r.x - 2.0 or not _same_flow(r, k):
                 return False
             if abs(k.x - r.x) <= 2.0:
                 total += k.value
@@ -727,7 +733,7 @@ def _cancel_under(r: Record, after: list[Record]) -> bool:
     for k in after:
         if k.amount is None:
             continue
-        if k.x <= r.x + 2.0 or k.region != r.region:
+        if k.x <= r.x + 2.0 or not _same_flow(r, k):
             break
         if abs(k.x - first.x) <= 2.0:
             total += k.value

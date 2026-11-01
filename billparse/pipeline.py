@@ -802,6 +802,7 @@ class Pipeline:
             "header_field_src": {k: str(v["src"]) for k, v in fields.items() if v.get("src") is not None},
             "checks": verdict.get("checks", []),
             "warnings": _warnings(best, big),
+            "spec_notes": _builtin_note(best),
             "analysis": analysis,
             "pricing": pricing,
             "attempts": [a.log() for a in attempts],
@@ -966,9 +967,15 @@ def _warnings(best: Attempt | None, big: bigfile.Scan | None = None) -> list[str
         return list(big.warnings) if big is not None else []
     out = list(big.warnings) if big is not None else list(best.ext.warnings) if best.ext else []
     note = ((best.spec or {}).get("meta") or {}).get("notes")
-    if note:
+    if note and not _builtin_note(best):             # a learned or LLM spec's notes are its assumptions
         out.append(note)
     return out
+
+
+def _builtin_note(best: Attempt | None) -> str | None:
+    """A builtin spec's notes: how it reads its layout (a reconciliation note), not a decision in doubt."""
+    spec = (best.spec or {}) if best is not None else {}
+    return ((spec.get("meta") or {}).get("notes") or None) if spec.get("trust") == "builtin" else None
 
 
 def _public(spec: dict) -> dict:
