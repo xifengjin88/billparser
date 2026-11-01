@@ -118,3 +118,13 @@ def test_a_json_total_amount_due_proves_the_lines(tmp_path):
     pipe = Pipeline(Settings(store_dir=tmp_path / "store", use_llm=False, use_agent=False))
     r = pipe.parse_file(path)
     assert r["status"] == "reconciled" and r["rows"] == 2
+
+
+@pytest.mark.parametrize("text, expect", [
+    ("(1 234,56) €", -1234.56), ("USD (1,234.56)", -1234.56), ("(12.00)", -12.0), ("12.00-", -12.0),
+    ("1 234,56 €", 1234.56), ("1 234,56 €", 1234.56), ("CHF 1'234.50", 1234.5), ("-1.234,56 €", -1234.56),
+    ("€ (99,00)", -99.0), ("1,234.56", 1234.56),
+])
+def test_parse_number_signs_and_formats(text, expect):
+    from billparse.transforms import parse_number
+    assert parse_number(text) == expect

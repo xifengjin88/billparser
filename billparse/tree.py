@@ -34,12 +34,19 @@ from .docmodel import Region
 
 CURRENCIES = ("USD", "CAD", "EUR", "GBP", "INR", "AUD", "JPY", "NZD", "SGD", "CHF", "BRL", "MXN", "ZAR", "SEK",
               "NOK", "DKK", "HKD", "CNY", "KRW")
-SYMBOL = {"$": "USD", "€": "EUR", "£": "GBP", "₹": "INR", "¥": "JPY"}
+SYMBOL = {"$": "USD", "€": "EUR", "£": "GBP", "₹": "INR", "¥": "JPY", "₩": "KRW"}
 _CUR = "|".join(CURRENCIES)
-# an amount: an optional currency, a number with 2 decimals, an optional sign or brackets; never part of a longer
-# number, a percent, a date or a version
-MONEY = re.compile(rf"(?<![\w.,/:-])(?P<neg>[-(])?\s?(?P<cur>{_CUR})?\s?(?P<sym>[$€£₹¥])?\s?(?P<neg2>-)?\s?"
-                   rf"(?P<num>\d{{1,3}}(?:,\d{{3}})+\.\d{{2}}|\d+\.\d{{2}})(?P<close>\))?(?![\d.,]*\d)(?!\s?%)(?![-/]\d)")
+_SP = "[ \u00a0\u202f]"                     # a space, a no-break space or a narrow one (French thousands)
+WHOLE = {"JPY", "KRW"}                          # currencies printed without decimals
+# an amount: an optional currency (before or after), a number with 2 decimals in any common format ("1,234.56",
+# "1.234,56", "1 234,56", "1'234.56", "234,56"), or a whole number with a currency that has no decimals ("¥1,234");
+# an optional sign or brackets; never part of a longer number, a percent, a date or a version
+MONEY = re.compile(
+    rf"(?<![\d.,/:'-])(?P<neg>[-(])?\s?(?P<cur>{_CUR})?\s?(?P<sym>[$€£₹¥₩])?\s?(?P<neg2>-)?\s?"
+    rf"(?P<num>\d{{1,3}}(?:,\d{{3}})+\.\d{{2}}|\d{{1,3}}(?:\.\d{{3}})+,\d{{2}}|\d{{1,3}}(?:{_SP}\d{{3}})+,\d{{2}}"
+    rf"|\d{{1,3}}(?:'\d{{3}})+\.\d{{2}}|\d+\.\d{{2}}|\d+,\d{{2}}|(?P<whole>\d{{1,3}}(?:,\d{{3}})+|\d+))"
+    rf"(?P<close>\))?(?![\d.,']*\d)(?!\s?%)(?![-/]\d)"
+    rf"(?:{_SP}?(?P<tsym>[€£$₹¥₩])|{_SP}(?P<tcur>{_CUR})\b)?")
 DATE_RANGE = re.compile(r"\b\d{1,2}[-/ ][A-Za-z]{3}[-/ ]\d{2,4}\s*-\s*\d{1,2}[-/ ][A-Za-z]{3}[-/ ]\d{2,4}\b|"
                         r"\b\d{4}[-/]\d{2}[-/]\d{2}\s*-\s*\d{4}[-/]\d{2}[-/]\d{2}\b|"
                         r"\b[A-Z][a-z]{2} \d{1,2} ?-\s?[A-Z][a-z]{2} \d{1,2},? \d{4}\b")
@@ -65,6 +72,8 @@ class TreeOptions:
     furniture_top: int = 3                  # ... within this many rows from the top
     furniture_bottom: int = 12              # ... or this many rows from the bottom
     heading_bold: bool = True               # a bold row can head rows at its own indent
+    max_indent: float = 150.0               # points: a row further right than this is not indented under a group
+                                            # (a totals block at the right of the page)
     heading_max_amounts: int = 1            # ... if it has at most this many amounts
     table_row_amounts: int = 3              # a row with this many amounts is a table row: it heads nothing
     min_total: float = 1.0                  # smallest amount that can be a total over the rows before it
@@ -162,18 +171,53 @@ class Tree:
 BETWEEN_WORDS = re.compile(rf"^\s+(?!(?:{_CUR})\b)[A-Za-z]{{2,}}")
 
 
-def money_in(text: str) -> list[tuple[float, str | None, int, int]]:
+def money_in(text: str, cells: list[str] | None = None) -> list[tuple[float, str | None, int, int]]:
     """Every amount in a text: (value, currency or None, start, end). A bare number between words is not an amount
-    (a version: "Ubuntu 22.04 LTS")."""
+    (a version: "Ubuntu 22.04 LTS"); a number right after a letter only with a currency ("PAGAR1 481,47 €", not
+    "t3.large"). cells: the row's cells, when text joins them: a number with a space inside must be inside one cell
+    ("12" and "345,67 €" in two columns are two values)."""
     out = []
-    for m in MONEY.finditer(text):
-        bare = not (m["cur"] or m["sym"])
-        if bare and re.search(r"[A-Za-z]\s*$", text[:m.start()]) and BETWEEN_WORDS.match(text[m.end():]):
+    pos = 0
+    while (m := MONEY.search(text, pos)):
+        pos = m.end() or pos + 1
+        num = m["num"]
+        end = m.end()
+        trail = "tcur" if m["tcur"] else "tsym" if m["tsym"] else None
+        if trail and (m["cur"] or m["sym"] or re.match(r"\s*[-(]?\d", text[m.end():])):
+            # "USD 10.84 CAD 16.26": a currency after a number that has one, or before another number, is the next
+            # number's
+            end = m.end("num") + (1 if m["close"] else 0)
+            pos = m.start(trail)
+            trail = None
+        cur = m["cur"] or SYMBOL.get(m["sym"] or "") or (
+            (m["tcur"] or SYMBOL.get(m["tsym"] or "")) if trail else None)
+        if m["whole"] is not None and cur not in WHOLE:
+            continue                                    # a whole number is an amount only in yen or won
+        if re.search(_SP, num) and cells is not None and not any(num in c for c in cells):
+            pos = m.start("num") + re.search(_SP, num).start() + 1      # two cells: read the second on its own
             continue
-        v = float(m["num"].replace(",", ""))
-        if m["neg"] or m["neg2"]:
+        start = m.start() + len(m.group(0)) - len(m.group(0).lstrip())     # a match may begin at a space
+        neg = bool(m["neg2"])
+        if m["neg"]:
+            if m.start("neg") > 0 and text[m.start("neg") - 1].isalnum():
+                start = m.end("neg")                    # "Lambda-GB- USD 2.22": the end of a word, not a sign
+                start += len(text[start:]) - len(text[start:].lstrip())
+            else:
+                neg = True
+        glued = start > 0 and text[start - 1].isalpha()
+        if glued and not cur:
+            continue                                    # "t3.large", "EUW1-": a name, not an amount
+        bare = not cur
+        if bare and re.search(r"[A-Za-z]\s*$", text[:start]) and BETWEEN_WORDS.match(text[end:]):
+            continue
+        digits = re.sub(rf"[{_SP[1:-1]}']", "", num)
+        if re.fullmatch(r"\d+(?:\.\d{3})*,\d{2}", digits):          # a decimal comma
+            v = float(digits.replace(".", "").replace(",", "."))
+        else:
+            v = float(digits.replace(",", ""))
+        if neg:
             v = -v
-        out.append((v, m["cur"] or SYMBOL.get(m["sym"] or ""), m.start(), m.end()))
+        out.append((v, cur, start, end))
     return out
 
 
@@ -237,7 +281,7 @@ def records_from(regions: list[Region], opt: TreeOptions) -> tuple[list[Record],
             continue
         if header and _mask(text) in repeated and header.search(text):
             continue
-        parsed.append((reg, row, text, money_in(text)))
+        parsed.append((reg, row, text, money_in(text, [c.text for c in row.cells if c.text])))
     # the main currency: the most common one among rows whose amounts are all in one currency
     counts = Counter(f[0][1] for *_, f in parsed if f and f[0][1] and len({x[1] for x in f}) == 1)
     currency = opt.currency or (counts.most_common(1)[0][0] if counts else None)
@@ -462,6 +506,27 @@ def _join_blocks(recs: list[Record], trailer: re.Pattern) -> list[Record]:
     return out
 
 
+def _wraps(rec: Record, r: Record) -> bool:
+    """r is the rest of rec's name, wrapped to the next line: one text cell on the line just below, at the name's
+    indent, and the name is not finished (a bracket still open) or r goes on in lower case."""
+    if rec.amount is None or not rec.cells or len(r.cells) > 1 or r.region != rec.region or r.row != rec.row + 1:
+        return False
+    text, name = r.label.strip(), rec.cells[0]
+    if not text or abs(r.x - rec.x) > 2.0 or money_in(text):
+        return False
+    return name.count("(") > name.count(")") or text[0].islower()
+
+
+def _append_name(rec: Record, text: str) -> None:
+    name = rec.cells[0]
+    rec.cells[0] = f"{name} {text}"
+    rec.label = rec.label.replace(name, rec.cells[0], 1) if name in rec.label else f"{rec.label} {text}"
+    for k, v in rec.columns.items():
+        if v == name:
+            rec.columns[k] = rec.cells[0]
+            break
+
+
 def _join_text(recs: list[Record], opt: TreeOptions) -> list[Record]:
     """An amount row with no words takes its name from the text rows above it; text rows that end with the
     trailer (by default a period) before that stay with the record above."""
@@ -474,6 +539,9 @@ def _join_text(recs: list[Record], opt: TreeOptions) -> list[Record]:
     out: list[Record] = []
     pending: list[Record] = []
     for r in recs:
+        if r.amount is None and not pending and out and _wraps(out[-1], r):
+            _append_name(out[-1], r.label.strip())
+            continue
         if r.amount is None:
             pending.append(r)
             continue
@@ -668,6 +736,9 @@ def _fits(r: Record, top: Record, opt: TreeOptions, heads: set[int] = frozenset(
         #                                                 add up to it exactly: then top heads them)
     if abs(r.value) < ZERO:
         return True
+    if r.x > top.x + opt.max_indent:
+        return False                                    # far to the right: a block of its own (totals printed at the
+        #                                                 right of the page), not an indent
     if r.x > top.x + 2.0:
         return True                                     # clearly indented under an open group: its child, even if
         #                                                 it passes the total (a discount can follow)

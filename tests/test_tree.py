@@ -12,6 +12,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 import pandas as pd  # noqa: E402
+import pytest  # noqa: E402
 
 from billparse import tree  # noqa: E402
 from billparse.context import lines_frame  # noqa: E402
@@ -372,3 +373,26 @@ def test_a_zip_of_bills_reads_each_bill_with_its_own_tree(tmp_path):
     assert checks["stated_total"] == "pass" and checks["amounts_explained"] == "pass"
     assert [(f["file"], f["status"], f["rows"]) for f in r["files"]] == [("ClientA_April.pdf", "reconciled", 2),
                                                                          ("ClientB_April.pdf", "reconciled", 3)]
+
+
+# ---------------------------------------------------------------- amounts in European and other formats
+@pytest.mark.parametrize("text, expect", [
+    ("1 234,56 €", [(1234.56, "EUR")]), ("1.234,56 €", [(1234.56, "EUR")]), ("234,56 €", [(234.56, "EUR")]),
+    ("1 234,56 €", [(1234.56, "EUR")]), ("1 234,56 EUR", [(1234.56, "EUR")]),
+    ("Montant total (hors taxes) 1 234,56 €", [(1234.56, "EUR")]), ("TVA 20% 246,91 €", [(246.91, "EUR")]),
+    ("-1.234,56 €", [(-1234.56, "EUR")]), ("(1 234,56) €", [(-1234.56, "EUR")]),
+    ("CHF 1'234.50", [(1234.5, "CHF")]), ("¥1,234", [(1234.0, "JPY")]), ("合計金額 ¥12,345", [(12345.0, "JPY")]),
+    ("$1,234.56", [(1234.56, "USD")]), ("USD 1,234.56", [(1234.56, "USD")]), ("1,234.56", [(1234.56, None)]),
+    ("Amazon CloudFront global Data Transfer Out GB 1,234.00 0.0850 104,89 €", [(1234.0, None), (104.89, "EUR")]),
+    ("IMPORTE TOTAL A PAGAR1 481,47 €", [(1481.47, "EUR")]),
+    ("132,978.088 Lambda-GB- USD 2.22", [(2.22, "USD")]), ("Discount - USD 5.00", [(-5.0, "USD")]),
+    ("Ubuntu 22.04 LTS", []), ("20%", []), ("1,234", []), ("2026-10-01", []),
+])
+def test_amounts_in_european_and_other_formats(text, expect):
+    assert [(round(v, 2), c) for v, c, *_ in tree.money_in(text)] == expect
+
+
+def test_a_space_inside_a_number_must_be_inside_one_cell():
+    """"12" and "345,67 €" in two columns are two values, not 12,345.67."""
+    assert [v for v, *_ in tree.money_in("12 345,67 €", cells=["12", "345,67 €"])] == [345.67]
+    assert [v for v, *_ in tree.money_in("12 345,67 €", cells=["12 345,67 €"])] == [12345.67]
