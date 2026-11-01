@@ -133,8 +133,9 @@ def parse_number(v: object, decimal: str = ".") -> float | None:
     s = str(v).strip()
     if not s or s.lower() in {"nan", "none", "null", "-", "—", "n/a"}:
         return None
-    neg = s.startswith("(") and s.endswith(")") or s.endswith("-") or s.startswith("-")
-    s = _CURRENCY_JUNK.sub("", s).strip("()-")
+    s = _CURRENCY_JUNK.sub("", s)                   # currency words and symbols, spaces, apostrophes
+    neg = s.startswith("(") and s.endswith(")") or s.endswith("-") or s.startswith("-")   # "USD (1,234.56)" too
+    s = s.strip("()-")
     if not s:
         return None
     if decimal == ",":

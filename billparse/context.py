@@ -32,6 +32,7 @@ import pandas as pd
 from svcres.regions import lookup as region_lookup
 
 from .analyze import RESOLVER_LOCK
+from .transforms import parse_number
 
 ACCOUNT = r"^(?P<name>.*?)\s*\(?(?P<id>\d{12})\)?\s*$"
 GUID = re.compile(r"\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b", re.I)
@@ -198,8 +199,9 @@ def lines_frame(lines: list[dict], catalog_dir: Path | None, currency: str | Non
             elif "charge_start" not in rec and (p := _period(t)):
                 rec["charge_start"], rec["charge_end"] = p
                 extra.remove(t)
-        if provider:
-            rec["provider"] = provider
+        own = provider_of([line["section"]]) if line.get("section") else None   # "Microsoft Azure" above its lines
+        if own or provider:
+            rec["provider"] = own or provider
         if currency:
             rec["currency"] = currency
         if extra:
@@ -256,6 +258,12 @@ def _cells(rec: dict, line: dict, extra: list[str]) -> str | None:
         if name and name not in used and UNIT_PRICE.search(name):
             rec.setdefault("unit_price", v)
             used.add(name)
+    for name, text in named:                            # a unit price with more decimals ("$0.1920") is not an amount
+        if name and name not in used and "unit_price" not in rec and UNIT_PRICE.search(name):
+            v = parse_number(text)
+            if v is not None:
+                rec["unit_price"] = v
+                used.add(name)
     tax = next(((n, v) for n, v in values if n and n not in used and TAX.search(n)), None)
     if main and tax and re.search(r"\btotal\b", main, re.I):     # Total = net charge + tax: two lines
         net = next(((n, v) for n, v in values if n and n not in used | {tax[0]} and abs(v + tax[1] - amount) < 0.011),
