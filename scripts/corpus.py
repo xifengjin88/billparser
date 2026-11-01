@@ -12,7 +12,9 @@ next run: the second run of a layout needs no agent.
 The files stay where they are: each run parses them into a new scratch store, with the LLM off. The report goes to
 store/corpus/<time>.json (store/ is not in git). Expected results written by hand go in store/corpus/expected.json:
 {"file name": {"total": 13417.90, "status": "reconciled", "min_rows": 700}}; a file that does not meet them is
-marked. The corpus is customer data: never copy it into the repository.
+marked. A file that is not a bill or is bad data gets "known": the reason, with the status it should keep
+({"status": "needs_review", "known": "not a bill: a savings proposal"}): while it keeps that status, the report lists
+it apart, not as an open problem. The corpus is customer data: never copy it into the repository.
 """
 
 from __future__ import annotations
@@ -225,6 +227,13 @@ def main() -> None:
     print("completeness:", dict(Counter(r.get("completeness") for r in ok)))
     print("accepted:", sum(r["status"] in ACCEPTED for r in ok), " expected failures:",
           sum(bool(r.get("expected_failures")) for r in results), f"of {sum(r['file'] in expected for r in results)}")
+    known = [r for r in ok if (expected.get(r["file"]) or {}).get("known") and not r.get("expected_failures")]
+    if known:                                                   # not bills or bad data, with the status they should keep
+        print(f"known ({len(known)}, not open problems):")
+        for r in known:
+            print(f"  {r['file'][:50]:50} {r['status']:13} {expected[r['file']]['known']}")
+    open_ = [r for r in ok if r["status"] not in ACCEPTED and r not in known]
+    print(f"open: {len(open_)}" + "".join(f"\n  {r['file'][:50]:50} {r['status']}" for r in open_))
     if a.compare and previous:
         before = {r["file"]: r for r in json.loads(previous[-1].read_text())}
         print(f"\nchanges since {previous[-1].name}:")

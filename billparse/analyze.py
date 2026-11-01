@@ -16,7 +16,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from svcres.catalog import Catalog, build
+from svcres.catalog import Catalog, build, stamp
 from svcres.resolver import Resolver
 from svcres.seeds import AZURE_FAMILY_TO_CATEGORY, FEE_SERVICES
 
@@ -59,9 +59,11 @@ def get_resolver(data_dir: Path) -> Resolver:
 def _load_resolver(data_dir: Path, url: str | None = None) -> Resolver:
     data_dir.mkdir(parents=True, exist_ok=True)
     cat_path = data_dir / "catalog.msgpack"
-    if not cat_path.exists():                     # the price catalog's lists, the fetch scripts' JSON for the rest
-        build(data_dir / "raw", rows_for_url(url)).save(cat_path)
-    return Resolver(Catalog.load(cat_path), data_dir, synonyms=synonym_store(data_dir, url))
+    cat = Catalog.load(cat_path) if cat_path.exists() else None
+    if cat is None or cat.seeds != stamp():       # none yet, or built by other code or seed aliases (svcres)
+        cat = build(data_dir / "raw", rows_for_url(url))   # the price catalog's lists, the fetch scripts' JSON for the rest
+        cat.save(cat_path)
+    return Resolver(cat, data_dir, synonyms=synonym_store(data_dir, url))
 
 
 def resolve_services(rows: pd.DataFrame, data_dir: Path) -> float | None:

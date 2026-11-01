@@ -201,6 +201,8 @@ class Resolver:
         for n in (norm(raw), norm_loose(raw)):
             hits = {key for p in provs for table in (self.cat.names, self.cat.products)
                     if (key := table.get(f"{p}:{n}"))}
+            if not hits and n == norm(raw):              # whole names only (an Azure resource type)
+                hits = {key for p in provs if (key := self.cat.exact.get(f"{p}:{n}"))}
             if len(hits) == 1:
                 return self._remember(ck, self._make(raw, hits.pop(), "name", 100))
             if len(hits) > 1:
