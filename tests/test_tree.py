@@ -396,3 +396,95 @@ def test_a_space_inside_a_number_must_be_inside_one_cell():
     """"12" and "345,67 €" in two columns are two values, not 12,345.67."""
     assert [v for v, *_ in tree.money_in("12 345,67 €", cells=["12", "345,67 €"])] == [345.67]
     assert [v for v, *_ in tree.money_in("12 345,67 €", cells=["12 345,67 €"])] == [12345.67]
+
+
+# ---------------------------------------------------------------- the AWS Billing console Bills page
+BILLS_PAGE = ROOT / "specs" / "builtin" / "aws-bills-page-pdf.json"
+
+
+def bills_page(grand: str = "USD 1,000.03") -> Region:
+    """A Bills page: the summary by seller (two currencies) and its Grand total, a highest-spend box, then the
+    charges. Compute (900.00) has two regions that pass it before its discount; Registry ($0.00) is a credit and the
+    charge it cancels at the service's indent; Queue (0.10) comes when the seller total is already complete and its
+    regions add up to it; a credit (-300.00) is larger than the Grand total's share of the seller. The Grand total
+    (1,000.03) is 3 cents more than pre-tax plus tax: AWS adds up the unrounded lines."""
+    def money(v: str) -> str:
+        return f"USD {v}"
+    rows = [
+        header(0, "AWS bill summary"),
+        header(1, "Service provider", "Total in invoice currency", "Total in USD"),
+        Row([Cell("Example Seller", 36, 230), Cell("GBP 750.00", 300, 360), Cell("USD 1,000.03", 400, 460)], 2, page=1),
+        Row([Cell("Grand total:", 36, 230), Cell(grand, 400, 460)], 3, page=1),
+        header(4, "Highest cost by service provider"),
+        row(5, "service", "Highest service spend", money("900.00")),
+        header(6, "Charges by service"),
+        Row([Cell("Example Seller (4)", 30, 230), Cell("Total pre-tax USD 900.10", 400, 460)], 7, page=1),
+        header(8, "Description", "Usage Quantity", "Amount in USD"),
+        row(9, "service", "Compute", money("900.00"), bold=True),
+        row(10, "region", "EU (Ireland)", money("700.00"), bold=True),
+        row(11, "line", "$0.10 per instance hour", money("700.00"), "7,000 Hrs"),
+        row(12, "region", "US East (Ohio)", money("500.00"), bold=True),
+        row(13, "line", "$0.10 per instance hour", money("500.00"), "5,000 Hrs"),
+        row(14, "region", "No Region", "(USD 300.00)", bold=True),
+        row(15, "line", "Promo credit, credit from account: 111122223333", "(USD 300.00)"),
+        row(16, "service", "Registry", money("0.00"), bold=True),
+        row(17, "region", "No Region", "(USD 4.00)", bold=True),
+        row(18, "line", "Promo credit, credit from account: 111122223333", "(USD 4.00)"),
+        row(19, "region", "EU (Frankfurt)", money("4.00"), bold=True),
+        row(20, "line", "$0.10 per GB-month of data storage", money("4.00"), "40 GB-Mo"),
+        row(21, "service", "Queue", money("0.10"), bold=True),
+        row(22, "region", "EU (London)", money("0.00"), bold=True),
+        row(23, "line", "First 1,000,000 requests per month are free", money("0.00"), "120 Requests"),
+        row(24, "region", "EU (Ireland)", money("0.10"), bold=True),
+        row(25, "line", "$0.40 per million requests", money("0.10"), "250,000 Requests"),
+        row(26, "total", "Total tax", money("99.90")),
+        Row([Cell("Savings (1)", 30, 230), Cell("Total savings (USD 304.00)", 400, 460)], 27, page=1),
+        row(28, "service", "Promo credit", "(USD 304.00)"),
+    ]
+    return Region(name="page1", kind="page", rows=rows)
+
+
+def bills_options() -> dict:
+    import json
+    return json.loads(BILLS_PAGE.read_text())["tree"]
+
+
+def test_a_bills_page_is_proved_against_its_grand_total():
+    t = tree.read([bills_page()], bills_options())
+    rec = t.evidence["reconcile"]
+    assert rec["label"].startswith("Grand total") and rec["proved"], rec
+    assert not t.evidence["unexplained"]
+    labels = [line["label"] for line in t.lines]
+    # the lines and the seller's tax; no summary row, highest-spend box, service, region or savings row
+    assert sorted(round(line["amount"], 2) for line in t.lines) == \
+        sorted([700.0, 500.0, -300.0, -4.0, 4.0, 0.0, 0.1, 99.9])
+    assert not any(x.startswith(("Example Seller", "Highest", "Compute", "Savings")) for x in labels)
+    assert round(sum(line["amount"] for line in t.lines), 2) == 1000.0
+
+
+def test_regions_past_their_service_until_its_discount_are_its_parts():
+    t = tree.read([bills_page()], bills_options())
+    compute = next(r for r in t.records if r.label == "Compute")
+    assert [round(c.value, 2) for c in compute.children] == [700.0, 500.0, -300.0]
+    registry = next(r for r in t.records if r.label == "Registry")
+    assert [round(c.value, 2) for c in registry.children] == [-4.0, 4.0]
+    queue = next(r for r in t.records if r.label == "Queue")
+    assert [round(c.value, 2) for c in queue.children] == [0.0, 0.1]
+
+
+def test_line_rounding_is_needed_for_a_grand_total_of_unrounded_lines():
+    opts = bills_options()
+
+    def proved_by(page: Region, o: dict) -> str | None:
+        rec = tree.read([page], o).evidence["reconcile"]
+        return rec["label"] if rec["proved"] else None
+    assert proved_by(bills_page(), opts) == "Grand total"
+    assert proved_by(bills_page(), {**opts, "line_rounding": False}) != "Grand total"
+    # more than the rounding of the lines is not rounding
+    assert proved_by(bills_page("USD 1,001.00"), opts) != "Grand total"
+
+
+def test_line_tol_is_never_more_than_half_a_cent_a_line():
+    assert tree.line_tol(1) == pytest.approx(tree.bound(1))
+    assert tree.line_tol(100) == pytest.approx(0.011 + 0.116)
+    assert tree.line_tol(10_000) < 1.2

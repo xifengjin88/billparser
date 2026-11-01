@@ -748,7 +748,8 @@ class Pipeline:
         scored.sort(key=lambda x: -x[0])
         out = [(ex, sp) for _, ex, sp in scored[: self.s.examples_k]]
         if len(out) < self.s.examples_k:                        # pad with built-ins as header-only examples
-            for spec in self.store.builtin_specs()[: self.s.examples_k - len(out)]:
+            tables = [sp for sp in self.store.builtin_specs() if sp.get("columns")]   # (not a tree spec)
+            for spec in tables[: self.s.examples_k - len(out)]:
                 out.append(("headers: " + ", ".join(h for c in spec["columns"].values() for h in c.get("from", [])[:1]),
                             _public(spec)))
         return out

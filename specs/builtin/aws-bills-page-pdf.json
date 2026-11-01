@@ -1,0 +1,39 @@
+{
+ "id": "aws-bills-page-pdf",
+ "version": 1,
+ "trust": "builtin",
+ "source": "tree",
+ "detect": {
+  "text": "(?s)^(AWS (estimated )?bill summary|账单摘要)$.*^(Charges by service|按服务计费)$"
+ },
+ "meta": {
+  "provider": "aws",
+  "kind": "cost_lines",
+  "cost_basis": "billed",
+  "format": "AWS Billing console Bills page printed to PDF (English or Chinese; issued or estimated): a summary by seller, the highest costs, then Charges by service (each seller's Total pre-tax, service, region, usage type, lines, and its Total tax)",
+  "notes": "Read from Charges by service: each line, and each seller's Total tax as a line; proved against the Grand total. The summary table (a row per seller, in one or two currencies), the payments table and the 'Highest ... spend' boxes print the same money again and are left out, as are the parts after the charges (charges by account, invoices, savings, taxes by service) (the savings are already in the lines). AWS adds up unrounded amounts (and converts them line by line), so a printed total can differ from its rounded lines by more than the rounding of its parts: line_rounding."
+ },
+ "tree": {
+  "ignore": "^(Highest (service|AWS Region) spend|最.的(服务费.|AWS 区域.出))|^[^()]+ [A-Z]{3} -?[\\d,.]+ USD -?[\\d,.]+$|^Amazon Web Services[^()]* [A-Z]{3} -?[\\d,.]+$|^Payment information \\(\\d+\\)|\\bInvoice \\d+ \\w+ \\d{2}/\\d{2}/\\d{4} [A-Z]{3} ",
+  "skip_from": "^(Charges by account|Savings \\(\\d+\\) Total savings|Taxes by service|按账户计费|节省成本|按服务划分的税费)",
+  "repeated_header": "^(Description Usage Quantity Amount in|描述 使.量 .额)",
+  "max_combo": 6,
+  "line_rounding": true
+ },
+ "context": {
+  "charge_types": [
+   [
+    "Tax",
+    "^(total tax|总计税费)"
+   ],
+   [
+    "Purchase",
+    "^savings plans? for\\b"
+   ],
+   [
+    "Credit",
+    "\\bcredits?\\b.*\\bfrom account\\b|^(credits?|discounts?)\\b|\\b(program|usage based) discounts?\\b|折扣|抵扣"
+   ]
+  ]
+ }
+}
