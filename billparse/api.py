@@ -114,6 +114,7 @@ class JobOut(BaseModel):
     callback_state: str | None = None
     status_url: str
     result_url: str | None = None
+    split: list[JobOut] | None = None   # a zip of separate files: the job of each file (this is the first)
 
 
 def job_out(store: Store, job: dict) -> JobOut:
@@ -127,19 +128,19 @@ def job_out(store: Store, job: dict) -> JobOut:
 
 
 def _queue_parse(request: Request, file: UploadFile, store: Store, force: bool, defaults, callback_url: str | None,
-                 backend: str | None = None, fallback: str | None = None) -> tuple[dict, bool]:
+                 backend: str | None = None, fallback: str | None = None) -> list[tuple[dict, bool]]:
+    """The parse job of the upload, or of each file of a zip of separate files (webapi.start_upload)."""
     try:
         jobs.check_callback_url(callback_url)
     except ValueError as e:
         raise HTTPException(400, str(e)) from e
     webapi.check_choices(backend, fallback)
     path, sha, _ = save_upload(file, store)            # on disk, never whole in memory (a large export)
-    if force:
-        _rerun_jobs(store, sha)
     use_llm = webapi._use_llm(backend)
-    return webapi.start_parse(store, file.filename or "upload", path, sha, force, use_llm, auth.current_user(request),
-                              agent_step=fallback != "none", backend=backend, fallback=fallback, temp=True,
-                              defaults=defaults, callback_url=callback_url)
+    return webapi.start_upload(store, file.filename or "upload", path, sha, force, use_llm, auth.current_user(request),
+                               before=(lambda s: _rerun_jobs(store, s)) if force else None,
+                               agent_step=fallback != "none", backend=backend, fallback=fallback,
+                               defaults=defaults, callback_url=callback_url)
 
 
 FORCE = Query(False, description="parse again a file seen before; a learning or improving job of the file that ended "
@@ -156,10 +157,15 @@ def parse_job(request: Request, file: UploadFile = File(...), force: bool = FORC
               assume_os: str | None = webapi.ASSUME_OS, assume_tenancy: str | None = webapi.ASSUME_TENANCY,
               assume_software: str | None = webapi.ASSUME_SOFTWARE, assume_license: str | None = webapi.ASSUME_LICENSE,
               assume_region: str | None = webapi.ASSUME_REGION, store: Store = Depends(get_store)) -> Any:
-    """Queue a parse and answer at once (202). The file's parse already queued or running: that job (200)."""
-    job, created = _queue_parse(request, file, store, force, webapi.price_defaults(
+    """Queue a parse and answer at once (202). The file's parse already queued or running: that job (200). A zip of
+    separate files: each file is its own parse; the answer is the first file's job, and split lists every file's."""
+    started = _queue_parse(request, file, store, force, webapi.price_defaults(
         assume_os, assume_tenancy, assume_software, assume_license, assume_region), callback_url, backend, fallback)
+    job, created = started[0]
     out = job_out(store, job)
+    if len(started) > 1:
+        out.split = [job_out(store, j) for j, _ in started]
+        created = any(c for _, c in started)
     return out if created else JSONResponse(out.model_dump(), status_code=200)
 
 
@@ -203,8 +209,12 @@ async def parse(request: Request, file: UploadFile = File(...), force: bool = FO
     this request waits, up to PARSE_WAIT_SECONDS (300). Longer (a large export): 202 with the job, to poll at
     GET /parse/jobs/{id}. The result is the first pass: a learning run, when the file needs one, runs after it.
     The wait holds no request thread (async): many callers waiting never block the other endpoints."""
-    job, _ = await run_in_threadpool(_queue_parse, request, file, store, force, webapi.price_defaults(
+    started = await run_in_threadpool(_queue_parse, request, file, store, force, webapi.price_defaults(
         assume_os, assume_tenancy, assume_software, assume_license, assume_region), None)
+    if len(started) > 1:                       # one answer holds one document: a zip of separate files cannot
+        raise HTTPException(422, f"This zip holds {len(started)} separate files; each is parsed on its own (queued). "
+                                 "Poll them with GET /parse/jobs, or upload each file to POST /parse.")
+    job = started[0][0]
     end = time.monotonic() + parse_wait()
     while job["state"] in jobs.ACTIVE and time.monotonic() < end:
         await asyncio.sleep(0.5)
