@@ -488,3 +488,25 @@ def test_line_tol_is_never_more_than_half_a_cent_a_line():
     assert tree.line_tol(1) == pytest.approx(tree.bound(1))
     assert tree.line_tol(100) == pytest.approx(0.011 + 0.116)
     assert tree.line_tol(10_000) < 1.2
+
+
+def test_a_zero_service_at_the_foot_of_a_page_heads_its_rows_on_the_next_page():
+    """A service printed USD 0.00 as the last row of a page: its credit and the charge the credit cancels are at its
+    indent on the next page. They are its rows, so its lines keep the service as their context."""
+    def r(i: int, page: int, x: float, text: str, amount: str, bold: bool = False) -> Row:
+        return Row([Cell(text, x, x + 200, bold), Cell(amount, 400, 460, bold)], i, page=page)
+    one = [r(0, 1, 30.0, "Example Seller (2) Total pre-tax", "USD 5.00"),
+           r(1, 1, 36.0, "Compute", "USD 5.00", bold=True),
+           r(2, 1, 36.0, "EU (Ireland)", "USD 5.00", bold=True),
+           r(3, 1, 51.0, "$0.10 per instance hour", "USD 5.00"),
+           r(4, 1, 36.0, "Render Farm", "USD 0.00", bold=True)]
+    two = [r(0, 2, 36.0, "No Region", "(USD 2.15)", bold=True),
+           r(1, 2, 51.0, "Promo credit, credit from account: 111122223333", "(USD 2.15)"),
+           r(2, 2, 36.0, "EU (Ireland)", "USD 2.15", bold=True),
+           r(3, 2, 40.5, "Spot Instances", "USD 2.15"),
+           r(4, 2, 51.0, "g4dn.xlarge spot instance hour", "USD 2.15")]
+    t = tree.read([Region(name="page1", kind="page", rows=one), Region(name="page2", kind="page", rows=two)], {})
+    farm = next(x for x in t.records if x.label == "Render Farm")
+    assert [round(c.value, 2) for c in farm.children] == [-2.15, 2.15]
+    spot = next(line for line in t.lines if line["label"].startswith("g4dn"))
+    assert "Render Farm" in spot["path"]

@@ -247,7 +247,7 @@ def build(summary: dict, rows: pd.DataFrame | None, file_doc: FileDoc | None) ->
         "lane": lane_of(spec), "decider": None, "version": "billparse",
         "specs_used": [f"{spec['id']}@v{spec.get('version') or 1}"] if spec.get("id") else [],
         "timings_ms": {"parse": int((summary.get("seconds") or 0) * 1000)},
-        "flags": flags, "notes": [{"message": f} for f in _feedback(summary)],
+        "flags": flags, "notes": [{"message": f} for f in [*_feedback(summary), summary.get("spec_notes")] if f],
         "llm_calls": [], "decider_errors": [], "tables": [],
         "cost_usd": {"total": 0.0},
         "attempts": summary.get("attempts") or [],
