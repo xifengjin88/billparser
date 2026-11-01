@@ -128,3 +128,24 @@ def test_a_json_total_amount_due_proves_the_lines(tmp_path):
 def test_parse_number_signs_and_formats(text, expect):
     from billparse.transforms import parse_number
     assert parse_number(text) == expect
+
+
+def test_an_azure_cost_by_resource_view_takes_the_service_from_the_resource_type(tmp_path):
+    """The portal's cost analysis by resource has no service column; a column a person added (a category, a
+    department) is not the service."""
+    head = "ResourceGroup,ResourceGroupId,SubscriptionName,SubscriptionId,Resource,ResourceId,ResourceType," \
+           "ResourceLocation,Tags,Cost,CostUSD,Currency,category,Department\n"
+    rows = [("rg1", "vm1", "Virtual machine", "120.50", "Backups", "IT"),
+            ("rg1", "disk1", "Disk", "30.25", "Backups", "IT"),
+            ("rg2", "sa1", "Storage account", "12.00", "Data platform", "Apps")]
+    text = head + "".join(f"{g},/subscriptions/s/resourceGroups/{g},Dev,s,{n},/subscriptions/s/{n},{t},US East,[],"
+                          f"{c},{c},USD,{cat},{dep}\n" for g, n, t, c, cat, dep in rows)
+    path = tmp_path / "cost-by-resource.csv"
+    path.write_text(text)
+    pipe = Pipeline(Settings(store_dir=tmp_path / "store", use_llm=False, use_agent=False))
+    r = pipe.parse_file(path)
+    assert r["spec"]["id"] == "azure-cost-by-resource"
+    out = pipe.store.get_rows(r["sha256"])
+    assert list(out["service_raw"]) == ["Virtual machine", "Disk", "Storage account"]
+    assert list(out["description"]) == ["vm1", "disk1", "sa1"]
+    assert round(float(out["billed_cost"].sum()), 2) == 162.75

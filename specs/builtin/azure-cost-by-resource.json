@@ -1,0 +1,86 @@
+{
+ "id": "azure-cost-by-resource",
+ "version": 1,
+ "trust": "builtin",
+ "detect": {
+  "required": [
+   "ResourceId",
+   "ResourceType"
+  ],
+  "any_of": [
+   [
+    "CostUSD",
+    "Cost",
+    "PreTaxCost",
+    "Cost (USD)"
+   ]
+  ],
+  "forbid": [
+   "ServiceName",
+   "MeterCategory",
+   "BilledCost",
+   "line_item_unblended_cost"
+  ]
+ },
+ "meta": {
+  "provider": "azure",
+  "kind": "cost_lines",
+  "cost_basis": "billed",
+  "format": "Azure portal cost analysis download grouped by resource (ResourceGroup, Resource, ResourceId, ResourceType, ResourceLocation, Cost, CostUSD)",
+  "notes": "The view has no service column: the service is the resource type. Columns a person added to the download (a category, a department) are not the service."
+ },
+ "columns": {
+  "service_raw": {
+   "from": [
+    "ResourceType"
+   ]
+  },
+  "description": {
+   "from": [
+    "Resource",
+    "ResourceType"
+   ],
+   "coalesce": true
+  },
+  "billed_cost": {
+   "from": [
+    "Cost",
+    "PreTaxCost",
+    "CostUSD",
+    "Cost (USD)"
+   ]
+  },
+  "charge_start": {
+   "from": [
+    "UsageDate",
+    "BillingMonth",
+    "Date"
+   ]
+  },
+  "region": {
+   "from": [
+    "ResourceLocation"
+   ]
+  },
+  "account_id": {
+   "from": [
+    "SubscriptionId"
+   ]
+  },
+  "account_name": {
+   "from": [
+    "SubscriptionName"
+   ]
+  },
+  "resource_id": {
+   "from": [
+    "ResourceId"
+   ]
+  },
+  "currency": {
+   "from": [
+    "Currency"
+   ]
+  }
+ }
+}

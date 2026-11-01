@@ -18,7 +18,7 @@ import billparse.analyze as analyze_mod  # noqa: E402
 from billparse import service_catalog  # noqa: E402
 from billparse.db import engine_for  # noqa: E402
 from prices.load import load_snapshot  # noqa: E402
-from svcres.catalog import Catalog, build  # noqa: E402
+from svcres.catalog import Catalog, build, stamp  # noqa: E402
 from svcres.normalize import code_key  # noqa: E402
 from svcres.resolver import Resolver  # noqa: E402
 
@@ -225,3 +225,28 @@ def test_a_finished_azure_fetch_deletes_its_save_files(tmp_path, monkeypatch):
     assert not out.with_suffix(".parts").exists()
     mod.fetch(out, None, None)
     assert pages["n"] == 2                                    # fetched again, not read from a save file
+
+
+# ---------------------------------------------------------------- Azure resource types and seed changes
+def test_azure_resource_types_resolve_to_the_service_that_bills_them(tmp_path):
+    r = Resolver(build(FX / "raw"), tmp_path)
+    assert r.resolve("Disk", "azure").service_key == "azure:Storage"
+    assert r.resolve("Snapshot", "azure").service_key == "azure:Storage"
+    assert r.resolve("Virtual machine scale set", "azure").service_key == "azure:Virtual Machines"
+    assert r.resolve("SQL server", "azure").service_key == "azure:SQL Database"
+    # whole names only: a charge that starts with a resource type is not that resource type
+    assert r.resolve("SQL Server in Azure VM Protected Instance", "azure").service_key != "azure:SQL Database"
+    assert r.resolve("Virtual Machine Scale Sets", "azure").method != "name"
+
+
+def test_a_catalog_built_with_other_seeds_is_built_again(tmp_path, monkeypatch):
+    data = tmp_path / "svc"
+    shutil.copytree(FX / "raw", data / "raw")
+    old = build(data / "raw")
+    old.seeds = "built-with-old-seeds"
+    old.save(data / "catalog.msgpack")
+    monkeypatch.setattr(analyze_mod, "_RESOLVER", None)
+    monkeypatch.setattr(analyze_mod, "default_url", lambda _d: None)
+    analyze_mod.get_resolver(data)
+    monkeypatch.setattr(analyze_mod, "_RESOLVER", None)
+    assert Catalog.load(data / "catalog.msgpack").seeds == stamp()

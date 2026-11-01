@@ -30,9 +30,26 @@ from pathlib import Path
 import msgpack
 
 from .normalize import code_key, norm, norm_loose
-from .seeds import AWS_SEED, AZURE_ALIASES, AZURE_FAMILY_TO_CATEGORY, GCP_KEYWORD_CATEGORY, MARKETPLACE_SELLERS
+from .seeds import (
+    AWS_SEED,
+    AZURE_ALIASES,
+    AZURE_FAMILY_TO_CATEGORY,
+    AZURE_RESOURCE_TYPES,
+    GCP_KEYWORD_CATEGORY,
+    MARKETPLACE_SELLERS,
+    fingerprint,
+)
 
 PROVIDERS = ("azure", "aws", "gcp")
+
+
+FORMAT = 2                                  # raise it when build() changes what a catalog holds
+
+
+def stamp() -> str:
+    """What a catalog is built from: this module's format and the seed data (a catalog with another stamp is built
+    again: analyze.get_resolver)."""
+    return f"{FORMAT}:{fingerprint()}"
 
 
 @dataclass
@@ -42,10 +59,14 @@ class Catalog:
     names: dict[str, str] = field(default_factory=dict)
     products: dict[str, str] = field(default_factory=dict)
     built_at: float = 0.0
+    seeds: str = ""                         # stamp() of the code and seed data it was built with
     sources: dict[str, dict[str, int]] = field(default_factory=dict)   # provider -> {"db": n, "raw": n} entries
     # "provider:normalized name" -> candidate service keys: names that are known to fit several services (an Azure
     # meter name two services share, an Azure service family): never guessed (fuzzy, prefix), always ambiguous
     ambiguous: dict[str, list[str]] = field(default_factory=dict)
+    # "provider:normalized name" -> service key, matched only as a whole name (an Azure resource type: "SQL server"
+    # must not take "SQL Server in Azure VM Protected Instance" as a prefix)
+    exact: dict[str, str] = field(default_factory=dict)
 
     # ---------- building ----------
     def add_service(self, provider: str, name: str, category: str, family: str | None = None,
@@ -73,7 +94,7 @@ class Catalog:
     def save(self, path: Path) -> None:
         blob = {"services": self.services, "codes": self.codes, "names": self.names,
                 "products": self.products, "built_at": self.built_at, "sources": self.sources,
-                "ambiguous": self.ambiguous}
+                "ambiguous": self.ambiguous, "seeds": self.seeds, "exact": self.exact}
         tmp = path.with_name(path.name + ".tmp")           # whole or not at all: workers load it while it changes
         tmp.write_bytes(msgpack.packb(blob))
         tmp.replace(path)
@@ -92,7 +113,7 @@ class Catalog:
 def build(raw_dir: Path, db: dict[str, list[dict]] | None = None) -> Catalog:
     """db: provider -> rows from the price catalog (see the module doc); they win over raw_dir's JSON."""
     db = db or {}
-    cat = Catalog(built_at=time.time())
+    cat = Catalog(built_at=time.time(), seeds=stamp())
     _build_azure(cat, raw_dir / "azure_products.json", db.get("azure") or [])
     _azure_meters(cat, db.get("azure_meters") or [])
     _azure_ambiguous(cat, db.get("azure_meters_ambiguous") or [])
@@ -173,6 +194,11 @@ def _azure_aliases(cat: Catalog) -> None:
         if key in cat.services:
             for a in aliases:
                 cat.add_name("azure", a, key)
+    for name, types in AZURE_RESOURCE_TYPES.items():      # whole names only: never a prefix or a fuzzy pick
+        key = f"azure:{name}"
+        if key in cat.services:
+            for t in types:
+                cat.exact.setdefault(f"azure:{norm(t)}", key)
 
 
 def _build_aws(cat: Catalog, path: Path, rows: list[dict]) -> None:

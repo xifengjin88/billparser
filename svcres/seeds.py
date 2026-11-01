@@ -8,6 +8,8 @@
 Edit freely. Anything learned from corrections is a synonym instead (billparse: table service_synonym).
 """
 
+import hashlib
+
 CATEGORIES = [
     "Compute", "Storage", "Databases", "Networking", "Analytics",
     "AI + Machine Learning", "Containers", "Security", "Management",
@@ -160,6 +162,24 @@ AZURE_ALIASES = {
     "Azure Cosmos DB": ["Cosmos Database"],
 }
 
+# Azure resource types, as a cost analysis grouped by resource prints them (its only service column), by the service
+# that bills them; a type whose service is not clear is left out (unresolved is better than a wrong service)
+AZURE_RESOURCE_TYPES = {
+    "Storage": ["Disk", "Snapshot", "Restore Point Collection"],
+    "Backup": ["Recovery Services vault"],
+    "Azure Synapse Analytics": ["Apache Spark pool", "Dedicated SQL pool"],
+    "Azure Arc": ["microsoft.hybridcompute/machines", "SQL Server - Azure Arc"],
+    "Virtual Machines": ["Virtual machine scale set", "Virtual machine scale set instance"],
+    "Virtual Network": ["Public IP address", "Private endpoint"],
+    "Azure DNS": ["Private DNS zone"],
+    "SQL Database": ["SQL server", "microsoft.sql/longtermretentionservers/longtermretentiondatabases"],
+    "Microsoft Defender for Cloud": ["microsoft.security/pricings", "microsoft.security/pricings/images"],
+    "Azure Monitor": ["microsoft.insights/scheduledqueryrules", "microsoft.insights/actiongroups",
+                      "microsoft.insights/metricalerts"],
+    "Azure DevOps": ["microsoft.visualstudio/organizations"],
+    "Microsoft Entra": ["microsoft.entraidgovernance/guestgovernanceusage"],
+}
+
 
 # Third-party products sold through a cloud's Marketplace, by the seller or product name a bill prints. They are the
 # names of the provider's "Marketplace" service (category Marketplace). Add more on the Mapping page: an alias to the
@@ -173,3 +193,9 @@ MARKETPLACE_SELLERS = {
 
 # Services whose charges are fees (charge type "Fee"), not usage, wherever they are billed
 FEE_SERVICES = {"AWSPartnerNetwork"}
+
+
+def fingerprint() -> str:
+    """A hash of the seed data above: a catalog built with other seeds is built again (analyze.get_resolver)."""
+    data = {k: v for k, v in globals().items() if k.isupper()}
+    return hashlib.sha256(repr(sorted((k, repr(v)) for k, v in data.items())).encode()).hexdigest()[:16]
