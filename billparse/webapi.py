@@ -14,6 +14,7 @@ import io
 import json
 import os
 import time
+from collections.abc import Callable
 from decimal import Decimal
 from functools import lru_cache
 from pathlib import Path
@@ -23,7 +24,7 @@ from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, Upl
 from fastapi.responses import Response
 from pydantic import BaseModel, Field
 
-from . import agent, auth, bigfile, contract, headers, highlight, jobs, worker
+from . import agent, auth, bigfile, bundle, contract, headers, highlight, jobs, worker
 from . import llm as llm_mod
 from .analyze import RESOLVER_LOCK, get_resolver
 from .pipeline import Pipeline
@@ -371,6 +372,7 @@ class ParseTask(BaseModel):
     cost_usd: float | None = None
     job_id: int | None = None
     queue: str | None = None
+    split: list[ParseTask] | None = None   # a zip of separate files: the parse of each file (this is the first)
     learning: LearningOut | None = None
 
 
@@ -756,6 +758,26 @@ def start_parse(store: Store, name: str, path: Path, sha: str, force: bool, use_
     return job, created
 
 
+def start_upload(store: Store, name: str, path: Path, sha: str, force: bool, use_llm: bool, user: str | None = None,
+                 before: Callable[[str], None] | None = None, **options: Any) -> list[tuple[dict, bool]]:
+    """Queue the parse of an upload (start_parse, temp): one job, or one job for each file of a zip of separate files
+    (bundle.py), a zip inside it too. before: called with each file's SHA-256 before its parse is queued."""
+    try:
+        parts = bundle.separate_files(path, name, store.temp_path, MAX_UPLOAD_MB * 1024 * 1024)
+    except bundle.TooBig as e:
+        path.unlink(missing_ok=True)
+        raise HTTPException(413, str(e)) from e
+    if parts is None:
+        if before:
+            before(sha)
+        return [start_parse(store, name, path, sha, force, use_llm, user, temp=True, **options)]
+    path.unlink(missing_ok=True)
+    out: list[tuple[dict, bool]] = []
+    for part in parts:
+        out += start_upload(store, part.name, part.path, part.sha256, force, use_llm, user, before, **options)
+    return out
+
+
 @router.post("/parse/start", response_model=ParseTask, tags=["web"])
 def parse_start(request: Request, file: UploadFile = File(...), force: bool = Query(False),
                 backend: str | None = Query(None), fallback: str | None = Query(None),
@@ -765,12 +787,14 @@ def parse_start(request: Request, file: UploadFile = File(...), force: bool = Qu
     """Queue a parse of a file and return at once; GET /parse/tasks/{sha256} says how it goes."""
     check_choices(backend, fallback)
     path, sha, _ = save_upload(file, store)
-    job, _ = start_parse(store, file.filename or "upload", path, sha, force, _use_llm(backend),
-                         auth.current_user(request), agent_step=fallback != "none", backend=backend,
-                         fallback=fallback, temp=True,
-                         defaults=price_defaults(assume_os, assume_tenancy, assume_software, assume_license,
-                                                 assume_region))
-    return _task_out(store, job)
+    started = start_upload(store, file.filename or "upload", path, sha, force, _use_llm(backend),
+                           auth.current_user(request), agent_step=fallback != "none", backend=backend,
+                           fallback=fallback, defaults=price_defaults(assume_os, assume_tenancy, assume_software,
+                                                                      assume_license, assume_region))
+    out = _task_out(store, started[0][0])
+    if len(started) > 1:                                # a zip of separate files: each file is its own parse
+        out.split = [_task_out(store, job) for job, _ in started]
+    return out
 
 
 def check_choices(*choices: str | None) -> None:
