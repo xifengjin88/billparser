@@ -28,6 +28,7 @@ from typing import Any
 
 import pandas as pd
 from sqlalchemy import delete, func
+from sqlalchemy.dialects import postgresql, sqlite
 from sqlmodel import Session, col, select
 
 from .db import (
@@ -143,11 +144,20 @@ class Store:
 
     # ---------------- which docs each spec has parsed (regression set)
     def link(self, spec_id: str, sha: str, fingerprint: dict, accepted: dict) -> None:
+        """accepted: {"rows": n, "total": x, "confidence": c, "checks": ...}. Upserts: two workers parsing files of
+        one layout at once both write the same rows (a check before the insert would race)."""
+        doc = SpecDocRow.__table__
+        fp = SpecFingerprintRow.__table__
         with self.session() as s:
-            s.merge(SpecDocRow(spec_id=spec_id, sha256=sha, **accepted))      # {"rows": n, "total": x, "confidence": c}
-            if s.get(SpecFingerprintRow, (spec_id, fingerprint["hash"])) is None:
-                s.add(SpecFingerprintRow(spec_id=spec_id, hash=fingerprint["hash"], fingerprint=jsonable(fingerprint)))
+            s.execute(self._insert(doc).values(spec_id=spec_id, sha256=sha, **accepted)
+                      .on_conflict_do_update(index_elements=[doc.c.spec_id, doc.c.sha256], set_=accepted))
+            s.execute(self._insert(fp).values(spec_id=spec_id, hash=fingerprint["hash"],
+                                              fingerprint=jsonable(fingerprint))
+                      .on_conflict_do_nothing(index_elements=[fp.c.spec_id, fp.c.hash]))
             s.commit()
+
+    def _insert(self, table):
+        return postgresql.insert(table) if self.engine.dialect.name == "postgresql" else sqlite.insert(table)
 
     def spec_docs(self, spec_id: str) -> dict[str, dict]:
         with self.session() as s:
