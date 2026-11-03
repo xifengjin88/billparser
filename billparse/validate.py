@@ -223,6 +223,9 @@ class RowStats:
                 sub = sub[sub["charge_type"].ne("Negation")]   # rate but its amount cancels the covered usage
             calc = sub["quantity"] * sub["unit_price"]
             ok = (calc - sub["billed_cost"]).abs() <= np.maximum(0.011, 0.01 * sub["billed_cost"].abs())
+            if "tax" in sub:                           # an amount with its own tax in it (an AWS eCSV TotalCost)
+                net = sub["billed_cost"] - pd.to_numeric(sub["tax"], errors="coerce").fillna(0.0)
+                ok |= (calc - net).abs() <= np.maximum(0.011, 0.01 * net.abs())
             self.lm_n += len(sub)
             self.lm_ok += int(ok.sum())
             ratio = (sub["billed_cost"] / calc.replace(0, np.nan)).dropna()

@@ -23,7 +23,7 @@ from test_pricing import FIXTURE, LINUX, TINY  # noqa: E402
 import billparse.analyze as analyze_mod  # noqa: E402
 import billparse.llm as llm_mod  # noqa: E402
 from billparse import Pipeline, Settings  # noqa: E402
-from billparse.pipeline import CANDIDATE_NOTE  # noqa: E402
+from billparse.pipeline import CANDIDATE_NOTE, _title_header  # noqa: E402
 from billparse.spec_schema import rows_json_schema, spec_json_schema  # noqa: E402
 from prices.load import load_snapshot  # noqa: E402
 
@@ -273,3 +273,35 @@ def test_two_rejected_candidates_are_repaired_with_the_spec_and_the_errors(tmp_p
     assert "no_such_transform" in repair and "Spec rejected: Unknown transform" in repair
     assert r["spec"]["route"] == "llm_spec" and r["status"] in ("reconciled", "unreconciled")
     assert [a["error"] is not None for a in _spec_attempts(r)] == [True, True, False]
+
+
+# ---------------------------------------------------------------- an LLM reading needs known services and a header
+def test_an_llm_reading_whose_names_come_from_the_wrong_column_needs_review(tmp_path):
+    """A savings workbook: the amounts add up, but the LLM took the commitment-type column as the service. Most of
+    the cost then has no known service: the reading needs review, and its spec is not kept."""
+    rows = [{"c1": svc, "c2": cost, "c3": kind} for svc, cost, kind in
+            [("Virtual Machines", 1523.91, "RI + Compute Savings Plan"), ("Storage", 1790.82, "Reserved Capacity"),
+             ("SQL Database", 2028.38, "RI (vCore models)"), ("Application Gateway", 982.73, "Not reservable")]]
+    path = tmp_path / "opaque.csv"
+    pd.DataFrame(rows).to_csv(path, index=False)
+    wrong = {"meta": {"provider": "azure", "kind": "cost_lines"},
+             "columns": {"service_raw": {"from": ["c3"]}, "billed_cost": {"from": ["c2"]}}}
+    pipe = _pipe(tmp_path, JsonLLM(wrong))
+    r = pipe.parse_file(path)
+    assert r["status"] == "needs_review", r["checks"]
+    assert any(c["name"] == "llm_reading" and c["status"] == "fail" for c in r["checks"])
+    assert not pipe.store.learned_specs()
+
+
+def test_an_llm_reading_with_known_services_is_still_accepted(tmp_path):
+    pipe = _pipe(tmp_path, JsonLLM(GOOD))
+    r = pipe.parse_file(_opaque_csv(tmp_path))
+    assert r["status"] in ("reconciled", "unreconciled")
+    assert not any(c["name"] == "llm_reading" for c in r["checks"])
+
+
+def test_columns_named_after_a_title_row_are_found():
+    title = "VMI — Azure Spend by Service"
+    spec = {"columns": {"service_raw": {"from": [f"{title}_4"]}, "billed_cost": {"from": [f"{title}_1"]}}}
+    assert _title_header(spec) == title
+    assert _title_header({"columns": {"service_raw": {"from": ["Service"]}, "billed_cost": {"from": ["Cost_1"]}}}) is None

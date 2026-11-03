@@ -32,7 +32,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from billparse import agent  # noqa: E402
+from billparse import agent, bundle  # noqa: E402
 from billparse.pipeline import Pipeline, Settings  # noqa: E402
 from billparse.settings import load_env  # noqa: E402
 
@@ -42,12 +42,14 @@ ATTRS = ("service", "region", "account_id", "instance_type", "database_engine", 
 ACCEPTED = ("reconciled", "unreconciled", "consistent", "auxiliary")
 
 
-def run_file(pipe: Pipeline, path: Path) -> dict:
+def run_file(pipe: Pipeline, path: Path, name: str | None = None) -> dict:
+    """name: the file's name in the report (a file of a zip of separate files: "bundle.zip/bill.pdf")."""
+    name = name or path.name
     t0 = time.perf_counter()
     try:
-        r = pipe.parse_file(path)
+        r = pipe.parse_path(path, name=name)
     except Exception as e:  # noqa: BLE001  the harness reports every failure and goes on
-        return {"file": path.name, "error": f"{type(e).__name__}: {e}", "trace": traceback.format_exc(limit=4),
+        return {"file": name, "error": f"{type(e).__name__}: {e}", "trace": traceback.format_exc(limit=4),
                 "seconds": round(time.perf_counter() - t0, 2)}
     # a large file's rows are not read whole: its rolled-up lines (sums and attribute shares by line kind)
     rows = pipe.store.get_rolled(r["sha256"]) if r.get("large") else pipe.store.get_rows(r["sha256"])
@@ -62,7 +64,7 @@ def run_file(pipe: Pipeline, path: Path) -> dict:
     if total is None and n and "billed_cost" in rows:
         total = round(float(rows["billed_cost"].sum()), 2)
     sums, lines = (sums_of(rows), lines_key(rows)) if n else ({}, None)
-    return {"sums": sums, "lines_key": lines, "file": path.name, "sha256": r["sha256"], "file_type": r.get("file_type"), "kind": r.get("kind"), "status": r["status"],
+    return {"sums": sums, "lines_key": lines, "file": name, "sha256": r["sha256"], "file_type": r.get("file_type"), "kind": r.get("kind"), "status": r["status"],
             "completeness": r.get("completeness"), "confidence": r.get("confidence"), "rows": n, "total": total,
             "route": (r.get("spec") or {}).get("route"), "spec": (r.get("spec") or {}).get("id"),
             "failed": [c["name"] for c in r.get("checks", []) if c["status"] == "fail"],
@@ -162,7 +164,7 @@ def check_expected(res: dict, exp: dict) -> list[str]:
     return bad
 
 
-def with_agent(pipe: Pipeline, path: Path, res: dict) -> dict:
+def with_agent(pipe: Pipeline, path: Path, res: dict, name: str | None = None) -> dict:
     """Run the agent on a file that is not proved, then measure it again; the job's outcome goes in the report."""
     summary = pipe.store.get_result(res["sha256"]) or {}
     if not agent.needs_agent(summary):
@@ -173,7 +175,7 @@ def with_agent(pipe: Pipeline, path: Path, res: dict) -> dict:
                       or j["layout_key"].endswith(summary.get("sha256", "")[:12]))
         pipe.store.retry_agent_job(job_id)
     job = agent.run_job(pipe, job_id)
-    after = run_file(pipe, path)
+    after = run_file(pipe, path, name)
     after["before"] = {k: res.get(k) for k in ("status", "completeness", "rows", "total")}
     after["agent"] = {k: job.get(k) for k in ("id", "status", "rounds", "tool_calls", "cost_usd", "spec_id", "note")}
     print(f"    agent job {job['id']}: {job['status']}, {job['rounds']} round(s), ${job['cost_usd']:.2f}, "
@@ -206,20 +208,22 @@ def main() -> None:
         # the agent step runs here only with --agent (with_agent), so its outcome is measured on its own
         pipe = Pipeline(Settings(store_dir=store_dir, use_llm=False, retain_docs=keep is not None, use_agent=False))
         results = []
-        for p in files:
-            res = run_file(pipe, p)
-            if a.agent and "error" not in res:
-                res = with_agent(pipe, p, res)
-            if p.name in expected:
-                res["expected_failures"] = check_expected(res, expected[p.name])
-            results.append(res)
-            flag = "  !" + "; ".join(res["expected_failures"]) if res.get("expected_failures") else ""
-            if "error" in res:
-                print(f"{p.name[:46]:46} ERROR {res['error'][:90]}")
-            else:
-                print(f"{p.name[:46]:46} {res['file_type'] or '':8} {res['status']:13} {str(res.get('completeness') or ''):12}"
-                      f" {res['rows']:6} rows  total={res['total'] if res['total'] is not None else '':<12} "
-                      f"route={res['route']}{flag}")
+        for f in files:
+            with bundle.files_of(f) as parts:                  # a zip of separate files: each file, as an upload
+                for name, p in parts:
+                    res = run_file(pipe, p, name)
+                    if a.agent and "error" not in res:
+                        res = with_agent(pipe, p, res, name)
+                    if name in expected:
+                        res["expected_failures"] = check_expected(res, expected[name])
+                    results.append(res)
+                    flag = "  !" + "; ".join(res["expected_failures"]) if res.get("expected_failures") else ""
+                    if "error" in res:
+                        print(f"{name[:46]:46} ERROR {res['error'][:90]}")
+                    else:
+                        print(f"{name[:46]:46} {res['file_type'] or '':8} {res['status']:13} "
+                              f"{str(res.get('completeness') or ''):12} {res['rows']:6} rows  "
+                              f"total={res['total'] if res['total'] is not None else '':<12} route={res['route']}{flag}")
     stamp = time.strftime("%Y%m%d-%H%M%S")
     (OUT / f"{stamp}.json").write_text(json.dumps(results, indent=1, default=str))
     ok = [r for r in results if "error" not in r]
@@ -244,7 +248,7 @@ def main() -> None:
                       f"{r.get('status')}/{r.get('rows')}/{r.get('total')}")
     failed = check_baseline(results, a.only) if a.check else False
     if a.accept:
-        accept_baseline(results)
+        accept_baseline(results, a.only)
     jobs = [r["agent"] for r in results if r.get("agent")]
     if jobs:
         print(f"agent: {len(jobs)} job(s) {dict(Counter(j['status'] for j in jobs))}, "
@@ -286,9 +290,14 @@ def check_baseline(results: list[dict], only: str) -> bool:
     return bad
 
 
-def accept_baseline(results: list[dict]) -> None:
+def accept_baseline(results: list[dict], only: str = "") -> None:
+    """The run's files into the baseline; a baseline file this run did not give (of the --only files) leaves it (a
+    zip of separate files is now its files)."""
     base = json.loads(BASELINE.read_text()) if BASELINE.exists() else {}
     keep = ("status", "completeness", "rows", "total", "sums", "lines_key", "coverage", "expected_failures", "error")
+    seen = {r["file"] for r in results}
+    for name in [n for n in base if only in n and n not in seen]:
+        del base[name]
     for r in results:
         base[r["file"]] = {k: r[k] for k in keep if k in r}
     BASELINE.write_text(json.dumps(base, indent=1, sort_keys=True, default=str))

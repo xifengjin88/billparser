@@ -6,8 +6,10 @@ from __future__ import annotations
 
 import gzip
 import hashlib
+import tempfile
 import zipfile
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -81,3 +83,14 @@ def _one_header(z: zipfile.ZipFile, data: list[zipfile.ZipInfo]) -> bool:
                 raw = g.read(64 * 1024)
         heads.add(raw.split(b"\n", 1)[0].strip())
     return len(heads) == 1
+
+
+@contextmanager
+def files_of(path: str | Path) -> Iterator[list[tuple[str, Path]]]:
+    """(name, path) of each file to parse, as an upload does it: the file itself, or each file of a zip of separate
+    files (copied to a temporary folder, removed after). For the command line and the corpus check."""
+    path = Path(path)
+    with tempfile.TemporaryDirectory() as tmp:
+        n = iter(range(1_000_000))
+        parts = separate_files(path, path.name, lambda suffix: Path(tmp) / f"{next(n)}{suffix}", 1 << 40)
+        yield [(path.name, path)] if parts is None else [(f"{path.name}/{p.name}", p.path) for p in parts]

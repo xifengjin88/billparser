@@ -63,6 +63,40 @@ def test_an_aws_ecsv_reads_each_line_once_and_ties_to_its_statement_total(tmp_pa
         assert set(rows["account_id"]) == {"111111111111", "222222222222"}
 
 
+def test_an_ecsv_commitment_fee_is_a_purchase_and_a_taxed_line_does_its_math(tmp_path):
+    """The eCSV prints no line type for commitment fees: a HeavyUsage usage type is a Reserved Instance fee, a
+    ComputeSP: one a Savings Plan fee (Purchase, never usage priced at on-demand rates). Its TotalCost has the line's
+    tax in it: quantity x rate is the amount less the tax."""
+    out = io.StringIO()
+    w = csv.DictWriter(out, ECSV_HEAD)
+    w.writeheader()
+    base = {"InvoiceID": "Estimated", "PayerAccountId": "999999999999", "RecordType": "PayerLineItem",
+            "BillingPeriodStartDate": "2026/04/01 00:00:00", "BillingPeriodEndDate": "2026/04/30 23:59:59",
+            "CurrencyCode": "USD"}
+    lines = [("AmazonRDS", "Amazon Relational Database Service", "HeavyUsage:db.r5.4xl", 720, 1.1088, 798.34, 0.0),
+             ("ComputeSavingsPlans", "Savings Plans for AWS Compute usage", "ComputeSP:1yrNoUpfront", 720, 0.5, 360.0,
+              0.0)]
+    lines += [("AmazonRDS", "Amazon Relational Database Service", "InstanceUsage:db.t4g.medium", 100 + i, 0.065,
+               round((100 + i) * 0.065 * 1.1, 2), round((100 + i) * 0.065 * 0.1, 2)) for i in range(5)]
+    for code, name, usage, qty, rate, cost, tax in lines:
+        w.writerow({**{h: "" for h in ECSV_HEAD}, **base, "ProductCode": code, "ProductName": name, "UsageType": usage,
+                    "ItemDescription": f"{name} {usage}", "UsageQuantity": qty, "BlendedRate": rate,
+                    "TaxAmount": tax, "CostBeforeTax": round(cost - tax, 2), "TotalCost": cost})
+    total = round(sum(x[5] for x in lines), 2)
+    w.writerow({**{h: "" for h in ECSV_HEAD}, **base, "RecordType": "StatementTotal",
+                "ItemDescription": "Total statement amount", "TotalCost": total})
+    path = tmp_path / "ecsv_4_2026.csv"
+    path.write_text(out.getvalue())
+    pipe = Pipeline(Settings(store_dir=tmp_path / "store", use_llm=False, use_agent=False))
+    r = pipe.parse_file(path)
+    rows = pipe.store.get_rows(r["sha256"])
+    fees = rows[rows["usage_type"].str.contains("HeavyUsage|ComputeSP", regex=True)]
+    assert list(fees["charge_type"]) == ["Purchase", "Purchase"]
+    assert rows.loc[~rows.index.isin(fees.index), "charge_type"].isna().all()
+    checks = {c["name"]: c["status"] for c in r["checks"]}
+    assert checks["line_math"] == "pass", r["checks"]
+
+
 def test_a_month_table_of_counts_is_not_money(tmp_path):
     """Instances and instance hours by coverage type and month (a coverage report): usage figures, never cost lines."""
     months = ["2026-01", "2026-02", "2026-03", "2026-04"]

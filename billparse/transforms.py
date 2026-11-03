@@ -222,7 +222,7 @@ def t_map(s: pd.Series, mapping: dict, default: str | None = "keep") -> pd.Serie
 
 
 def _charge_type(v):
-    if v is None:
+    if v is None or (isinstance(v, float) and v != v):     # missing (None or NaN): never the text "nan"
         return None
     k = re.sub(r"[\s_-]+", "", str(v).lower())
     return CHARGE_TYPE_MAP.get(k) or CHARGE_TYPE_MAP.get(str(v).lower()) or str(v)
