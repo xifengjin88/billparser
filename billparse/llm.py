@@ -10,6 +10,7 @@ The LLM never sees whole files and never writes code.
 
 from __future__ import annotations
 
+import base64
 import json
 import os
 import re
@@ -111,6 +112,17 @@ class AnthropicLLM:
     def complete(self, system: str, user: str, max_tokens: int = 4000) -> str:
         out = self._post({"model": self.model, "max_tokens": max(max_tokens, self.max_tokens), "system": system,
                           "messages": [{"role": "user", "content": user}]})
+        return "".join(b.get("text", "") for b in out["content"] if b.get("type") == "text")
+
+    def complete_images(self, system: str, images: list[bytes], user: str, max_tokens: int = 16000) -> str:
+        """A text answer about page images (PNG), sent as image blocks before the question (the vision route). An
+        answer cut off by max_tokens raises ValueError: a page left half read must never pass as whole."""
+        content = [{"type": "image", "source": {"type": "base64", "media_type": "image/png",
+                                                "data": base64.b64encode(img).decode("ascii")}} for img in images]
+        out = self._post({"model": self.model, "max_tokens": max(max_tokens, self.max_tokens), "system": system,
+                          "messages": [{"role": "user", "content": [*content, {"type": "text", "text": user}]}]})
+        if out.get("stop_reason") == "max_tokens":
+            raise ValueError("The answer was cut off (max_tokens)")
         return "".join(b.get("text", "") for b in out["content"] if b.get("type") == "text")
 
     def complete_json(self, system: str, user: str, schema: dict, max_tokens: int = 4000) -> dict:

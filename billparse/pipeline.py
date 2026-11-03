@@ -28,7 +28,7 @@ from pathlib import Path
 import pandas as pd
 
 from . import agent as agent_mod
-from . import bigfile, contract, coverage, jobs
+from . import bigfile, contract, coverage, jobs, vision
 from . import headers as headers_mod
 from . import llm as llm_mod
 from .analyze import analyze, resolve_services
@@ -38,13 +38,14 @@ from .docmodel import Document, Region, load_bytes
 from .fingerprint import fingerprint, similarity, table_headers
 from .induce import derive_spec
 from .layout import find_header
-from .mapper import MapContext, propose, propose_all
+from .mapper import TREE_SPEC, MapContext, propose, propose_all
 from .pricing import KeyCache, PriceDefaults, PriceStats, apply_discount, drop_prices, infer_discount, match_prices
 from .provider import detect_provider, fill_provider
 from .settings import catalog_dir, data_dir
 from .spec import Extraction, SpecError, check_spec, detect_score, run
 from .store import Store
 from .transforms import CANONICAL, period_of
+from .tree import money_in
 from .validate import CRITICAL, PRICE_CHECKS, REVIEW_BELOW, clean_rows, validate, validate_stats
 
 
@@ -65,6 +66,8 @@ class Settings:
     spec_candidates: int = field(default_factory=lambda: max(1, int(os.environ.get("BILLPARSE_SPEC_CANDIDATES") or 2)))
     # the agent step runs in this parse (the tests, with a fake agent model); else it is a job of the learn queue
     learn_inline: bool = False
+    # a short PDF no text-layer route proves is read from its page images (vision.py); BILLPARSE_VISION=0: never
+    use_vision: bool = field(default_factory=lambda: (os.environ.get("BILLPARSE_VISION") or "1") != "0")
 
 
 @dataclass
@@ -204,7 +207,8 @@ class Pipeline:
             return {**cached, "cached": True}
         self.store.save_doc(doc.sha256, data, name)
 
-        if doc.regions and all(r.scanned or (not r.is_frame and not r.rows) for r in doc.regions):
+        if doc.regions and all(r.scanned or (not r.is_frame and not r.rows) for r in doc.regions) \
+                and not self._can_see(doc):
             return self._finish(doc, None, [], {"status": "unsupported", "confidence": 0.0, "checks": [],
                                                 "feedback": ["Scanned PDF: needs OCR (not in this prototype)"]},
                                 {}, None, t0)
@@ -381,10 +385,16 @@ class Pipeline:
         """Every route, cheapest first, until one is accepted; else the most confident attempt with rows."""
         headers = table_headers(doc)
         attempts: list[Attempt] = []
-        for route_fn in (self._builtin, self._learned, self._mapper, self._llm_spec, self._llm_extract):
+        unproved: Attempt | None = None         # the mapper's reading of a PDF accepted without proof: vision may prove it
+        for route_fn in (self._builtin, self._learned, self._mapper, self._vision, self._llm_spec, self._llm_extract):
+            if route_fn == self._llm_spec and unproved is not None:
+                return attempts, unproved           # the vision route proved nothing: the mapper's reading stands
             for att in route_fn(doc, fp, headers, attempts):
                 attempts.append(att)
                 if self._accept(att):
+                    if att.route == "mapper" and att.verdict.get("status") != "reconciled" and self._wants_vision(doc):
+                        unproved = unproved or att
+                        continue
                     return attempts, att
         ok = [a for a in attempts if a.ext is not None and not a.ext.rows.empty]
         return attempts, (max(ok, key=lambda a: a.confidence) if ok else None)
@@ -536,6 +546,43 @@ class Pipeline:
                 if att.ext is not None:
                     att.ext.warnings.extend(m.warnings)
             yield att
+
+    def _wants_vision(self, doc: Document) -> bool:
+        """A short PDF whose text layer prints a total (a total word and an amount on one line) that the rule
+        readings could not prove: its page images may (text printed over other text, a total cut apart)."""
+        if not self._can_see(doc) or sum(1 for r in doc.regions if r.kind == "page") > vision.MAX_PAGES:
+            return False
+        return any(vision.TOTAL_LINE.search(row.text) and money_in(row.text)
+                   for r in doc.regions if not r.is_frame for row in r.rows)
+
+    def _can_see(self, doc: Document) -> bool:
+        """The vision route can read this document: a PDF, the setting on, an LLM that reads images."""
+        return doc.file_type == "pdf" and self.s.use_vision and hasattr(self.llm, "complete_images")
+
+    def _vision(self, doc, fp, headers, attempts):
+        """A short PDF that no text-layer route proved: its page images read by the LLM as protocol Markdown
+        (vision.py), the Markdown read by the tree of sums. Accepted only when proved (_accept)."""
+        if not self._can_see(doc) or any(a.verdict.get("status") == "reconciled" for a in attempts):
+            return
+        path = self.store.file_path(doc.sha256)
+        images = vision.page_images(path.read_bytes()) if path is not None else None
+        if not images:
+            return
+        try:
+            md = self.llm.complete_images(vision.SYSTEM, images, vision.USER)
+        except Exception as e:                              # noqa: BLE001  an LLM error ends this route only
+            yield Attempt("vision", None, error=f"{type(e).__name__}: {e}", llm_calls=1,
+                          verdict={"status": "error", "confidence": 0.0, "checks": [], "feedback": [str(e)]})
+            return
+        self.store.save_part(doc.sha256, "vision", md)      # what the model read, beside the result
+        seen = Document(doc.name, doc.file_type, doc.sha256, vision.to_regions(md),
+                        notes=["read from the page images (vision route)"])
+        att = self._try("vision", dict(TREE_SPEC, tree={}), seen)
+        att.llm_calls = 1
+        if att.ext is not None:
+            att.ext.warnings.append(f"The text layer could not be proved: the {len(images)} page(s) were read from "
+                                    "their images by the LLM, and the lines proved to the printed total.")
+        yield att
 
     def _llm_spec(self, doc, fp, headers, attempts):
         """The LLM writes a spec, the interpreter runs it and the checks judge it; up to max_repairs rounds. Round 1
@@ -697,6 +744,8 @@ class Pipeline:
             return False
         if att.verdict.get("status") == "auxiliary":
             return att.confidence > 0
+        if att.route == "vision":                    # read by the LLM from images: only a proved reading counts
+            return att.verdict.get("status") == "reconciled"
         # a built-in spec is judged without its price checks: a failed one (a SKU the catalog does not have yet or no
         # longer has: an old bill, a SKU newer than the last price download) lowers the result's confidence, and may
         # make it need review, but never hands the file to another route, whose reading would replace the built-in's
@@ -724,7 +773,7 @@ class Pipeline:
 
     def _alt_extraction(self, doc: Document, best: Attempt) -> Extraction | None:
         """Independent second extraction for the dual-extraction check."""
-        if best.route in ("builtin", "mapper", "llm_extract_direct") or best.spec is None:
+        if best.route in ("builtin", "mapper", "llm_extract_direct", "vision") or best.spec is None:
             return None
         if (best.spec.get("meta") or {}).get("kind", "cost_lines") != "cost_lines" or best.spec.get("reshape"):
             return None
@@ -964,7 +1013,7 @@ def _note_settled(att: Attempt, settled: dict[str, str] | None) -> None:
             att.ext.warnings.extend(warns)
 
 
-LLM_ROUTES = ("llm_spec", "llm_extract", "llm_extract_derived", "llm_extract_direct")
+LLM_ROUTES = ("llm_spec", "llm_extract", "llm_extract_derived", "llm_extract_direct", "vision")
 TITLE_COLUMNS = re.compile(r"^(?P<base>.{3,}?)_\d+$")     # a title row read as the header: "Title", "Title_1", ...
 
 
