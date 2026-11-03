@@ -88,3 +88,15 @@ def test_a_builtin_specs_notes_are_a_reconciliation_note_not_a_doubt(tmp_path):
     note = "the service is the resource type"
     assert any(note in n["message"] for n in meta["notes"])
     assert not any(note in f["message"] for f in meta["flags"])
+
+
+def test_files_of_gives_each_file_of_a_bundle_and_cleans_up(tmp_path):
+    z = _zip(tmp_path / "bills.zip", {"a.pdf": (FILES / "summary_invoice.pdf").read_bytes(),
+                                      "b.pdf": (FILES / "reseller_invoice.pdf").read_bytes()})
+    with bundle.files_of(z) as files:
+        assert [n for n, _ in files] == ["bills.zip/a.pdf", "bills.zip/b.pdf"]
+        kept = [p for _, p in files]
+        assert all(p.exists() for p in kept)
+    assert not any(p.exists() for p in kept)
+    with bundle.files_of(FILES / "summary_invoice.pdf") as files:
+        assert files == [("summary_invoice.pdf", FILES / "summary_invoice.pdf")]

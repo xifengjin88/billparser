@@ -15,7 +15,7 @@ import json
 import sys
 from pathlib import Path
 
-from . import headers
+from . import bundle, headers
 from .pipeline import Pipeline, Settings
 from .settings import configure_logging, load_env
 
@@ -92,8 +92,10 @@ def main(argv: list[str] | None = None) -> None:
     pipe = Pipeline(Settings(use_llm=not getattr(a, "no_llm", False), learn_inline=True))
     if a.cmd == "parse":
         for f in a.files:
-            r = pipe.parse_file(f, force=a.force)
-            print(json.dumps(r, indent=1, default=str)) if a.json else _print_summary(r)
+            with bundle.files_of(f) as files:               # a zip of separate files: each file on its own
+                for name, path in files:
+                    r = pipe.parse_path(path, name=name, force=a.force)
+                    print(json.dumps(r, indent=1, default=str)) if a.json else _print_summary(r)
     elif a.cmd == "nightly":
         from .learn import run_nightly
         print(json.dumps(run_nightly(pipe), indent=1, default=str))

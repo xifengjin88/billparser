@@ -18,6 +18,7 @@ from __future__ import annotations
 import contextvars
 import json
 import os
+import re
 import time
 import traceback
 from concurrent.futures import ThreadPoolExecutor
@@ -241,6 +242,7 @@ class Pipeline:
                                text=doc_text(doc) if best.route == "llm_extract_direct" else None)
             if best.route == "llm_extract_direct" and verdict.get("completeness") == "consistent":
                 verdict["completeness"] = "unchecked"           # rows the LLM wrote, no printed total tested them
+            verdict = _llm_gate(best, verdict)
             return self._finish(doc, best, attempts, verdict, fp, share, t0, pricing=pricing)
         finally:
             _PRICING.reset(token)
@@ -960,6 +962,46 @@ def _note_settled(att: Attempt, settled: dict[str, str] | None) -> None:
         att.verdict.setdefault("warnings", []).extend(warns)
         if att.ext is not None:
             att.ext.warnings.extend(warns)
+
+
+LLM_ROUTES = ("llm_spec", "llm_extract", "llm_extract_derived", "llm_extract_direct")
+TITLE_COLUMNS = re.compile(r"^(?P<base>.{3,}?)_\d+$")     # a title row read as the header: "Title", "Title_1", ...
+
+
+def _llm_made(best: Attempt) -> bool:
+    """The reading came from the LLM: an LLM route now, or a learned spec the LLM or the agent wrote before."""
+    if best.route in LLM_ROUTES:
+        return True
+    spec = best.spec or {}
+    made_by = str((spec.get("stats") or {}).get("created_by") or "")
+    return best.route == "learned" and (made_by.startswith(("llm", "agent")) or str(spec.get("id", "")).startswith("agent-"))
+
+
+def _title_header(spec: dict | None) -> str | None:
+    """The spec reads columns named after one title (a title row taken as the header): the title, else None."""
+    names = [h for c in ((spec or {}).get("columns") or {}).values() if isinstance(c, dict)
+             for h in (c.get("from") or []) if isinstance(h, str)]
+    bases = [m["base"] for h in names if (m := TITLE_COLUMNS.match(h))]
+    return next((b for b in set(bases) if bases.count(b) + names.count(b) >= 2), None)
+
+
+def _llm_gate(best: Attempt, verdict: dict) -> dict:
+    """An LLM-made reading is accepted only when its charges have services the catalog knows and its columns are a
+    real header: its amounts can add up to a printed total while every name is read from the wrong column (a
+    savings workbook read by its commitment-type column). Else it needs review, and its spec is not kept."""
+    if not _llm_made(best) or verdict.get("status") not in ("reconciled", "unreconciled"):
+        return verdict
+    why = []
+    if any(c["name"] == "service_resolution" and c["status"] == "fail" for c in verdict.get("checks", [])):
+        why.append("most of the cost has no service the catalog knows")
+    if (title := _title_header(best.spec)):
+        why.append(f"its columns are named after a title row ({title!r}), not a header")
+    if not why:
+        return verdict
+    check = {"name": "llm_reading", "status": "fail", "weight": -0.25,
+             "detail": "A reading the LLM made needs review: " + "; ".join(why)}
+    return dict(verdict, status="needs_review", checks=[*verdict.get("checks", []), check],
+                feedback=[*verdict.get("feedback", []), f"llm_reading: {check['detail']}"])
 
 
 def _warnings(best: Attempt | None, big: bigfile.Scan | None = None) -> list[str]:

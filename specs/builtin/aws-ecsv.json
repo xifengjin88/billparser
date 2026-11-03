@@ -17,7 +17,7 @@
   "format": "AWS monthly cost allocation report (eCSV): RecordType LinkedLineItem / PayerLineItem lines, AccountTotal, InvoiceTotal and StatementTotal rows",
   "exact_columns": true
  },
- "notes": "The same money is printed at each level: LinkedLineItem (per linked account), PayerLineItem (the payer's sum of them), AccountTotal, InvoiceTotal and StatementTotal. The lines are the first of LinkedLineItem, PayerLineItem the file has (a payer-only account prints PayerLineItem only); StatementTotal proves them.",
+ "notes": "The same money is printed at each level: LinkedLineItem (per linked account), PayerLineItem (the payer's sum of them), AccountTotal, InvoiceTotal and StatementTotal. The lines are the first of LinkedLineItem, PayerLineItem the file has (a payer-only account prints PayerLineItem only); StatementTotal proves them. The eCSV prints no line type for commitment fees: a usage type with HeavyUsage is a Reserved Instance hourly fee, one with ComputeSP:, DatabaseSP: (and the other plans) a Savings Plan fee; both are charge type Purchase, never usage priced at on-demand rates.",
  "columns": {
   "invoice_id": {"from": ["InvoiceID"]},
   "account_id": {"from": ["LinkedAccountId", "PayerAccountId"], "coalesce": true},
@@ -32,6 +32,7 @@
   "charge_end": {"from": ["UsageEndDate", "BillingPeriodEndDate"], "coalesce": true},
   "quantity": {"from": ["UsageQuantity"]},
   "unit_price": {"from": ["BlendedRate"]},
+  "charge_type": {"from": ["UsageType"], "t": [{"regex": {"pattern": "HeavyUsage|(?:Compute|Database|EC2Instance|SageMaker|MachineLearning)SP:", "group": 0}}, {"map": {"mapping": {"HeavyUsage": "RIFee", "ComputeSP:": "SavingsPlanRecurringFee", "DatabaseSP:": "SavingsPlanRecurringFee", "EC2InstanceSP:": "SavingsPlanRecurringFee", "SageMakerSP:": "SavingsPlanRecurringFee", "MachineLearningSP:": "SavingsPlanRecurringFee"}}}, "charge_type"]},
   "currency": {"from": ["CurrencyCode"]},
   "credits": {"from": ["Credits"]},
   "tax": {"from": ["TaxAmount"]},
