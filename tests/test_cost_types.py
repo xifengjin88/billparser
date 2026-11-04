@@ -394,3 +394,13 @@ def test_a_default_coverage_must_be_a_coverage_value():
     spec["meta"]["default_coverage"] = "free"
     with pytest.raises(SpecError):
         check_spec(spec)
+
+
+def test_a_commitment_tier_is_committed_use_not_reserved():
+    """Log Analytics / Sentinel commitment tiers: a fixed daily level at a discount, not an Azure Reservation."""
+    rows = pd.DataFrame({"description": ["Az Sentinel-Classic 100 GB Cmt Tier Capacity Resv-1/Day-US W2",
+                                         "100 GB Commitment Tier Capacity Reservation",
+                                         "Az Log Analytics-PAYG Data Ingestion- 1 GB"]})
+    coverage_mod.apply(rows)
+    assert rows["coverage"].tolist() == ["committed_use", "committed_use", "unknown"]
+    assert rows["_how:coverage"].tolist() == ["text", "text", None]

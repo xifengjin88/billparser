@@ -7,7 +7,7 @@ the `coverage` or `commitment_credit` transform. apply() then settles what one c
   * FOCUS: PricingCategory "Committed" is refined by CommitmentDiscountType (a Savings Plan or a reservation).
   * A line type that names a commitment (Azure UnusedReservation, a fee line) gives coverage when no column did.
   * Files with no coverage column (invoices, custom files): the words of a usage line ("Savings Plan", "Reserved",
-    "Spot", "CUD", "On Demand") give it, as an inferred value. A column always wins over text. No evidence: unknown,
+    "Spot", "CUD", "Commitment Tier", "On Demand") give it, as an inferred value. A column always wins over text. No evidence: unknown,
     or the spec's meta.default_coverage, for a format that names every commitment on its lines (the AWS Bills page:
     a line with no commitment words was billed on demand).
   * Lines that are not usage and not commitment lines (tax, credit, refund, fee, ...) have no coverage: None. The
@@ -28,6 +28,9 @@ from .transforms import coverage_of, map_unique
 COMMITMENTS = {"reserved", "savings_plan", "committed_use"}
 TEXT_RULES = [("on_demand", re.compile(r"pay[\s-]*as[\s-]*you[\s-]*go|\bnot\s+applied\b", re.I)),   # before the
               #   commitment words: "reserved capacity not applied, billed at pay-as-you-go rates" is on demand
+              # a Log Analytics / Sentinel commitment tier: a fixed daily level at a discount, not an Azure
+              # Reservation, although its meter says "Commitment Tier Capacity Reservation": before "reserved"
+              ("committed_use", re.compile(r"\b(?:cmt|commitment)\s+tier\b", re.I)),
               ("savings_plan", re.compile(r"savings\s*plans?", re.I)),
               ("reserved", re.compile(r"\breserved\b|\breservations?\b|\bRI\b")),
               ("committed_use", re.compile(r"\bCUD\b|committed\s+use", re.I)),
