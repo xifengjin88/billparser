@@ -778,7 +778,7 @@ def _currency(p: pd.DataFrame, res: pd.DataFrame, one: pd.Series) -> tuple[pd.Se
 
 
 CONFLICT_COLUMNS = [c for col in ("region", "instance_type", "operating_system") for c in (col, HOW + col)]
-COUNT_COLUMNS = ["coverage", "service_code"]
+COUNT_COLUMNS = ["coverage", HOW + "coverage", "service_code"]
 
 
 AZURE_REGION = re.compile(r"^(?!global$)[a-z]+[0-9]?$")       # eastus, eastus2, westeurope (not global)
@@ -905,7 +905,8 @@ def _count(stats: PriceStats, level: pd.Series, missing: pd.Series, cost: pd.Ser
             got[0] += len(g)
             got[1] += float(g["r"].sum())
             got[2] |= set(g["s"].unique())
-    stats.below_list += int((ok & cov.eq("unknown") & (ratio.lt(R3_RATIO) | billed.eq(0))).sum())
+    unsaid = cov.eq("unknown") | (cov.eq("on_demand") & _col(p, HOW + "coverage").eq("rule"))   # a spec's default
+    stats.below_list += int((ok & unsaid & (ratio.lt(R3_RATIO) | billed.eq(0))).sum())
 
 
 def infer_discount(stats: PriceStats) -> float | None:

@@ -724,7 +724,7 @@ class Pipeline:
             clean_rows(att.ext)
             normalize_regions(att.ext.rows)
             extract_attributes(att.ext.rows, att.ext.warnings)
-            coverage.apply(att.ext.rows)
+            coverage.apply(att.ext.rows, coverage.default_of(spec))
             kind = (spec.get("meta") or {}).get("kind", "cost_lines")
             if kind != "cost_lines":
                 att.verdict = {"status": "auxiliary", "confidence": 1.0 if not att.ext.rows.empty else 0.0,

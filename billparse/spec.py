@@ -86,6 +86,11 @@ def check_spec(spec: dict) -> None:
         problems = check_context(spec["context"])
         if problems:
             raise SpecError("; ".join(problems))
+    default = (spec.get("meta") or {}).get("default_coverage")
+    if default is not None:
+        from .coverage import VALUES
+        if default not in VALUES:
+            raise SpecError(f"Unknown meta.default_coverage: {default!r}; known: {sorted(VALUES)}")
     post = (spec.get("meta") or {}).get("post") or []
     if post:
         from .costs import POST

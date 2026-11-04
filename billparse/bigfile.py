@@ -571,7 +571,7 @@ def scan(spec: dict, info: FileInfo, sample: Document, catalog_dir: Path | None 
             if steps:
                 normalize_regions(rows)
                 extract_attributes(rows, ext.warnings)
-                coverage.apply(rows)
+                coverage.apply(rows, coverage.default_of(spec))
                 if catalog_dir is not None and kind == "cost_lines":
                     r, u = resolve_service_sums(rows, catalog_dir)
                     res.resolved += r

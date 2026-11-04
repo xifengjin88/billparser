@@ -202,7 +202,7 @@ def check(spec: dict, doc: Document, catalog_dir: Path | None, prices=None,
     ext = run(spec, doc, catalog_dir)
     clean_rows(ext)
     extract_attributes(ext.rows)
-    coverage.apply(ext.rows)
+    coverage.apply(ext.rows, coverage.default_of(spec))
     kind = (spec.get("meta") or {}).get("kind", "cost_lines")
     if prices is not None and kind == "cost_lines":
         match_prices(ext.rows, prices, cache=cache)

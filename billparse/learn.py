@@ -77,7 +77,7 @@ def _check(pipeline, spec: dict, sha: str, path: Path) -> tuple[int, float, dict
     if kind == "cost_lines" and prices is not None and not ext.rows.empty:
         normalize_regions(ext.rows)
         extract_attributes(ext.rows)
-        coverage.apply(ext.rows)
+        coverage.apply(ext.rows, coverage.default_of(spec))
         resolve_services(ext.rows, pipeline.s.catalog_dir)
         match_prices(ext.rows, prices, cache=cache)
     total = float(ext.rows["billed_cost"].sum()) if "billed_cost" in ext.rows else 0.0

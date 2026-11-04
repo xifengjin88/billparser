@@ -7,11 +7,13 @@ the `coverage` or `commitment_credit` transform. apply() then settles what one c
   * FOCUS: PricingCategory "Committed" is refined by CommitmentDiscountType (a Savings Plan or a reservation).
   * A line type that names a commitment (Azure UnusedReservation, a fee line) gives coverage when no column did.
   * Files with no coverage column (invoices, custom files): the words of a usage line ("Savings Plan", "Reserved",
-    "Spot", "CUD", "On Demand") give it, as an inferred value. A column always wins over text. No evidence: unknown.
+    "Spot", "CUD", "On Demand") give it, as an inferred value. A column always wins over text. No evidence: unknown,
+    or the spec's meta.default_coverage, for a format that names every commitment on its lines (the AWS Bills page:
+    a line with no commitment words was billed on demand).
   * Lines that are not usage and not commitment lines (tax, credit, refund, fee, ...) have no coverage: None. The
     question does not apply to them, so they are never "unknown".
 
-The way each value was made is kept per row in "_how:coverage": "printed" (from a column) or "text" (from words).
+The way each value was made is kept per row in "_how:coverage": "printed" (from a column), "text" (from words) or "rule" (the spec's default).
 """
 
 from __future__ import annotations
@@ -32,6 +34,7 @@ TEXT_RULES = [("on_demand", re.compile(r"pay[\s-]*as[\s-]*you[\s-]*go|\bnot\s+ap
               ("spot", re.compile(r"\bspot\b", re.I)),
               ("on_demand", re.compile(r"\bon[\s-]*demand\b", re.I))]
 SPOT_USAGE = re.compile(r"SpotUsage", re.I)
+VALUES = {"on_demand", "spot", *COMMITMENTS}           # the values a spec may give as its default
 COMMITMENT_LINES = {"Purchase", "Negation"}       # commitment fee and negation lines keep a commitment coverage
 
 
@@ -55,7 +58,13 @@ def _col(rows: pd.DataFrame, name: str) -> pd.Series:
     return rows[name] if name in rows else pd.Series([None] * len(rows), index=rows.index, dtype=object)
 
 
-def apply(rows: pd.DataFrame) -> None:
+def default_of(spec: dict | None) -> str | None:
+    """meta.default_coverage: the coverage of a usage line with no evidence, for this format (None: unknown)."""
+    return ((spec or {}).get("meta") or {}).get("default_coverage")
+
+
+def apply(rows: pd.DataFrame, default: str | None = None) -> None:
+    """default: the coverage of a usage line that has no evidence (default_of(spec)); None: unknown."""
     if rows.empty:
         return
     ct = _col(rows, "charge_type")
@@ -91,7 +100,8 @@ def apply(rows: pd.DataFrame) -> None:
         found = map_unique(text[todo], _text_coverage)
         hit = found.notna()
         cov[found[hit].index], how[found[hit].index] = found[hit], "text"
-    cov[usage & cov.isna()] = "unknown"                   # usage the file does not say how it was priced
+    none = usage & cov.isna()                             # usage the file does not say how it was priced
+    cov[none], how[none] = default or "unknown", "rule" if default else None
 
     # a commitment fee line whose printed commitment type names it (FOCUS purchases have no PricingCategory)
     fee = ct.isin(COMMITMENT_LINES) & cov.isna()

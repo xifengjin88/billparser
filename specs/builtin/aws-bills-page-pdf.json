@@ -10,6 +10,7 @@
   "provider": "aws",
   "kind": "cost_lines",
   "cost_basis": "billed",
+  "default_coverage": "on_demand",
   "format": "AWS Billing console Bills page printed to PDF (English or Chinese; issued or estimated): a summary by seller, the highest costs, then Charges by service (each seller's Total pre-tax, service, region, usage type, lines, and its Total tax)",
   "notes": "Read from Charges by service: each line, and each seller's Total tax as a line; proved against the Grand total. The summary table (a row per seller, in one or two currencies), the payments table and the 'Highest ... spend' boxes print the same money again and are left out, as are the parts after the charges (charges by account, invoices, savings, taxes by service) (the savings are already in the lines). AWS adds up unrounded amounts (and converts them line by line), so a printed total can differ from its rounded lines by more than the rounding of its parts: line_rounding."
  },

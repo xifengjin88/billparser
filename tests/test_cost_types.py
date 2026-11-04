@@ -13,6 +13,7 @@ import pytest
 
 import billparse.analyze as analyze_mod
 import billparse.contract as contract_mod
+import billparse.coverage as coverage_mod
 from billparse import Pipeline, Settings
 from billparse.expr import evaluate
 from billparse.schema import SCHEMA_VERSION, Document
@@ -356,3 +357,40 @@ def test_map_unique_is_the_same_as_map():
     for f in (lambda v: {"a": 1.5}.get(v), lambda v: v.strip() if isinstance(v, str) else None,
               lambda v: v == "a", lambda v: 1 if v == "a" else "x", lambda v: "none" if v is None else str(v)):
         assert map_unique(s, f).equals(s.map(f))
+
+
+# ---------------------------------------------------------------- a format whose usage is on demand unless it says so
+def _bills_rows() -> pd.DataFrame:
+    return pd.DataFrame({
+        "description": ["$ 1.36 per RDS db.r7i.2xlarge Single-AZ instance hour (or partial hour) running Aurora",
+                        "USD 0.0 per Linux m5.large reserved instance applied",
+                        "$0.10 per GB-month of data storage",
+                        "Total tax"],
+        "charge_type": [None, None, None, "Tax"],
+    })
+
+
+def test_a_spec_default_coverage_fills_usage_with_no_evidence():
+    rows = _bills_rows()
+    coverage_mod.apply(rows, default="on_demand")
+    assert rows["coverage"].tolist() == ["on_demand", "reserved", "on_demand", None]
+    assert rows["_how:coverage"].tolist() == ["rule", "text", "rule", None]
+
+
+def test_without_a_default_usage_with_no_evidence_is_unknown():
+    rows = _bills_rows()
+    coverage_mod.apply(rows)
+    assert rows["coverage"].tolist() == ["unknown", "reserved", "unknown", None]
+
+
+def test_the_aws_bills_page_spec_defaults_to_on_demand():
+    spec = json.loads((ROOT / "specs" / "builtin" / "aws-bills-page-pdf.json").read_text())
+    check_spec(spec)
+    assert coverage_mod.default_of(spec) == "on_demand"
+
+
+def test_a_default_coverage_must_be_a_coverage_value():
+    spec = json.loads((ROOT / "specs" / "builtin" / "aws-bills-page-pdf.json").read_text())
+    spec["meta"]["default_coverage"] = "free"
+    with pytest.raises(SpecError):
+        check_spec(spec)
