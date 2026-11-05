@@ -1,0 +1,28 @@
+{
+  "id": "azure-cost-management-accumulated",
+  "version": 1,
+  "trust": "builtin",
+  "detect": {
+    "required": ["UsageDate"],
+    "any_of": [["CostUSD", "Cost", "PreTaxCost"]],
+    "forbid": ["ServiceName", "MeterCategory", "ResourceId", "ResourceGroupName", "ResourceType", "BilledCost"]
+  },
+  "meta": {
+    "provider": "azure",
+    "kind": "cost_lines",
+    "cost_basis": "billed",
+    "format": "Azure Cost Management download with no group-by (sheet Data: UsageDate, CostUSD, Cost, Currency; sheet Summary: scope and view)",
+    "notes": "One line for each date of the chosen granularity, for the whole scope: the export is not split by service. The scope name is on the Summary sheet."
+  },
+  "source": "grid",
+  "table": {"sheet": "^Data$", "header_rows": 1, "stop_at_total": true},
+  "fields": {"scope_name": {"anchor": "^Name:$", "take": "right_of"}},
+  "columns": {
+    "service_raw": {"const": "Azure (all services)"},
+    "description": {"const": "Azure cost for the scope, not split by service"},
+    "billed_cost": {"from": ["CostUSD", "Cost", "PreTaxCost"]},
+    "charge_start": {"from": ["UsageDate"]},
+    "currency": {"from": ["Currency"]}
+  },
+  "filters": [{"drop_if_blank": "billed_cost"}]
+}

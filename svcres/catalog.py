@@ -37,6 +37,7 @@ from .seeds import (
     AZURE_RESOURCE_TYPES,
     GCP_KEYWORD_CATEGORY,
     MARKETPLACE_SELLERS,
+    SUPPORT_NAMES,
     fingerprint,
 )
 
@@ -125,6 +126,11 @@ def build(raw_dir: Path, db: dict[str, list[dict]] | None = None) -> Catalog:
         cat.add_code(provider, "Marketplace", key)
         for seller in MARKETPLACE_SELLERS.get(provider, []):
             cat.add_name(provider, seller, key)
+    for provider, names in SUPPORT_NAMES.items():
+        key = cat.add_service(provider, "Support", "Support", code="Support")
+        cat.add_code(provider, "Support", key)
+        for name in names:
+            cat.add_name(provider, name, key)
     return cat
 
 
@@ -159,13 +165,13 @@ def _build_azure(cat: Catalog, path: Path, rows: list[dict]) -> None:
 
 
 def _azure_meters(cat: Catalog, rows: list[dict]) -> None:
-    """rows: name, serviceName: Azure meter names that belong to one service ("D8s v5": Virtual Machines), as product
-    names of that service (a product name already there keeps its service)."""
+    """rows: name, serviceName: Azure meter names that belong to one service ("D8s v5": Virtual Machines), as whole
+    names of that service only: a meter named "Standard" must not make every "Standard ..." line a VM by prefix."""
     n = 0
     for r in rows:
         key = f"azure:{r.get('serviceName')}"
-        if r.get("name") and key in cat.services:
-            cat.add_name("azure", r["name"], key, product=True)
+        if r.get("name") and key in cat.services and (name := norm(r["name"])):
+            cat.exact.setdefault(f"azure:{name}", key)
             n += 1
     if rows:
         cat.sources.setdefault("azure", {})["meters"] = n

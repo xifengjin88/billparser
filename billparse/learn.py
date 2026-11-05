@@ -131,17 +131,21 @@ def _closest_learned(pipeline, fp: dict, min_sim: float = 0.5) -> str | None:
 
 # ---------------------------------------------------------------- promotion
 def promote_candidates(pipeline) -> list[dict]:
-    out = []
-    for spec in pipeline.store.learned_specs():
-        if spec.get("trust") != "candidate":
-            continue
-        docs = pipeline.store.spec_docs(spec["id"])
-        good = [d for d in docs.values() if d["confidence"] >= PROMOTE_MIN_CONF]
-        if len(good) >= PROMOTE_AFTER:
-            saved = pipeline.store.save_spec(dict(spec, trust="verified"))
-            headers.learn_spec(pipeline.store.engine, saved, "spec")     # a verified spec confirms its headers
-            out.append({"spec": spec["id"], "promoted_to": "verified", "version": saved["version"], "docs": len(good)})
-    return out
+    return [p for spec in pipeline.store.learned_specs() if (p := promote_if_ready(pipeline, spec))]
+
+
+def promote_if_ready(pipeline, spec: dict) -> dict | None:
+    """A candidate spec (a mapper or LLM spec that was accepted) that PROMOTE_AFTER files have parsed well becomes
+    verified: at parse time, as soon as the file that makes the count is parsed (and again by the nightly loop)."""
+    if spec.get("trust") != "candidate":
+        return None
+    docs = pipeline.store.spec_docs(spec["id"])
+    good = [d for d in docs.values() if d["confidence"] >= PROMOTE_MIN_CONF]
+    if len(good) < PROMOTE_AFTER:
+        return None
+    saved = pipeline.store.save_spec(dict(spec, trust="verified"))
+    headers.learn_spec(pipeline.store.engine, saved, "spec")     # a verified spec confirms its headers
+    return {"spec": spec["id"], "promoted_to": "verified", "version": saved["version"], "docs": len(good)}
 
 
 # ---------------------------------------------------------------- queued agent jobs

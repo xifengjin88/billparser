@@ -155,21 +155,19 @@ def catalog_rows(engine: Engine) -> dict[str, list[dict]]:
                     out[r.provider].append({"code": r.product_id, "name": r.product_name or None})
             for provider, q in prices.items():
                 out[provider] += [dict(r._mapping) for r in conn.execute(q)]
-            # Azure meter names ("D8s v5", "P30 LRS Disk"): what reseller and invoice files print; each one that
-            # belongs to one service only
-            meters = (sa.select(P.c.meter_name.label("name"), sa.func.min(P.c.service_code).label("serviceName"))
-                      .where((P.c.provider == "azure") & P.c.meter_name.isnot(None))
-                      .group_by(P.c.meter_name).having(sa.func.count(sa.distinct(P.c.service_code)) == 1))
-            out["azure_meters"] = [dict(r._mapping) for r in conn.execute(meters)]
-            shared = (sa.select(P.c.meter_name, P.c.service_code)
-                      .where((P.c.provider == "azure") & P.c.meter_name.in_(
-                          sa.select(P.c.meter_name).where(P.c.provider == "azure").group_by(P.c.meter_name)
-                          .having(sa.func.count(sa.distinct(P.c.service_code)) > 1)))
-                      .distinct())
-            amb: dict[str, list[str]] = {}
-            for name, svc in conn.execute(shared):
-                amb.setdefault(name, []).append(svc)
-            out["azure_meters_ambiguous"] = [{"name": k, "services": sorted(v)} for k, v in amb.items()]
+            # Azure meter names ("D8s v5", "P30 LRS Disk"): what reseller and invoice files print. Grouped as the
+            # resolver compares them (case and spacing ignored: "B8ms" is a VM, "B8MS" a MySQL server): a name of
+            # one service is that service's; a name several services share is ambiguous
+            pairs = (sa.select(P.c.meter_name, P.c.service_code)
+                     .where((P.c.provider == "azure") & P.c.meter_name.isnot(None)).distinct())
+            by: dict[str, tuple[str, set[str]]] = {}
+            for name, svc in conn.execute(pairs):
+                if (n := norm(name)):
+                    by.setdefault(n, (name, set()))[1].add(svc)
+            out["azure_meters"] = [{"name": name, "serviceName": next(iter(svcs))}
+                                   for name, svcs in by.values() if len(svcs) == 1]
+            out["azure_meters_ambiguous"] = [{"name": name, "services": sorted(svcs)}
+                                             for name, svcs in by.values() if len(svcs) > 1]
     except DBAPIError as e:                         # no tables (a store without the migrations): JSON only
         log.warning("service catalog: the database could not be read (%s); the JSON lists only", type(e).__name__)
         return {}

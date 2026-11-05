@@ -685,7 +685,8 @@ export interface paths {
         put?: never;
         /**
          * Parse Job
-         * @description Queue a parse and answer at once (202). The file's parse already queued or running: that job (200).
+         * @description Queue a parse and answer at once (202). The file's parse already queued or running: that job (200). A zip of
+         *     separate files: each file is its own parse; the answer is the first file's job, and split lists every file's.
          */
         post: operations["parse_job_parse_jobs_post"];
         delete?: never;
@@ -1264,6 +1265,12 @@ export interface components {
             contracted_unit_price?: number | null;
             /** Price Match Level */
             price_match_level?: string | null;
+            /** Price Missing */
+            price_missing?: string | null;
+            /** Storage Gb */
+            storage_gb?: number | null;
+            /** Storage Type */
+            storage_type?: string | null;
             /** Section */
             section?: string | null;
             /** Source */
@@ -1651,6 +1658,8 @@ export interface components {
             status_url: string;
             /** Result Url */
             result_url?: string | null;
+            /** Split */
+            split?: components["schemas"]["JobOut"][] | null;
         };
         /**
          * LearningOut
@@ -1806,6 +1815,8 @@ export interface components {
             job_id?: number | null;
             /** Queue */
             queue?: string | null;
+            /** Split */
+            split?: components["schemas"]["ParseTask"][] | null;
             learning?: components["schemas"]["LearningOut"] | null;
         };
         /**
@@ -1852,6 +1863,10 @@ export interface components {
             inferred_discount?: components["schemas"]["InferredDiscount"] | null;
             /** Warnings */
             warnings?: string[];
+            /** List Total From Files */
+            list_total_from_files?: number | null;
+            /** List Total */
+            list_total?: number | null;
         };
         /**
          * PricingDefault

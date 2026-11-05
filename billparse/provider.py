@@ -30,6 +30,12 @@ HEADERS = {
            r"cost ?type|invoice\.month|usage\.pricing ?unit",
 }
 VALUES = {"azure": re.compile(r"^/subscriptions/", re.I), "aws": re.compile(r"^arn:aws", re.I)}
+# an instance type's shape: Azure "Standard_D4s_v5" or "E2as_v7", AWS "m5.xlarge" or "db.r6g.large", GCP
+# "n2-standard-4" (the shapes do not overlap)
+SIZES = {"azure": re.compile(r"^(Standard_|Basic_)?[A-Z]{1,3}\d+[a-z]*(-\d+[a-z]*)?(_v\d+)?$"),
+         "aws": re.compile(r"^((db|cache)\.)?[a-z][a-z0-9-]*\d[a-z0-9-]*\.(\d*x?large|medium|small|micro|nano|metal)"
+                           r"[\w-]*$"),
+         "gcp": re.compile(r"^[a-z]\d\w?-(standard|highmem|highcpu|ultramem|megamem)-\d+$")}
 REGIONS = {
     "azure": re.compile(r"^(east|west|north|south|central|northcentral|southcentral|westcentral)us\d?$|"
                         r"^(west|north)europe$|^uk(south|west)$|^(japan|korea|australia|canada|brazil|france|germany|"
@@ -64,6 +70,16 @@ def detect_provider(rows: pd.DataFrame, headers: list[str], name: str) -> dict |
         if hits:
             score[p] += min(3.0, float(len(hits)))
             why[p].append("headers " + ", ".join(hits[:6]))
+    for p, rx in NAME.items():                     # "Azure Region", "Optimized Azure Profile"
+        hits = [h for h in headers if re.search(rf"\b({rx})\b", _norm(h))]
+        if hits:
+            score[p] += 1.0
+            why[p].append("the provider's name in headers " + ", ".join(hits[:3]))
+    if "instance_type" in rows:
+        for p, rx in SIZES.items():
+            if _share(rows["instance_type"], rx) > 0.5:
+                score[p] += 1.0
+                why[p].append("instance types")
     if "resource_id" in rows:
         for p, rx in VALUES.items():
             if _share(rows["resource_id"], rx) > 0.5:

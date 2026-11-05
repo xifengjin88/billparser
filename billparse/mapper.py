@@ -460,6 +460,10 @@ def _inventory(chosen: dict[str, str], source: str, headers: list[str]) -> tuple
 
 def _spec_from_mapping(chosen: dict[str, str], source: str, headers: list[str], groups: bool = False) -> dict:
     columns = {f: {"from": [h]} for f, h in chosen.items()}
+    if not ({"service_raw", "description"} & set(chosen)) and "instance_type" in chosen and not groups:
+        # a list of instances with no label column: each line is its instance type (its service: analyze.py)
+        columns["description"] = {"from": [chosen["instance_type"]]}
+        chosen = {**chosen, "description": chosen["instance_type"]}
     if groups and "service_raw" not in chosen:
         # hierarchical invoices: the bold group row is the service, lines below are SKUs
         fallback = [chosen["description"]] if "description" in chosen else []

@@ -8,6 +8,7 @@ table's first rows) that the source viewer reads. rereconcile() checks the total
 
 from __future__ import annotations
 
+import json
 import os
 import re
 from collections import Counter
@@ -36,6 +37,7 @@ from .transforms import parse_number
 
 MAX_CHARGES = int(os.environ.get("CONTRACT_MAX_CHARGES", "50000"))  # more lines are rolled up (see _rollup)
 MAX_TABLE_ROWS = 5000                  # rows of a table kept for the source viewer (more are read from the file)
+DEFAULT_CURRENCY = "USD"               # a document's currency when the file states none (said in its reasons)
 MAX_SERVICE_GAPS = 500                 # one gap per charge with no service code, up to this many
 TOLERANCE = Decimal("0.05")
 ROUNDING = "rounding"           # the stated fact with the rounding between the printed total and its lines
@@ -216,6 +218,8 @@ def build(summary: dict, rows: pd.DataFrame | None, file_doc: FileDoc | None) ->
     if doc.billing_period_start is None:              # a printed billing period ("Billing period: Apr 1 - Apr 30, 2025")
         _period(doc, summary, loc)
     _currency(doc, summary, loc)
+    if doc.currency is None and any(c.cost is not None for c in doc.charges):
+        doc.currency = cv(DEFAULT_CURRENCY, head, "inferred", None, "default")   # the file states none: assumed
     if summary.get("pricing"):
         doc.pricing = Pricing.model_validate(summary["pricing"])
     doc.commitments = _commitments(doc.charges)
@@ -231,10 +235,14 @@ def build(summary: dict, rows: pd.DataFrame | None, file_doc: FileDoc | None) ->
         _totals(doc, summary, loc)
     _gaps(doc, summary, loc)
     rereconcile(doc, summary.get("completeness"))
-    failed = [f"{c['name']}: {c.get('detail')}" for c in summary.get("checks") or [] if c.get("status") == "fail"]
     if summary.get("completeness") == "contradicted" and doc.completeness != "contradicted":
         doc.completeness = "contradicted"                 # billparse's other checks failed: never a better verdict
-        doc.confidence = Confidence(level="low", reasons=[*failed, *(doc.confidence.reasons if doc.confidence else [])])
+        doc.confidence = Confidence(level="low", reasons=doc.confidence.reasons if doc.confidence else [])
+    why = _why(summary, doc)                            # what a consumer is told first: why a part failed
+    if why:
+        old = doc.confidence.reasons if doc.confidence else []
+        doc.confidence = Confidence(level=doc.confidence.level if doc.confidence else "low",
+                                    reasons=list(dict.fromkeys([*why, *old])))
     flags = [{"message": w} for w in summary.get("warnings") or []]
     if rolled:
         flags.append({"message": f"{lines:,} lines were rolled up into {len(doc.charges):,} charges (lines alike in "
@@ -254,6 +262,59 @@ def build(summary: dict, rows: pd.DataFrame | None, file_doc: FileDoc | None) ->
         "lines": lines,
     }
     return doc, meta, bundle_of(file_doc)
+
+
+# a failed check in words for the consumer of the API (not how billparse checks it)
+CHECK_WHY = {
+    "labels": "Most of the cost has no service or description: the columns may be read wrong.",
+    "rows": "Few or no cost lines could be read: {detail}",
+    "row_coverage": "Part of the file was not read: {detail}",
+    "line_math": "On some lines quantity x unit price is not the cost: {detail}",
+    "currency": "The currency is not clear: {detail}",
+    "dates": "Some dates could not be read: {detail}",
+    "negatives": "Some amounts have an unexpected sign: {detail}",
+    "subtotals": "The subtotals do not add up: {detail}",
+    "amounts_explained": "Some amounts printed in the file are in no line: {detail}",
+    "views_agree": "Two views of the file give different amounts: {detail}",
+    "dual_extraction": "Two readings of the file give different amounts: {detail}",
+    "placeholder": "The file looks like an unfilled template ({detail}): its amounts are not real costs.",
+}
+NO_LINES = ("No cost lines were found in the file. It may hold no costs (for example a memo or a manifest), or its "
+            "layout is one billparse cannot read yet.")
+
+
+def _why(summary: dict, doc: Document) -> list[str]:
+    """Short, plain reasons for the parts of a parse that failed: no lines (and why), the checks that failed, no
+    currency. Best effort: what was read is kept; these say what is missing or doubtful."""
+    out: list[str] = []
+    skipped = [f.split(": ", 1)[-1] for f in summary.get("feedback") or [] if f.startswith("llm_skipped:")]
+    if not doc.charges:
+        status = summary.get("status")
+        notes = [w.split(": ", 1)[-1] for w in summary.get("warnings") or [] if "damaged" in w or "could not" in w]
+        fb = [f for f in summary.get("feedback") or [] if "OCR" in f]
+        if status == "unsupported" and fb:
+            out.append("The file is a scanned image with no text layer: it needs OCR, which billparse does not do.")
+        elif notes:
+            out.append(f"The file could not be opened: {notes[0]}.")
+        else:
+            out.append(NO_LINES)
+        llm = [f for f in summary.get("feedback") or [] if f.startswith(("llm_spec:", "llm_extract:", "vision:"))]
+        if llm:
+            out.append(f"The LLM could not read the layout either ({llm[0].split(': ', 1)[-1][:120]}).")
+        out += [f"The LLM was not used further: {why}." for why in skipped[:1]]
+        return out
+    for c in summary.get("checks") or []:
+        if c.get("status") != "fail" or c.get("name") == "stated_total":    # a total that does not tie: said
+            continue
+        detail = str(c.get("detail") or "").rstrip(".")
+        if c.get("name") == "service_resolution":
+            out.append(f"{detail}: the other lines keep the service name as the file prints it.")
+        else:
+            out.append(CHECK_WHY.get(c.get("name"), "{name}: {detail}").format(name=c.get("name"), detail=detail))
+    out += [f"The LLM was not used further: {why}." for why in skipped[:1]]
+    if doc.currency is not None and doc.currency.source == "default":
+        out.append(f"The file does not state its currency: {doc.currency.value} is assumed.")
+    return out
 
 
 def _feedback(summary: dict) -> list[str]:
@@ -385,6 +446,7 @@ def _charge(i: int, r: dict, loc: Locator, sections: dict[str, str]) -> Charge:
     # effective_cost and list_cost: deprecated in 1.4: use the typed fields
     for k in ("service_raw", "category", "resolved_by", "charge_type", "account_name", "region_name", "effective_cost",
               "list_cost", "credits", "tax", "invoice_id", "price_per", "resource_type", "storage_gb", "meter_name",
+              "storage_type", "load_balancer_type", "billing_mode", "vcpu", "memory_gb",   # an inventory's sizes
               "_lines"):
         v = r.get(k)
         if _str(v) is not None:
@@ -396,7 +458,26 @@ def _charge(i: int, r: dict, loc: Locator, sections: dict[str, str]) -> Charge:
     if _str(r.get("_path")):
         attrs["under"] = str(r["_path"])
     c.attributes = attrs
+    _estimated(c, r, cite)
     return c
+
+
+def _estimated(c: Charge, r: dict, cite: Cite) -> None:
+    """An inventory's values the LLM estimated (estimate.py): inferred, source claude, with the confidence; the
+    attributes say each one with its reason."""
+    raw = _str(r.get("_estimates"))
+    if not raw:
+        return
+    from .estimate import CONFIDENCE
+    for f, e in json.loads(raw).items():
+        conf = CONFIDENCE.get(e.get("confidence"), CONFIDENCE["low"])
+        if f == "quantity" and c.quantity is not None:
+            c.quantity = cv(c.quantity.value, cite, "inferred", conf, "claude")
+        elif f == "instance_type" and c.instance_type is not None:
+            c.instance_type = cv(c.instance_type.value, cite, "inferred", conf, "claude")
+        elif f == "region" and c.context.region is not None:
+            c.context.region = cv(c.context.region.value, cite, "inferred", conf, "claude")
+        c.attributes[f"estimated {f}"] = f"{e.get('value')} (an LLM estimate, {e.get('confidence')}: {e.get('reason')})"
 
 
 def _prices(c: Charge, r: dict, cite: Cite) -> None:
@@ -585,6 +666,14 @@ def _gaps(doc: Document, summary: dict, loc: Locator) -> None:
             doc.gaps.append(Gap(kind="unreconciled_total", ref=t.id, cite=t.amount.cite, currency=currency,
                                 amount=None if t.computed is None else t.amount.value - t.computed,
                                 message=f"{t.label.value}: printed {t.amount.value}, its lines add up to {t.computed}"))
+    # an inventory: a value the files do not give (a variable with no default, a remote module, usage)
+    by_name = {str(c.description.value): c.id for c in doc.charges}
+    guessed = {(e.get("name"), e.get("field")): e for e in ev.get("estimates") or [] if e.get("used")}
+    for g in ev.get("gaps") or []:
+        e = guessed.get((g.get("name"), g.get("field")))       # the LLM's value: a candidate, the gap stays open
+        doc.gaps.append(Gap(kind="missing_input", field=g.get("field"), ref=by_name.get(g.get("name")),
+                            cite=loc.cite(g.get("src"), g.get("name")), message=f"{g.get('name')}: {g.get('message')}",
+                            candidates=[f"{e['value']} (an LLM estimate, {e['confidence']}: {e['reason']})"] if e else []))
     # a line of $0.00 puts no money at risk: no gap for its service
     missing = [c for c in doc.charges if c.kind.value == "usage" and c.service_code is None and c.cost is not None
                and c.cost.value != 0]
@@ -649,6 +738,8 @@ def rereconcile(doc: Document, completeness: str | None = None) -> Document:
 
 
 def confidence_for(doc: Document) -> Confidence:
+    if doc.doc_type is not None and doc.doc_type.value == "inventory":
+        return _inventory_confidence(doc)
     reasons = []
     for t in doc.stated_totals:
         if t.status == "mismatch":
@@ -666,6 +757,26 @@ def confidence_for(doc: Document) -> Confidence:
     if doc.completeness == "consistent" and not [r for r in reasons if "service code" not in r]:
         return Confidence(level="medium", reasons=["The file prints no total; every amount was read", *reasons])
     return Confidence(level="low", reasons=reasons or [f"Completeness: {doc.completeness}"])
+
+
+def _inventory_confidence(doc: Document) -> Confidence:
+    """An inventory has no amounts to add up: it can be relied on as far as the files give each resource's count,
+    size and region. Usage (GB stored, requests) is never in the files: said, but it does not lower the level."""
+    gaps = [g for g in doc.gaps if g.kind == "missing_input"]
+    missing = [g for g in gaps if g.field != "usage"]
+    usage = len(gaps) - len(missing)
+    said = f"{usage} resource(s) are priced by usage that is not in the files (see Gaps)." if usage else None
+    if not doc.charges:
+        return Confidence(level="low", reasons=["No resource was read."])
+    if missing:
+        fields = sorted({g.field or "value" for g in missing})
+        guessed = sum(1 for g in missing if g.candidates)
+        est = (f"{guessed} of them are LLM estimates: the rows priced with them are only in the total with "
+               "estimates.") if guessed else None
+        return Confidence(level="low", reasons=[f"{len(missing)} value(s) the files do not give ({', '.join(fields)}); "
+                                                "see Gaps.", *([est] if est else []), *([said] if said else [])])
+    return Confidence(level="high", reasons=[f"Every resource's count, size and region was read "
+                                             f"({len(doc.charges)} resources).", *([said] if said else [])])
 
 
 def money_at_risk(doc: Document) -> Decimal:

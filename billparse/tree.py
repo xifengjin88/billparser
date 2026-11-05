@@ -172,6 +172,7 @@ class Tree:
 
 
 # ---------------------------------------------------------------- amounts
+SIZE_UNIT = re.compile(r"^\s*(%|[KMGTP]i?B\b|[KMGT]bps\b|vCPUs?\b|cores?\b|hrs?\b|hours?\b|GHz\b)", re.I)
 BETWEEN_WORDS = re.compile(rf"^\s+(?!(?:{_CUR})\b)[A-Za-z]{{2,}}")
 
 
@@ -214,6 +215,8 @@ def money_in(text: str, cells: list[str] | None = None) -> list[tuple[float, str
         bare = not cur
         if bare and re.search(r"[A-Za-z]\s*$", text[:start]) and BETWEEN_WORDS.match(text[end:]):
             continue
+        if bare and SIZE_UNIT.match(text[end:]):
+            continue                                    # "0.89 TB", "16 GiB", "45 %": a size or a share, not money
         digits = re.sub(rf"[{_SP[1:-1]}']", "", num)
         if re.fullmatch(r"\d+(?:\.\d{3})*,\d{2}", digits):          # a decimal comma
             v = float(digits.replace(".", "").replace(",", "."))

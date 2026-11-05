@@ -1,0 +1,236 @@
+{
+  "provider": "aws",
+  "about": "How billparse prices the rows of a Terraform or CloudFormation inventory with the AWS on-demand catalog. The first rule that matches a row prices it; a row no rule matches is not priced and says why. See specs/iac-prices/README.md.",
+  "hours_a_month": 730,
+  "maps": {
+    "engines": {"postgres": "PostgreSQL", "mysql": "MySQL", "mariadb": "MariaDB",
+                "aurora-postgresql": "Aurora PostgreSQL", "aurora-mysql": "Aurora MySQL", "aurora": "Aurora MySQL",
+                "oracle-se2": "Oracle", "oracle-ee": "Oracle", "sqlserver-se": "SQL Server",
+                "sqlserver-ee": "SQL Server", "sqlserver-ex": "SQL Server", "sqlserver-web": "SQL Server",
+                "redis": "Redis", "memcached": "Memcached", "valkey": "Valkey"}
+  },
+  "no_rule": {
+    "aws_vpc_endpoint": "an interface endpoint costs per hour for each subnet (zone) and per GB processed"
+  },
+  "rules": [
+    {
+      "name": "Aurora instance",
+      "match": {"resource_type": ["aws_db_instance", "AWS::RDS::DBInstance", "aws_rds_cluster_instance",
+                                  "AWS::RDS::DBClusterInstance"],
+                "unit": ["instances"], "database_engine": {"regex": "^aurora"}},
+      "requires": ["instance_type"],
+      "vars": {
+        "io": {"from": "storage_type", "map": {"aurora-iopt1": "IOOptimized"}, "else": ""},
+        "standard": {"from": "storage_type", "map": {"aurora-iopt1": ""},
+                     "else": "Aurora Standard (the cluster is not aurora-iopt1); "},
+        "class": {"from": "instance_type", "sub": ["xlarge$", "xl"]}
+      },
+      "set": {"service_code": "AmazonRDS", "usage_type": "{prefix}InstanceUsage{io}:{class}", "operation": null},
+      "quantity": "quantity * hours", "unit": "Hrs",
+      "note": "{standard}hours={hours} a month (on demand, always running)"
+    },
+    {
+      "name": "RDS storage",
+      "match": {"resource_type": ["aws_db_instance", "AWS::RDS::DBInstance"], "unit": ["GB"]},
+      "defaults": {"storage_type": {"value": "gp2"}},
+      "vars": {
+        "kind": {"from": "storage_type", "map": {"gp2": "GP2-Storage", "gp3": "GP3-Storage", "io1": "PIOPS-Storage",
+                                                 "io2": "IO2-Storage", "standard": "StorageUsage"}},
+        "multi": {"from": "deployment_option", "map": {"multi-az": "Multi-AZ-"}, "else": ""}
+      },
+      "set": {"service_code": "AmazonRDS", "usage_type": "{prefix}RDS:{multi}{kind}", "operation": "CreateDBInstance",
+              "database_engine": "Any", "instance_type": null},
+      "quantity": "quantity", "unit": "GB-Mo",
+      "note": "GB-months"
+    },
+    {
+      "name": "Redshift node",
+      "match": {"resource_type": ["aws_redshift_cluster"], "unit": ["nodes"]},
+      "requires": ["instance_type"],
+      "set": {"service_code": "AmazonRedshift", "usage_type": "{prefix}Node:{instance_type}",
+              "operation": "RunComputeNode:0001"},
+      "quantity": "quantity * hours", "unit": "Hrs",
+      "note": "hours={hours} a month (on demand, always running)"
+    },
+    {
+      "name": "OpenSearch instance",
+      "match": {"resource_type": ["aws_opensearch_domain", "aws_elasticsearch_domain"], "unit": ["instances"]},
+      "requires": ["instance_type"],
+      "vars": {"type": {"from": "instance_type", "sub": ["\\.(search|elasticsearch)$", ""]}},
+      "set": {"service_code": "AmazonES", "usage_type": "{prefix}ESInstance:{type}", "operation": "ESDomain"},
+      "quantity": "quantity * hours", "unit": "Hrs",
+      "note": "hours={hours} a month (on demand, always running)"
+    },
+    {
+      "name": "OpenSearch volume",
+      "match": {"resource_type": ["opensearch_volume"], "unit": ["volumes"]},
+      "requires": ["storage_gb"],
+      "defaults": {"storage_type": {"value": "gp2", "note": "volume_type=gp2 (the default, the files do not say)"}},
+      "vars": {"type": {"from": "storage_type", "upper": true}},
+      "set": {"service_code": "AmazonES", "usage_type": "{prefix}ES:{type}-Storage", "operation": "ESDomain",
+              "instance_type": null},
+      "quantity": "quantity * storage_gb", "unit": "GB-Mo",
+      "note": "GB-months={quantity:g} volumes x {storage_gb:g} GB"
+    },
+    {
+      "name": "MSK broker",
+      "match": {"resource_type": ["aws_msk_cluster"], "unit": ["brokers"]},
+      "requires": ["instance_type"],
+      "vars": {"type": {"from": "instance_type", "sub": ["^kafka\\.", ""]}},
+      "set": {"service_code": "AmazonMSK", "usage_type": "{prefix}Kafka.{type}", "operation": "RunBroker"},
+      "quantity": "quantity * hours", "unit": "Hrs",
+      "note": "hours={hours} a month (on demand, always running)"
+    },
+    {
+      "name": "MSK broker storage",
+      "match": {"resource_type": ["msk_volume"], "unit": ["volumes"]},
+      "requires": ["storage_gb"],
+      "set": {"service_code": "AmazonMSK", "usage_type": "{prefix}Kafka.Storage.GP2", "operation": "RunVolume",
+              "instance_type": null},
+      "quantity": "quantity * storage_gb", "unit": "GB-Mo",
+      "note": "GB-months={quantity:g} volumes x {storage_gb:g} GB"
+    },
+    {
+      "name": "Fargate vCPU",
+      "match": {"resource_type": ["aws_ecs_service"], "unit": ["vCPU"]},
+      "vars": {"arm": {"from": "architecture", "map": {"arm64": "ARM-"}, "else": ""},
+               "arch": {"from": "architecture", "map": {"arm64": "ARM"}, "else": "x86"}},
+      "set": {"service_code": "AmazonECS", "usage_type": "{prefix}Fargate-{arm}vCPU-Hours:perCPU", "operation": null},
+      "quantity": "quantity * hours", "unit": "Hrs",
+      "note": "{arch}; hours={hours} a month (on demand, always running)"
+    },
+    {
+      "name": "Fargate memory",
+      "match": {"resource_type": ["aws_ecs_service"], "unit": ["GB"]},
+      "vars": {"arm": {"from": "architecture", "map": {"arm64": "ARM-"}, "else": ""},
+               "arch": {"from": "architecture", "map": {"arm64": "ARM"}, "else": "x86"}},
+      "set": {"service_code": "AmazonECS", "usage_type": "{prefix}Fargate-{arm}GB-Hours", "operation": null},
+      "quantity": "quantity * hours", "unit": "Hrs",
+      "note": "{arch}; hours={hours} a month (on demand, always running)"
+    },
+    {
+      "name": "ElastiCache node",
+      "match": {"resource_type": ["aws_elasticache_cluster", "aws_elasticache_replication_group",
+                                  "AWS::ElastiCache::CacheCluster", "AWS::ElastiCache::ReplicationGroup"]},
+      "requires": ["instance_type"],
+      "defaults": {"database_engine": {"value": "redis", "note": "engine=redis (the default, the files do not say)"}},
+      "vars": {"op": {"from": "database_engine", "map": {"redis": "CreateCacheCluster:0002",
+                                                         "memcached": "CreateCacheCluster:0001",
+                                                         "valkey": "CreateCacheCluster:Valkey"}}},
+      "set": {"usage_type": "{prefix}NodeUsage:{instance_type}", "operation": "{op}", "database_engine": null},
+      "quantity": "quantity * hours", "unit": "Hrs",
+      "note": "hours={hours} a month (on demand, always running)",
+      "stop": true
+    },
+    {
+      "name": "RDS instance",
+      "match": {"resource_type": ["aws_db_instance", "AWS::RDS::DBInstance"], "unit": ["instances"]},
+      "requires": ["instance_type"],
+      "defaults": {"deployment_option": {"value": "Single-AZ"}},
+      "quantity": "quantity * hours", "unit": "Hrs",
+      "note": "hours={hours} a month (on demand, always running)"
+    },
+    {
+      "name": "instance by its type (EC2, RDS, and other instances, nodes and brokers)",
+      "match": {"unit": ["instances", "nodes", "brokers"]},
+      "requires": ["instance_type"],
+      "quantity": "quantity * hours", "unit": "Hrs",
+      "note": "hours={hours} a month (on demand, always running)"
+    },
+    {
+      "name": "NAT gateway",
+      "match": {"resource_type": ["aws_nat_gateway", "AWS::EC2::NatGateway"]},
+      "set": {"service_code": "AmazonEC2", "usage_type": "{prefix}NatGateway-Hours", "operation": "NatGateway",
+              "instance_type": null},
+      "quantity": "quantity * hours", "unit": "Hrs",
+      "note": "hours={hours} a month (always running)"
+    },
+    {
+      "name": "load balancer (application, network or gateway)",
+      "match": {"resource_type": ["aws_lb", "aws_alb", "AWS::ElasticLoadBalancingV2::LoadBalancer"]},
+      "defaults": {"load_balancer_type": {"value": "application"}},
+      "vars": {"op": {"from": "load_balancer_type", "map": {"application": "LoadBalancing:Application",
+                                                            "network": "LoadBalancing:Network",
+                                                            "gateway": "LoadBalancing:Gateway"}}},
+      "set": {"service_code": "AWSELB", "usage_type": "{prefix}LoadBalancerUsage", "operation": "{op}",
+              "instance_type": null},
+      "quantity": "quantity * hours", "unit": "Hrs",
+      "note": "hours={hours} a month (always running)"
+    },
+    {
+      "name": "Classic Load Balancer",
+      "match": {"resource_type": ["aws_elb", "AWS::ElasticLoadBalancing::LoadBalancer"]},
+      "set": {"service_code": "AWSELB", "usage_type": "{prefix}LoadBalancerUsage", "operation": "LoadBalancing",
+              "instance_type": null},
+      "quantity": "quantity * hours", "unit": "Hrs",
+      "note": "hours={hours} a month (always running)"
+    },
+    {
+      "name": "EKS cluster",
+      "match": {"resource_type": ["aws_eks_cluster", "AWS::EKS::Cluster"]},
+      "set": {"service_code": "AmazonEKS", "usage_type": "{prefix}AmazonEKS-Hours:perCluster",
+              "operation": "CreateOperation", "instance_type": null},
+      "quantity": "quantity * hours", "unit": "Hrs",
+      "note": "hours={hours} a month (always running)"
+    },
+    {
+      "name": "public IPv4 address",
+      "match": {"resource_type": ["aws_eip", "AWS::EC2::EIP"]},
+      "set": {"service_code": "AmazonVPC", "usage_type": "{prefix}PublicIPv4:InUseAddress", "operation": null,
+              "instance_type": null},
+      "quantity": "quantity * hours", "unit": "Hrs",
+      "note": "hours={hours} a month (always running)"
+    },
+    {
+      "name": "KMS key",
+      "match": {"resource_type": ["aws_kms_key", "AWS::KMS::Key"]},
+      "vars": {"at": {"from": "region", "format": "{value}-", "else": ""}},
+      "set": {"service_code": "awskms", "usage_type": "{at}KMS-Keys", "operation": null, "instance_type": null},
+      "quantity": "quantity",
+      "note": "a month"
+    },
+    {
+      "name": "Secrets Manager secret",
+      "match": {"resource_type": ["aws_secretsmanager_secret", "AWS::SecretsManager::Secret"]},
+      "set": {"service_code": "AWSSecretsManager", "usage_type": "{prefix}AWSSecretsManager-Secrets",
+              "operation": null, "instance_type": null},
+      "quantity": "quantity",
+      "note": "a month"
+    },
+    {
+      "name": "CloudWatch alarm",
+      "match": {"resource_type": ["aws_cloudwatch_metric_alarm", "AWS::CloudWatch::Alarm"]},
+      "set": {"service_code": "AmazonCloudWatch", "usage_type": "{prefix}CW:AlarmMonitorUsage", "operation": null,
+              "instance_type": null},
+      "quantity": "quantity",
+      "note": "a month"
+    },
+    {
+      "name": "EBS volume storage",
+      "match": {"resource_type": ["aws_ebs_volume", "AWS::EC2::Volume"], "unit": ["volumes"]},
+      "requires": ["storage_gb"],
+      "defaults": {"storage_type": {"value": "gp2", "note": "storage_type=gp2 (EC2 default, the files do not say)"}},
+      "vars": {"usage": {"from": "storage_type", "map": {"standard": "EBS:VolumeUsage"},
+                         "else": "EBS:VolumeUsage.{storage_type}"}},
+      "set": {"usage_type": "{usage}"},
+      "quantity": "quantity * storage_gb", "unit": "GB-Mo",
+      "note": "GB-months={quantity:g} volumes x {storage_gb:g} GB"
+    },
+    {
+      "name": "EBS provisioned IOPS",
+      "match": {"resource_type": ["aws_ebs_volume", "AWS::EC2::Volume"], "unit": ["IOPS"],
+                "storage_type": ["gp3", "io1", "io2"]},
+      "set": {"usage_type": "EBS:VolumeP-IOPS.{storage_type}"},
+      "quantity": "quantity", "unit": "IOPS-Mo",
+      "note": "provisioned IOPS a month"
+    },
+    {
+      "name": "EBS provisioned throughput",
+      "match": {"resource_type": ["aws_ebs_volume", "AWS::EC2::Volume"], "unit": ["MiB/s"],
+                "storage_type": ["gp3"]},
+      "set": {"usage_type": "EBS:VolumeP-Throughput.gp3"},
+      "quantity": "quantity / 1024", "unit": "GiBps-mo",
+      "note": "provisioned throughput a month (MiB/s / 1024 = GiBps)"
+    }
+  ]
+}

@@ -57,6 +57,9 @@ def _line_kind(v) -> str:
     return re.sub(r"[\s_-]+", "", v.lower()) if isinstance(v, str) else ""
 
 
+NOT_USAGE = {"Purchase", "Negation", "Tax", "Credit", "Refund", "Support", "Fee", "Adjustment"}   # kind_of: else usage
+
+
 def _col(rows: pd.DataFrame, name: str) -> pd.Series:
     return rows[name] if name in rows else pd.Series([None] * len(rows), index=rows.index, dtype=object)
 
@@ -71,7 +74,7 @@ def apply(rows: pd.DataFrame, default: str | None = None) -> None:
     if rows.empty:
         return
     ct = _col(rows, "charge_type")
-    usage = ct.isna() | ct.eq("Usage")
+    usage = ~ct.isin(NOT_USAGE)        # an unknown printed type ("LineItem") is usage, as contract.kind_of says
     cov = _col(rows, "coverage").astype(object).where(lambda s: s.notna(), None)
     how = pd.Series("printed", index=rows.index, dtype=object).where(cov.notna(), None)
 
@@ -101,6 +104,8 @@ def apply(rows: pd.DataFrame, default: str | None = None) -> None:
         for p in parts[1:]:
             text = text + " " + p
         found = map_unique(text[todo], _text_coverage)
+        off = _col(rows, "_text_price_off").fillna(False).astype(bool)     # attributes.py: billed below its words'
+        found[found.eq("on_demand") & off[todo]] = None                   # on-demand price: a commitment covered it
         hit = found.notna()
         cov[found[hit].index], how[found[hit].index] = found[hit], "text"
     none = usage & cov.isna()                             # usage the file does not say how it was priced

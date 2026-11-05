@@ -336,6 +336,13 @@ class Store:
             rows = s.exec(q.order_by(col(JournalRow.id))).all()
         return [{**r.data, "id": r.id, "ts": r.ts} for r in rows]
 
+    def llm_spent_since(self, ts: float) -> float:
+        """USD the parses recorded since ts spent on LLM calls (their runs' claude_cost_usd)."""
+        with self.session() as s:
+            rows = s.exec(select(JournalRow.data).where(col(JournalRow.stream) == "runs")
+                          .where(col(JournalRow.ts) >= ts)).all()
+        return float(sum(float((d or {}).get("claude_cost_usd") or 0) for d in rows))
+
     # ---------------- agent jobs
     def enqueue_agent_job(self, layout_key: str, sha: str, name: str, kind: str, spec_id: str | None = None) -> int | None:
         """A new queued job; this layout's job when a person queued it again (retry_agent_job); else None (the layout

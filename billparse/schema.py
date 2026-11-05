@@ -6,7 +6,7 @@ from typing import Any, Generic, Literal, TypeVar, cast
 
 from pydantic import BaseModel, Field
 
-SCHEMA_VERSION = "1.10"           # 1.2: database_engine, deployment_option on charges; 1.3: confidence;
+SCHEMA_VERSION = "1.11"           # 1.2: database_engine, deployment_option on charges; 1.3: confidence;
                                   # 1.4: typed list/contracted/effective cost, coverage, line_type_raw on charges,
                                   #      kind commitment_negation, cost_types and cost_basis on documents
                                   # 1.5: tenancy, license_model, resource_id, pricing_term, purchase_option,
@@ -22,6 +22,10 @@ SCHEMA_VERSION = "1.10"           # 1.2: database_engine, deployment_option on c
                                   #      no_such_product in price_missing; price checks (validate.py)
                                   # 1.10: pricing.defaults_used: the values assumed for what lines do not print
                                   #       (request, the file's own, or the default setting), with their lines
+                                  # 1.11: gap kind missing_input: a value an inventory (Terraform, CloudFormation)
+                                  #       does not give (a variable with no default, a remote module, usage);
+                                  #       an LLM estimate of one is its gap's candidate and the charge's value
+                                  #       (origin inferred, source claude); pricing.list_total_from_files, list_total
 
 T = TypeVar("T")
 
@@ -38,7 +42,7 @@ Origin = Literal["printed", "inferred"]
 Completeness = Literal["reconciled", "consistent", "unchecked", "contradicted"]
 GapKind = Literal[
     "unclaimed_amount", "unreconciled_total", "missing_match_field", "failed_window",
-    "rejected_claim", "no_bill_table",
+    "rejected_claim", "no_bill_table", "missing_input",
 ]
 
 DOC_TYPES = list(DocType.__args__)
@@ -238,6 +242,10 @@ class Pricing(BaseModel):
     missing: list[PricingMissing] = Field(default_factory=list)
     inferred_discount: InferredDiscount | None = None
     warnings: list[str] = Field(default_factory=list)
+    # an inventory (1.11): its list price a month, of the rows priced from the files alone, and of every priced row
+    # (with the rows priced with an LLM estimate of a value the files do not give)
+    list_total_from_files: float | None = None
+    list_total: float | None = None
 
 
 class Document(BaseModel):

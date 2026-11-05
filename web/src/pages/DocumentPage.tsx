@@ -179,6 +179,7 @@ function DocumentBody({ view }: { view: DocumentView }) {
         </div>
       )}
 
+      {v.doc_type === 'inventory' ? <InventoryStats v={v} /> : (
       <div className="mb-5 grid grid-cols-2 gap-2 sm:grid-cols-4 xl:grid-cols-8">
         <Stat label="Type" value={label(v.doc_type)} />
         <Stat label="Provider" value={v.provider ?? '—'} />
@@ -192,6 +193,7 @@ function DocumentBody({ view }: { view: DocumentView }) {
         <Stat label="List price match" value={matchRate(v)}
               hint="Share of priced AWS usage cost matched to a public list price: sure (exact or by attributes), and with assumptions" />
       </div>
+      )}
 
       <Tabs value={tab} onValueChange={(t) => setParams((p) => { const next = new URLSearchParams(p); next.set('tab', String(t)); return next }, { replace: true })}>
         <TabsList className="flex-wrap">
@@ -338,6 +340,42 @@ export function TotalsTab({ view }: { view: DocumentView }) {
           </ul>
         </Section>
       )}
+    </div>
+  )
+}
+
+/** An inventory (Terraform, CloudFormation) has no amounts: what it launches, and what the files do not give. */
+function InventoryStats({ v }: { v: DocumentView }) {
+  const inputs = v.gaps.filter((g) => g.kind === 'missing_input')
+  const usage = inputs.filter((g) => g.field === 'usage').length
+  const regions = [...new Set(v.charges.map((c) => c.region).filter(Boolean))]
+  const priced = v.charges.filter((c) => c.list_cost != null)
+  const month = v.pricing?.list_total ?? priced.reduce((sum, c) => sum + (c.list_cost ?? 0), 0)
+  const fromFiles = v.pricing?.list_total_from_files
+  const estimated = v.gaps.filter((g) => g.kind === 'missing_input' && g.candidates.length > 0).length
+  return (
+    <div className="mb-5 grid grid-cols-2 gap-2 sm:grid-cols-4 xl:grid-cols-8">
+      <Stat label="Type" value={label(v.doc_type)} />
+      <Stat label="Provider" value={v.provider ?? '—'} />
+      <Stat label="Region" value={regions.length ? regions.join(', ') : '—'} />
+      <Stat label="Resources" value={v.charges.length.toLocaleString()} hint="Rows the files launch (each with its count)" />
+      <Stat label="Missing inputs" value={(inputs.length - usage).toLocaleString()}
+            hint="A count, size, type or region the files do not give (a variable with no default, a remote module): see Gaps" />
+      <Stat label="Usage not in files" value={usage.toLocaleString()}
+            hint="Resources priced by usage (GB stored, requests, data processed): an inventory never gives it" />
+      {estimated > 0 && fromFiles != null ? (
+        <>
+          <Stat label="List / month, files" value={money(fromFiles)}
+                hint="On-demand list price a month of the rows priced from the files alone (no LLM estimate)" />
+          <Stat label="List / month, with estimates" value={money(month)}
+                hint={`Also the rows priced with an LLM estimate of a value the files do not give (${estimated} estimated value(s): see Gaps). Each such row's Price assumptions names the estimate.`} />
+        </>
+      ) : (
+        <Stat label="List price / month" value={priced.length ? money(month) : '—'}
+              hint="On-demand list price of the rows the catalog priced, a month: what runs by the hour as 730 hours; storage as GB-months. Each row's Price assumptions says how. Usage (LCU, GB processed, GB stored, requests) and rows with a missing input are not in it." />
+      )}
+      <Stat label="Priced rows" value={`${priced.length} of ${v.charges.length}`}
+            hint="Rows with a list price from the catalog; see the Price match column for why a row has none" />
     </div>
   )
 }

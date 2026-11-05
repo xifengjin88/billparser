@@ -19,6 +19,7 @@ from typing import Protocol
 
 import requests
 
+from .spec import fix_flags
 from .spec_schema import rows_json_schema, spec_json_schema
 from .transforms import CANONICAL, TRANSFORMS
 
@@ -200,7 +201,12 @@ Canonical fields: {json.dumps(CANONICAL)}
 Transforms: {sorted(TRANSFORMS)} (e.g. "number", {{"date": "%m/%d/%Y"}}, {{"strip_suffix": "($)"}}, {{"json_sum": "amount"}})
 
 Rules: map billed_cost (required) and service_raw or description. Never put totals, subtotals or tax
-lines into cost rows unless they are line items. Return ONLY the JSON object."""
+lines into cost rows unless they are line items.
+The header row is the row of column names right above the first data row. A title row is never the header: one
+text repeated across merged cells ("Acme — Spend by Service"), or a sheet or report name. A grid "table.start" regex
+is tested on a row's cell texts joined by one space (header "Service | Monthly | Notes" is the text
+"Service Monthly Notes": "^Service Monthly\\b" matches it). Regexes are Python: an inline flag such as (?i) goes
+only at the very start (matching already ignores case). Return ONLY the JSON object."""
 
 
 def _json_from(text: str) -> dict:
@@ -235,7 +241,7 @@ def generate_spec(llm: LLM, preview: dict, examples: list[tuple[str, dict]],
     if note:
         parts.append(note)
     parts.append("Write the spec.")
-    return _ask(llm, SPEC_GUIDE, "\n\n".join(parts), spec_json_schema())
+    return fix_flags(_ask(llm, SPEC_GUIDE, "\n\n".join(parts), spec_json_schema()))   # "(?i)" mid-pattern
 
 
 def settled_block(settled: dict[str, str]) -> str:

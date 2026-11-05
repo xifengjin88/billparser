@@ -133,7 +133,7 @@ class StatedFact(_Strict):
 
 class Gap(_Strict):
     kind: Literal["unclaimed_amount", "unreconciled_total", "missing_match_field", "failed_window",
-                  "rejected_claim", "no_bill_table"]
+                  "rejected_claim", "no_bill_table", "missing_input"]
     message: str
     cite: Cite | None = None
     amount: Decimal | None = None
@@ -182,6 +182,8 @@ class Pricing(_Strict):
     missing: list[PricingMissing] = Field(default_factory=list)
     inferred_discount: InferredDiscount | None = None
     warnings: list[str] = Field(default_factory=list)
+    list_total_from_files: float | None = None     # an inventory: priced from the files alone
+    list_total: float | None = None                # an inventory: also the rows priced with an LLM estimate
 
 
 class Document(_Strict):

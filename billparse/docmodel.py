@@ -50,6 +50,7 @@ class Cell:
     bold: bool = False
     indent: float = 0.0
     formula: str | None = None
+    currency: str | None = None        # a spreadsheet number's format names it ("$"#,##0.00, [$€-407])
 
     @property
     def text(self) -> str:
@@ -165,7 +166,7 @@ def _load_into(doc: Document, data: bytes, name: str, prefix: str = "") -> None:
         doc.regions.append(records)
         if meta.rows:
             doc.regions.append(meta)
-    elif lname.endswith(TEXT_EXT) and not _tabular(_decode(data)):
+    elif lname.endswith(CODE_EXT) or (lname.endswith(TEXT_EXT) and not _tabular(_decode(data))):
         doc.file_type = doc.file_type or "txt"
         doc.regions.append(_read_text(_decode(data), prefix))
     else:
@@ -175,6 +176,7 @@ def _load_into(doc: Document, data: bytes, name: str, prefix: str = "") -> None:
 
 # ---------------------------------------------------------------- text, Word, PowerPoint
 TEXT_EXT = (".txt", ".text", ".md", ".log", ".yaml", ".yml", ".tf", ".hcl")
+CODE_EXT = (".tf", ".tfvars", ".hcl")       # Terraform: always text, never a table ("n = 5" looks like one)
 
 
 def _tabular(text: str) -> bool:
@@ -229,11 +231,17 @@ def _read_office(data: bytes, prefix: str, kind: str) -> list[Region]:
                     elif el.tag.endswith("}p"):
                         lines.append("".join(t.text or "" for t in el.iter(f"{{{ns['w']}}}t")))
             else:
-                for tbl in root.iter(f"{{{ns['a']}}}tbl"):
+                for t, tbl in enumerate(root.iter(f"{{{ns['a']}}}tbl"), 1):
+                    grid: list[Row] = []
                     for tr in tbl.iter(f"{{{ns['a']}}}tr"):
-                        cells = ["".join(t.text or "" for t in tc.iter(f"{{{ns['a']}}}t")).strip()
+                        cells = ["".join(x.text or "" for x in tc.iter(f"{{{ns['a']}}}t")).strip()
                                  for tc in tr.iter(f"{{{ns['a']}}}tc")]
                         lines.append("    ".join(c for c in cells if c))
+                        row = [Cell(value=c, x0=i + 1, x1=i + 2) for i, c in enumerate(cells) if c]
+                        if row:
+                            grid.append(Row(cells=row, index=len(grid) + 1))
+                    if grid:                       # the table as a sheet too: its cells kept apart (the grid routes)
+                        regions.append(Region(kind="sheet", name=f"{prefix}slide{k} table{t}", rows=grid))
                 for para in root.iter(f"{{{ns['a']}}}p"):
                     text = "".join(t.text or "" for t in para.iter(f"{{{ns['a']}}}t"))
                     if text.strip() and not any(text.strip() in ln for ln in lines):
@@ -350,6 +358,27 @@ def _frame(df: pd.DataFrame, name: str, header_in_df: bool) -> Region:
 
 
 # ---------------------------------------------------------------- Excel
+# a number format's currency: [$$-409] (the locale says which dollar), [$€-407], "$"#,##0.00, \$#,##0, €#,##0
+FORMAT_LOCALE = {"409": "USD", "1009": "CAD", "c09": "AUD", "809": "GBP", "1409": "NZD", "4809": "SGD"}
+FORMAT_SYMBOL = {"$": "USD", "€": "EUR", "£": "GBP", "¥": "JPY", "₹": "INR"}
+FORMAT_BRACKET = re.compile(r"\[\$([^\]-]*)(?:-([0-9A-Fa-f]+))?\]")
+
+
+def format_currency(fmt) -> str | None:
+    if not isinstance(fmt, str) or fmt == "General":
+        return None
+    if (m := FORMAT_BRACKET.search(fmt)):
+        sym, loc = m.group(1), (m.group(2) or "").lower()
+        if sym == "$" and loc:
+            return FORMAT_LOCALE.get(loc)              # another dollar's locale that is not listed: unknown
+        if sym in FORMAT_SYMBOL:
+            return FORMAT_SYMBOL[sym]
+        return sym.upper() if re.fullmatch(r"[A-Za-z]{3}", sym) else None
+    plain = re.sub(r'"[^"]*"', lambda q: q.group(0).strip('"'), fmt).replace("\\", "")
+    found = {FORMAT_SYMBOL[c] for c in plain if c in FORMAT_SYMBOL}
+    return found.pop() if len(found) == 1 else None
+
+
 def _read_xlsx(data: bytes, prefix: str) -> list[Region]:
     import openpyxl
 
@@ -396,7 +425,9 @@ def _read_xlsx(data: bytes, prefix: str) -> list[Region]:
                 cells.append(Cell(value=val, x0=c, x1=c + 1,
                                   bold=bool(cell.font and cell.font.bold),
                                   indent=float(cell.alignment.indent or 0) if cell.alignment else 0.0,
-                                  formula=formula))
+                                  formula=formula,
+                                  currency=format_currency(cell.number_format)
+                                  if isinstance(val, (int, float)) else None))
             if cells:
                 rows.append(Row(cells=cells, index=r))
         regions.append(Region(kind="sheet", name=prefix + title, rows=rows))

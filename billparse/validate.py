@@ -426,6 +426,8 @@ def validate(ext: Extraction, alt: Extraction | None = None, resolved_share: flo
     if not stats.cost_rows:
         return _summarize([Check("rows", "fail", "No cost rows extracted", -1.0)], 0.0, reconciled=False)
     checks = [Check("rows", "pass", f"{stats.rows} rows", 0.1), _labels(stats), _line_math(stats)]
+    if (tpl := _placeholders(ext.rows)) is not None:
+        checks.append(tpl)
     tot_check, reconciled = _stated_totals(ext.stated_totals, ext.evidence, stats.total, stats.non_tax, stats.rows)
     checks.append(tot_check)
     checks.append(_coverage(ext.amount_like_rows, ext.source_rows, stats.rows, ext.stated_totals))
@@ -474,6 +476,21 @@ def _resolution(resolved_share: float | None) -> list[Check]:
     st = "pass" if resolved_share >= 0.9 else "warn" if resolved_share >= 0.6 else "fail"
     return [Check("service_resolution", st, f"{resolved_share:.0%} of cost has a resolved service",
                   {"pass": 0.05, "warn": -0.05, "fail": -0.15}[st])]
+
+
+PLACEHOLDER = re.compile(r"^\s*(\[[A-Za-z_ ]{3,40}\]|\{\{?\s*[A-Za-z_ ]{3,40}\s*\}?\}|<[A-Za-z_ ]{3,40}>)\s*$")
+
+
+def _placeholders(rows) -> Check | None:
+    """A template nobody filled in ("[cloud_provider]", "{{customer}}" as a line's label): its amounts are not costs."""
+    found = set()
+    for col in rows.columns:                           # any text a line carries: label, provider, region, ...
+        if str(col).startswith("_") or rows[col].dtype.kind in "fiub":
+            continue
+        found |= {v.strip() for v in rows[col].dropna().astype(str).unique()[:200] if PLACEHOLDER.match(v)}
+    if not found:
+        return None
+    return Check("placeholder", "fail", f"placeholder labels {', '.join(sorted(found)[:3])}", -1.0)
 
 
 def _labels(s: RowStats) -> Check:
@@ -820,7 +837,7 @@ def _grounded(rows: pd.DataFrame | None, text: str | None) -> Check:
     return Check("grounding_values", "pass", "Every instance type and region is printed in the document", 0.0)
 
 
-CRITICAL = ("rows", "stated_total", "row_coverage", "labels", "subtotals", "amounts_explained")
+CRITICAL = ("rows", "stated_total", "row_coverage", "labels", "subtotals", "amounts_explained", "placeholder")
 INTERNAL = ("subtotals", "line_math", "row_coverage", "dual_extraction", "amounts_explained", "views_agree",
             "catalog_grounding", "printed_list_price", "implied_unit_price", "usage_hours")
 

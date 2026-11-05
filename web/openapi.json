@@ -1826,7 +1826,7 @@
   "/parse/jobs": {
    "post": {
     "summary": "Parse Job",
-    "description": "Queue a parse and answer at once (202). The file's parse already queued or running: that job (200).",
+    "description": "Queue a parse and answer at once (202). The file's parse already queued or running: that job (200). A zip of\nseparate files: each file is its own parse; the answer is the first file's job, and split lists every file's.",
     "operationId": "parse_job_parse_jobs_post",
     "parameters": [
      {
@@ -3505,6 +3505,39 @@
       ],
       "title": "Price Match Level"
      },
+     "price_missing": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Price Missing"
+     },
+     "storage_gb": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Storage Gb"
+     },
+     "storage_type": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Storage Type"
+     },
      "section": {
       "anyOf": [
        {
@@ -4839,6 +4872,20 @@
        }
       ],
       "title": "Result Url"
+     },
+     "split": {
+      "anyOf": [
+       {
+        "items": {
+         "$ref": "#/components/schemas/JobOut"
+        },
+        "type": "array"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Split"
      }
     },
     "type": "object",
@@ -5382,6 +5429,20 @@
       ],
       "title": "Queue"
      },
+     "split": {
+      "anyOf": [
+       {
+        "items": {
+         "$ref": "#/components/schemas/ParseTask"
+        },
+        "type": "array"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Split"
+     },
      "learning": {
       "anyOf": [
        {
@@ -5546,6 +5607,28 @@
       },
       "type": "array",
       "title": "Warnings"
+     },
+     "list_total_from_files": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "List Total From Files"
+     },
+     "list_total": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "List Total"
      }
     },
     "type": "object",

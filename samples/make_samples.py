@@ -672,6 +672,43 @@ def pivot_workbook() -> None:
     _save_recalculated(wb, OUT / "spend_optimizer_pivot.xlsx")
 
 
+def cost_report_workbook() -> None:
+    """The Archera Azure Cost Intelligence Report layout (made-up customer): a title row merged over each sheet, the
+    service lines on the Service Breakdown sheet with a second header row and a formula TOTAL row."""
+    import openpyxl
+    from openpyxl.styles import Font
+
+    wb = openpyxl.Workbook()
+    ex = wb.active
+    ex.title = "Executive Summary"
+    ex["A1"] = "Northwind Traders — Azure Cost Intelligence Report"
+    ex.merge_cells("A1:I1")
+    ex["A2"] = "Period: September 2026 (1 month, annualized ×12)  |  1-year GRI: 25% premium  |  80% coverage"
+    ex.merge_cells("A2:I2")
+    ex.append(["MONTHLY SPEND", None, "ANNUALIZED", None, "EXISTING COMMITMENTS"])
+    ex.append(["$9,214", None, "$110,568", None, "$0/mo"])
+    sb = wb.create_sheet("Service Breakdown")
+    sb["A1"] = "Northwind Traders — Azure Spend by Service"
+    sb.merge_cells("A1:H1")
+    sb["A1"].font = Font(bold=True)
+    sb.append(["Service", "Monthly", "Annualized", "% of Total", "Reservable?", "Commitment Type", "Notes"])
+    sb.append(["Service", "Aug 2026", None, None, "Reservable?", "Commitment Type", "Notes"])
+    lines = [("Virtual Machines", 4120.55, "YES", "RI + Compute Savings Plan", "No RIs in place."),
+             ("SQL Database", 2310.4, "YES", "RI (vCore models)", None),
+             ("Storage", 1288.12, "YES", "Reserved Capacity (Blob)", None),
+             ("Azure App Service", 905.33, "YES", "App Service Plan RI", None),
+             ("Load Balancer", 389.6, "NO", "Not reservable", "Standard LB."),
+             ("Azure DNS", 0, "NO", "Not reservable", None)]
+    first = sb.max_row + 1
+    for svc, amt, res, kind, note in lines:
+        r = sb.max_row + 1
+        sb.append([svc, amt, f"=B{r}*12", f"=B{r}/B{first + len(lines)}", res, kind, note])
+    r = sb.max_row + 1
+    sb.append(["TOTAL", f"=SUM(B{first}:B{r - 1})", f"=SUM(C{first}:C{r - 1})", 1])
+    sb.cell(r, 1).font = Font(bold=True)
+    _save_recalculated(wb, OUT / "cost_report_workbook.xlsx")
+
+
 def _save_recalculated(wb, path: Path) -> None:
     """Real Excel files carry cached formula values; openpyxl doesn't write them. LibreOffice recalculates."""
     with tempfile.TemporaryDirectory() as d:
@@ -810,7 +847,7 @@ def german_xlsx(path: Path, month: str = "September 2026", amount_header: str = 
 if __name__ == "__main__":
     OUT.mkdir(exist_ok=True)
     for fn in (aws_cur2, azure_ea, pc_invoice_recon, focus_parquet, gcp_json, cost_explorer, messy_csv,
-               custom_workbook, pivot_workbook, reseller_pdf, list_pdf, custom_json):
+               custom_workbook, pivot_workbook, cost_report_workbook, reseller_pdf, list_pdf, custom_json):
         fn()
         print("ok", fn.__name__)
     for fn in (aws_cur2_commitments, aws_cur2_no_amortized, azure_amortized, azure_actual, focus_commitments,

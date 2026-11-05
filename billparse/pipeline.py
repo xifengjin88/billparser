@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import contextvars
 import json
+import logging
 import os
 import re
 import time
@@ -26,10 +27,13 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 import pandas as pd
+import requests
 
 from . import agent as agent_mod
-from . import bigfile, contract, coverage, jobs, vision
+from . import bigfile, contract, coverage, iac, jobs, vision
+from . import estimate as estimate_mod
 from . import headers as headers_mod
+from . import learn as learn_mod
 from . import llm as llm_mod
 from .analyze import analyze, resolve_services
 from .attributes import extract as extract_attributes
@@ -47,6 +51,8 @@ from .store import Store
 from .transforms import CANONICAL, period_of
 from .tree import money_in
 from .validate import CRITICAL, PRICE_CHECKS, REVIEW_BELOW, clean_rows, validate, validate_stats
+
+log = logging.getLogger("billparse.pipeline")
 
 
 @dataclass
@@ -66,8 +72,17 @@ class Settings:
     spec_candidates: int = field(default_factory=lambda: max(1, int(os.environ.get("BILLPARSE_SPEC_CANDIDATES") or 2)))
     # the agent step runs in this parse (the tests, with a fake agent model); else it is a job of the learn queue
     learn_inline: bool = False
-    # a short PDF no text-layer route proves is read from its page images (vision.py); BILLPARSE_VISION=0: never
-    use_vision: bool = field(default_factory=lambda: (os.environ.get("BILLPARSE_VISION") or "1") != "0")
+    # a short PDF no text-layer route proves is read from its page images (vision.py): off unless BILLPARSE_VISION=1
+    use_vision: bool = field(default_factory=lambda: (os.environ.get("BILLPARSE_VISION") or "0") == "1")
+    # an inventory's values the files do not give are estimated by the LLM (estimate.py); BILLPARSE_ESTIMATE=0: never
+    use_estimates: bool = field(default_factory=lambda: (os.environ.get("BILLPARSE_ESTIMATE") or "1") != "0")
+    # what the LLM may cost: in one parse (its spec drafts, repairs, extraction, vision, estimate), and in all the
+    # parses of the last 24 hours (0: no limit). Past it, the file keeps its best result without the LLM, and says so
+    llm_max_calls: int = field(default_factory=lambda: int(os.environ.get("BILLPARSE_LLM_MAX_CALLS") or 5))
+    llm_max_cost_per_file: float = field(
+        default_factory=lambda: float(os.environ.get("BILLPARSE_LLM_MAX_COST_PER_FILE") or 0.5))
+    llm_daily_budget: float = field(
+        default_factory=lambda: float(os.environ.get("BILLPARSE_LLM_DAILY_BUDGET_USD") or 20.0))
 
 
 @dataclass
@@ -79,6 +94,9 @@ class _PriceContext:
 
 
 _PRICING: contextvars.ContextVar[_PriceContext | None] = contextvars.ContextVar("billparse_pricing", default=None)
+# what this thread's LLM calls had cost when the parse began (the per-file limit counts from it)
+_LLM_START: contextvars.ContextVar[float] = contextvars.ContextVar("billparse_llm_start", default=0.0)
+LLM_SKIPPED = "llm_skipped"            # an attempt's route when the LLM gate said no (its error says why)
 
 
 @dataclass
@@ -202,6 +220,7 @@ class Pipeline:
 
     def _parse(self, data: bytes, name: str, force: bool, price_defaults: PriceDefaults | None = None) -> dict:
         t0 = time.perf_counter()
+        _LLM_START.set(self._spent())
         doc = load_bytes(data, name)
         if not force and (cached := self.store.get_result(doc.sha256)):
             return {**cached, "cached": True}
@@ -227,6 +246,8 @@ class Pipeline:
                            "feedback": ["No route produced rows"]}
                 return self._finish(doc, None, attempts, verdict, fp, None, t0)
 
+            if (best.spec or {}).get("source") == "iac":
+                self._estimate(doc, best)
             # final pass: the document's provider for the lines that do not say, resolve services, re-validate with
             # resolution share, analyze
             rows = best.ext.rows
@@ -236,7 +257,16 @@ class Pipeline:
                 best.ext.provider = found
             share = resolve_services(rows, self.s.catalog_dir)
             if best.verdict.get("status") == "auxiliary":           # an inventory, a price sheet: not cost lines
-                return self._finish(doc, best, attempts, dict(best.verdict, completeness="consistent"), fp, share, t0)
+                verdict = dict(best.verdict, completeness="consistent")
+                if iac.missing_inputs(best.ext.evidence.get("gaps")):
+                    verdict["status"] = "needs_review"           # a count, size or region the files do not give
+                pricing = None
+                if ((best.spec or {}).get("meta") or {}).get("kind") == "inventory":   # its list prices, a month
+                    ctx = _PRICING.get()
+                    stats = iac.price(rows, ctx.catalog if ctx else self.catalog(), price_defaults or
+                                      self.s.price_defaults, cache=ctx.cache if ctx else None)
+                    pricing = {**stats.summary(None), **iac.totals(rows)}
+                return self._finish(doc, best, attempts, verdict, fp, share, t0, pricing=pricing)
             pricing = self._price(rows, best.ext.fields, price_defaults)
             if best.route == "files":                           # each file was checked on its own: their verdicts
                 verdict = dict(best.verdict)
@@ -290,9 +320,11 @@ class Pipeline:
         summary = self.store.get_result(sha)
         if summary is None:
             raise KeyError(sha)
-        if summary.get("kind") not in (None, "cost_lines"):
-            return summary                                  # an inventory or a price sheet: no cost lines
         defaults = price_defaults or PriceDefaults(**((summary.get("pricing") or {}).get("defaults") or {}))
+        if summary.get("kind") == "inventory":              # Terraform, CloudFormation: its rows' list prices again
+            return self._reprice_inventory(sha, summary, defaults, t0)
+        if summary.get("kind") not in (None, "cost_lines"):
+            return summary                                  # a price sheet, recommendations: no cost lines
         header = summary.get("header_fields") or {}
         period = contract.printed_period(header)
         # lines without a date: the date the first pricing used (else a reprice on another day would price them
@@ -328,6 +360,71 @@ class Pipeline:
         if rows_path is not None:
             self.store.save_rolled(sha, rows)
         return summary
+
+    def _reprice_inventory(self, sha: str, summary: dict, defaults: PriceDefaults, t0: float) -> dict:
+        """An inventory's stored rows priced again (iac.price: it clears what an earlier pricing filled), then its
+        contract rebuilt and saved. Its rows, gaps and status stay as they were."""
+        rows = self.store.get_rows(sha)
+        if rows is None or rows.empty:
+            return summary
+        doc = bigfile.stored_doc(self.store, sha) or Document(summary.get("file") or "", "txt", sha, [])
+        summary["pricing"] = {**iac.price(rows, self.catalog(), defaults).summary(None), **iac.totals(rows)}
+        summary["repriced"] = {"at": time.time(), "seconds": round(time.perf_counter() - t0, 3)}
+        summary["contract"] = self._save_contract(doc, summary, rows)
+        self.store.save_result(sha, summary, rows)
+        return summary
+
+    def _spent(self) -> float:
+        spent = getattr(self.llm, "spent", None)
+        return spent() if spent else 0.0
+
+    def _llm_stop(self, doc: Document, calls: int = 0, text: bool = True) -> str | None:
+        """Why this parse must not call the LLM now (None: it may): the file has nothing to read, this file's LLM
+        calls reached BILLPARSE_LLM_MAX_COST_PER_FILE, or the parses of the last 24 hours reached
+        BILLPARSE_LLM_DAILY_BUDGET_USD. An LLM call never runs without a limit."""
+        if text and not any(r.rows or (r.df is not None and not r.df.empty) for r in doc.regions):
+            return "the file has nothing to read (no text and no table)"
+        if self.s.llm_max_calls and calls >= self.s.llm_max_calls:
+            return f"this file's LLM calls reached their limit ({calls} of {self.s.llm_max_calls})"
+        here = self._spent() - _LLM_START.get()
+        if self.s.llm_max_cost_per_file and here >= self.s.llm_max_cost_per_file:
+            return f"this file's LLM calls reached their limit (${here:.2f} of ${self.s.llm_max_cost_per_file:.2f})"
+        if self.s.llm_daily_budget:
+            day = self.store.llm_spent_since(time.time() - 86400) + here
+            if day >= self.s.llm_daily_budget:
+                return f"the LLM budget of the last 24 hours is used up (${day:.2f} of ${self.s.llm_daily_budget:.2f})"
+        return None
+
+    def _may_call_llm(self, doc: Document, attempts: list[Attempt], text: bool = True) -> bool:
+        """True when the LLM may be called; else the reason is an attempt of its own (once), for the result. A spec
+        round of several drafts asks for room for all of them."""
+        why = self._llm_stop(doc, sum(a.llm_calls for a in attempts), text)
+        if why and not any(a.route == LLM_SKIPPED for a in attempts):
+            attempts.append(Attempt(LLM_SKIPPED, None, error=why))
+        return why is None
+
+    def _estimate(self, doc: Document, best: Attempt) -> None:
+        """An inventory with a region, count, type or size the files do not give: the LLM's checked estimates go
+        into its rows (estimate.py; one call). Every answer, used or not, is kept in the evidence. An LLM that fails
+        leaves the rows as the files give them, with a warning."""
+        if not (self.llm and self.s.use_estimates and estimate_mod.open_gaps(best.ext.evidence.get("gaps"))):
+            return
+        if (why := self._llm_stop(doc)):
+            best.ext.warnings.append(f"The missing values were not estimated: {why}")
+            return
+        ctx = _PRICING.get()
+        try:
+            got = estimate_mod.estimate(self.llm, doc, ctx.catalog if ctx else self.catalog())
+        except (llm_mod.LLMUnavailable, requests.RequestException, ValueError, KeyError, TypeError) as e:
+            best.llm_calls += 1
+            best.ext.warnings.append(f"The LLM estimate of the missing values failed: {type(e).__name__}: {e}")
+            return
+        if got is None:
+            return
+        res, answers = got
+        best.llm_calls += 1
+        best.ext.rows = iac.rows(res)
+        best.ext.evidence["estimates"] = answers
 
     @staticmethod
     def _price_summary(stats: PriceStats, rows: pd.DataFrame) -> dict:
@@ -564,6 +661,8 @@ class Pipeline:
         (vision.py), the Markdown read by the tree of sums. Accepted only when proved (_accept)."""
         if not self._can_see(doc) or any(a.verdict.get("status") == "reconciled" for a in attempts):
             return
+        if not self._may_call_llm(doc, attempts, text=False):     # page images: a scan has no text, and is read
+            return
         path = self.store.file_path(doc.sha256)
         images = vision.page_images(path.read_bytes()) if path is not None else None
         if not images:
@@ -588,19 +687,29 @@ class Pipeline:
         """The LLM writes a spec, the interpreter runs it and the checks judge it; up to max_repairs rounds. Round 1
         has spec_candidates candidates, generated in parallel (only the LLM calls run in threads: each candidate is
         run and checked here, in the parse's thread, with its price context); the next rounds repair the best one."""
-        if not self.llm:
+        if not self.llm or not self._may_call_llm(doc, attempts):
             return
         preview = build_preview(doc)
         examples = self._examples(fp)
         settled = _settled(attempts)
         spec, feedback = None, None
         rounds = self.s.max_repairs
-        if self.s.spec_candidates > 1 and rounds > 0:
-            best, feedback, spec = yield from self._spec_candidates(doc, preview, examples, attempts, settled)
+        left = (self.s.llm_max_calls or 10**6) - sum(a.llm_calls for a in attempts)
+        if self.s.spec_candidates > 1 and rounds > 0 and left > 1:
+            best, feedback, spec = yield from self._spec_candidates(doc, preview, examples, attempts, settled,
+                                                                    n=min(self.s.spec_candidates, left))
             if best is not None and self._accept(best):
                 return
             rounds -= 1
+        said: list[set[str]] = []
         for _ in range(rounds):
+            if feedback and set(feedback) in said:      # the last round changed nothing the checks see: stop
+                attempts.append(Attempt(LLM_SKIPPED, None, error="a repair round did not change what the checks "
+                                                                  "found, so the next rounds were not run"))
+                return
+            said.append(set(feedback or []))
+            if not self._may_call_llm(doc, attempts):
+                return
             try:
                 spec = llm_mod.generate_spec(self.llm, preview, examples, feedback, spec, settled=settled)
                 check_spec(spec)
@@ -616,7 +725,7 @@ class Pipeline:
                 return
             feedback = att.verdict.get("feedback") or [att.error or "No rows extracted"]
 
-    def _spec_candidates(self, doc, preview, examples, attempts, settled: dict | None = None):
+    def _spec_candidates(self, doc, preview, examples, attempts, settled: dict | None = None, n: int | None = None):
         """Round 1: spec_candidates specs at once, each from another order of the examples, the later ones told to read
         the layout on their own. Every candidate is an attempt in the log; the best (accepted; else no failed critical
         check; else the fewest failed price checks; else the most confident) is the only one that can be accepted.
@@ -624,7 +733,7 @@ class Pipeline:
         Returns (the best attempt or None, the feedback for the next round, the spec it repairs). When no candidate
         ran (each failed to parse or check_spec), the next round repairs the first one that has a spec, told why it was
         rejected, as a single candidate's next round is."""
-        n = self.s.spec_candidates
+        n = n or self.s.spec_candidates
         spent = getattr(self.llm, "spent", None)
 
         def generate(i: int):
@@ -683,7 +792,7 @@ class Pipeline:
         return (not self._accept(att), critical, price_fails, -att.confidence)
 
     def _llm_extract(self, doc, fp, headers, attempts):
-        if not self.llm:
+        if not self.llm or not self._may_call_llm(doc, attempts):
             return
         try:
             out = llm_mod.extract_rows(self.llm, build_preview(doc, max_rows=400))
@@ -834,6 +943,9 @@ class Pipeline:
                 self.store.link(spec["id"], doc.sha256, fp,
                                 {"rows": n_rows, "total": round(total, 2), "confidence": verdict["confidence"],
                                  "checks": checks})
+                if spec.get("trust") == "candidate" and (up := learn_mod.promote_if_ready(self, spec)):
+                    spec_info["trust"] = "verified"            # this file was the last one it needed
+                    log.info("spec %s promoted to verified after %s good files", up["spec"], up["docs"])
 
         kind = verdict.get("kind") or ((best.spec or {}).get("meta") or {}).get("kind", "cost_lines") if best else None
         analysis = {}
@@ -852,7 +964,9 @@ class Pipeline:
             "header_fields": {k: v["value"] for k, v in fields.items()},
             "header_field_src": {k: str(v["src"]) for k, v in fields.items() if v.get("src") is not None},
             "checks": verdict.get("checks", []),
-            "warnings": _warnings(best, big),
+            "warnings": [*doc.notes, *_warnings(best, big)],     # doc.notes: what loading the file could not read
+            # why the routes failed (a consumer's reason when no lines are read: contract._why)
+            "feedback": _feedback_of(verdict, attempts),
             "spec_notes": _builtin_note(best),
             "analysis": analysis,
             "pricing": pricing,
@@ -1051,6 +1165,14 @@ def _llm_gate(best: Attempt, verdict: dict) -> dict:
              "detail": "A reading the LLM made needs review: " + "; ".join(why)}
     return dict(verdict, status="needs_review", checks=[*verdict.get("checks", []), check],
                 feedback=[*verdict.get("feedback", []), f"llm_reading: {check['detail']}"])
+
+
+def _feedback_of(verdict: dict, attempts: list[Attempt]) -> list[str]:
+    """The verdict's feedback, then each attempt's error and feedback: once each, at most 8."""
+    out = list(verdict.get("feedback") or [])
+    for a in attempts:
+        out += ([f"{a.route}: {a.error}"] if a.error else []) + list(a.verdict.get("feedback") or [])
+    return list(dict.fromkeys(str(x) for x in out))[:8]
 
 
 def _warnings(best: Attempt | None, big: bigfile.Scan | None = None) -> list[str]:

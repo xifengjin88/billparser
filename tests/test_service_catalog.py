@@ -236,7 +236,7 @@ def test_azure_resource_types_resolve_to_the_service_that_bills_them(tmp_path):
     assert r.resolve("SQL server", "azure").service_key == "azure:SQL Database"
     # whole names only: a charge that starts with a resource type is not that resource type
     assert r.resolve("SQL Server in Azure VM Protected Instance", "azure").service_key != "azure:SQL Database"
-    assert r.resolve("Virtual Machine Scale Sets", "azure").method != "name"
+    assert r.resolve("Virtual Machine Scale Sets", "azure").service_key == "azure:Virtual Machines"   # billed as VMs
 
 
 def test_a_catalog_built_with_other_seeds_is_built_again(tmp_path, monkeypatch):

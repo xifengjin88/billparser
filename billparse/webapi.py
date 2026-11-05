@@ -150,6 +150,9 @@ class ChargeRow(BaseModel):
     list_unit_price: float | None = None
     contracted_unit_price: float | None = None
     price_match_level: str | None = None    # exact | attributes | assumed | ambiguous | unmatched | ... (1.8)
+    price_missing: str | None = None        # what the price match lacked; for an inventory's not_priced row, why
+    storage_gb: float | None = None         # an inventory's volume, database or node storage (its attributes)
+    storage_type: str | None = None
     section: str | None = None
     source: str
     cite: CiteOut
@@ -569,6 +572,18 @@ def _note(n) -> NoteRow:
     return NoteRow(message=str(n))
 
 
+def _attr_number(v) -> float | None:
+    try:
+        f = float(v)
+    except (TypeError, ValueError):
+        return None
+    return None if f != f else f
+
+
+def _attr_text(v) -> str | None:
+    return v if isinstance(v, str) and v else None
+
+
 def charge_row(c, gap_refs: set) -> ChargeRow:
     kind_by = (f"{c.kind.source or ''} {c.kind.confidence:.2f}".strip() if c.kind.confidence is not None
                else (c.kind.source or ""))
@@ -583,7 +598,8 @@ def charge_row(c, gap_refs: set) -> ChargeRow:
         pricing_model=_v(c.pricing_model), quantity=_f(c.quantity), unit=_v(c.unit), unit_price=_f(c.unit_price),
         usage_type=_v(c.usage_type), operation=_v(c.operation), sku_id=_v(c.sku_id), resource_id=_v(c.resource_id),
         commitment_id=_v(c.commitment_id), list_unit_price=_f(c.list_unit_price),
-        price_match_level=_v(c.price_match_level),
+        price_match_level=_v(c.price_match_level), price_missing=_v(c.price_missing),
+        storage_gb=_attr_number(c.attributes.get("storage_gb")), storage_type=_attr_text(c.attributes.get("storage_type")),
         contracted_unit_price=_f(c.contracted_unit_price), section=c.section_id, source=c.cite.label(), cite=_cite(c.cost.cite if c.cost else c.cite),
         has_gap=c.id in gap_refs)
 

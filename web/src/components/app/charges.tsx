@@ -67,7 +67,9 @@ export const CHARGE_COLUMNS: Column<ChargeRow>[] = [
   { key: 'cost', header: 'Cost', value: (c) => c.cost, filter: 'number', width: '120px', align: 'right', render: (c) => <span className={c.counted ? '' : 'text-muted-foreground line-through'}>{money(c.cost_exact)}</span> },
   { key: 'kind', header: 'Kind', value: (c) => c.kind, width: '140px', render: (c) => <span title={c.kind_by}>{c.kind.replaceAll('_', ' ')}</span> },
   { key: 'coverage', header: 'Coverage', value: (c) => c.coverage, width: '120px', render: (c) => opt(c.coverage?.replaceAll('_', ' ')) },
-  { key: 'priceMatch', header: 'Price match', value: (c) => c.price_match_level, width: '120px', render: (c) => opt(c.price_match_level?.replaceAll('_', ' ')) },
+  { key: 'priceMatch', header: 'Price match', value: (c) => c.price_match_level, width: '240px', render: (c) => c.price_match_level === 'not_priced'
+      ? <span className="block truncate text-amber-700 dark:text-amber-400" title={c.price_missing ?? ''}>not priced: {c.price_missing}</span>
+      : opt(c.price_match_level?.replaceAll('_', ' ')) },
   { key: 'list', header: 'List cost', value: (c) => c.list_cost, filter: 'number', width: '110px', align: 'right', render: (c) => c.list_cost == null ? opt(null) : money(c.list_cost) },
   { key: 'contracted', header: 'Contracted cost', value: (c) => c.contracted_cost, filter: 'number', width: '130px', align: 'right', render: (c) => c.contracted_cost == null ? opt(null) : money(c.contracted_cost) },
   { key: 'effective', header: 'Effective cost', value: (c) => c.effective_cost, filter: 'number', width: '120px', align: 'right', render: (c) => c.effective_cost == null ? opt(null) : money(c.effective_cost) },
@@ -79,6 +81,9 @@ export const CHARGE_COLUMNS: Column<ChargeRow>[] = [
   { key: 'db', header: 'DB engine', value: (c) => c.database_engine, width: '110px', render: (c) => opt(c.database_engine) },
   { key: 'dep', header: 'Deployment', value: (c) => c.deployment_option, width: '110px', render: (c) => opt(c.deployment_option) },
   { key: 'qty', header: 'Qty', value: (c) => c.quantity, filter: 'number', width: '90px', align: 'right', render: (c) => opt(c.quantity?.toLocaleString()) },
+  { key: 'unit', header: 'Unit', value: (c) => c.unit, width: '110px', render: (c) => opt(c.unit) },
+  { key: 'storage', header: 'Storage GB', value: (c) => c.storage_gb, filter: 'number', width: '110px', align: 'right', render: (c) => opt(c.storage_gb?.toLocaleString()) },
+  { key: 'storageType', header: 'Storage type', value: (c) => c.storage_type, width: '110px', render: (c) => opt(c.storage_type) },
   { key: 'price', header: 'Unit price', value: (c) => c.unit_price, filter: 'number', width: '100px', align: 'right', render: (c) => opt(c.unit_price?.toLocaleString()) },
   { key: 'listUnit', header: 'List unit price', value: (c) => c.list_unit_price, filter: 'number', width: '120px', align: 'right', render: (c) => opt(c.list_unit_price?.toLocaleString()) },
   { key: 'contractedUnit', header: 'Contracted unit price', value: (c) => c.contracted_unit_price, filter: 'number', width: '150px', align: 'right', render: (c) => opt(c.contracted_unit_price?.toLocaleString()) },

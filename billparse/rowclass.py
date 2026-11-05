@@ -25,6 +25,13 @@ class RowLabel:
     features: dict
 
 
+FIRST_TOTAL = re.compile(r"^\s*(grand\s+)?total\b", re.I)
+
+
+def _first_text(row) -> str:
+    return next((c.text for c in row.cells if c.text), "")
+
+
 def features(row: Row, amount_text: str, label_text: str, header_texts: set[str],
              median_x: float, prev_label: str | None) -> dict:
     texts = [c.text for c in row.cells if c.text]
@@ -38,7 +45,8 @@ def features(row: Row, amount_text: str, label_text: str, header_texts: set[str]
         "has_label": bool(label_text),
         "bold": row.bold,
         "indent_delta": round(row.first_x - median_x, 1),
-        "total_kw": bool(TOTAL_RX.search(row.text)) and not wide,
+        # a wide row is a data row that says "total" somewhere; one whose first cell is TOTAL is the total row
+        "total_kw": bool(TOTAL_RX.search(row.text)) and (not wide or bool(FIRST_TOTAL.match(_first_text(row)))),
         "subtotal_kw": bool(SUBTOTAL_RX.search(row.text)) and not wide,
         "tax_kw": bool(TAX_RX.search(label_text or row.text)),
         "has_formula_sum": any(_vertical_sum(c.formula) for c in row.cells if c.formula),

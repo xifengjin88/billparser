@@ -201,7 +201,7 @@ class Resolver:
         for n in (norm(raw), norm_loose(raw)):
             hits = {key for p in provs for table in (self.cat.names, self.cat.products)
                     if (key := table.get(f"{p}:{n}"))}
-            if not hits and n == norm(raw):              # whole names only (an Azure resource type)
+            if not hits:                                 # whole names only (a resource type, a meter name)
                 hits = {key for p in provs if (key := self.cat.exact.get(f"{p}:{n}"))}
             if len(hits) == 1:
                 return self._remember(ck, self._make(raw, hits.pop(), "name", 100))
@@ -220,14 +220,19 @@ class Resolver:
 
         # 4b. longest word prefix that is a known name: "Amazon EC2 m5.xlarge" -> "ec2",
         #     "Virtual Machines D4s v5 East US" -> "virtual machines"
-        words = norm_loose(raw).split()
-        for k in range(min(5, len(words) - 1), 0, -1):
-            pre = " ".join(words[:k])
-            hits = {key for p in provs for table in (self.cat.names, self.cat.products)
-                    if (key := table.get(f"{p}:{pre}"))}
+        #     The whole words first: "Microsoft Fabric (Reservation)" is Microsoft Fabric, not Service Fabric
+        hits = set()
+        # (whole words keep "Amazon" and "for": 8 of them reach "Amazon Elastic Container Service for Kubernetes")
+        for words, most in dict.fromkeys(((tuple(norm(raw).split()), 8), (tuple(norm_loose(raw).split()), 5))):
+            for k in range(min(most, len(words) - 1), 0, -1):
+                pre = " ".join(words[:k])
+                hits = {key for p in provs for table in (self.cat.names, self.cat.products)
+                        if (key := table.get(f"{p}:{pre}"))}
+                if hits:
+                    break
             if len(hits) == 1:
                 return self._remember(ck, self._make(raw, hits.pop(), "prefix", 95))
-            if len(hits) > 1:
+            if hits:                                     # several services: no guess
                 break
 
         # 4c. a Microsoft invoice product name ("Az DDOS Prot-NW Prot Plan-1 Hr"): its service part, short words

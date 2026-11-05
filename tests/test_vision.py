@@ -66,7 +66,9 @@ def _blank_pdf(path: Path) -> Path:
 
 
 def _pipe(tmp_path: Path, llm, **kw) -> Pipeline:
-    return Pipeline(Settings(store_dir=tmp_path / "store", use_llm=True, use_agent=False, **kw), llm=llm)
+    # the vision route is off by default (BILLPARSE_VISION=1 turns it on): these tests turn it on
+    return Pipeline(Settings(store_dir=tmp_path / "store", use_llm=True, use_agent=False, **{"use_vision": True, **kw}),
+                    llm=llm)
 
 
 def test_markdown_tables_become_rows_the_tree_proves():

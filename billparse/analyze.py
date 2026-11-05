@@ -80,7 +80,7 @@ def resolve_service_sums(rows: pd.DataFrame, data_dir: Path) -> tuple[float, flo
 
 
 def _resolve_services(rows: pd.DataFrame, data_dir: Path) -> tuple[float, float]:
-    if rows.empty or not ({"service_raw", "product_code", "description"} & set(rows.columns)):
+    if rows.empty or not ({"service_raw", "product_code", "description", "instance_type"} & set(rows.columns)):
         return 0.0, 0.0
     res = get_resolver(data_dir)
     provider = None
@@ -88,10 +88,13 @@ def _resolve_services(rows: pd.DataFrame, data_dir: Path) -> tuple[float, float]
         top = rows["provider"].dropna().astype(str).str.lower().value_counts()
         provider = top.index[0] if top.iloc[0] / top.sum() > 0.9 and top.index[0] in ("aws", "azure", "gcp") else None
     picked = pd.Series([None] * len(rows), index=rows.index, dtype=object)
+    counts = "billed_cost" not in rows or rows["billed_cost"].isna().all()     # a count report, no money
     for col in ("product_code", "service_raw", "description"):
         if col not in rows:
             continue
         todo = picked.isna() & rows[col].notna()
+        if counts:                                      # "Compute Savings Plan" there says how instances ran:
+            todo &= ~rows[col].astype(str).str.strip().str.match(COVERAGE_TERM)     # not the plan's fee service
         if not todo.any():
             continue
         table = res.resolve_many(rows.loc[todo, col].astype(str).str.strip().unique(), provider)
@@ -99,6 +102,7 @@ def _resolve_services(rows: pd.DataFrame, data_dir: Path) -> tuple[float, float]
                                   lambda v, table=table: table[v] if v in table and table[v].service_key else None)
     if provider is None:                                # one provider by its exact matches: weak matches elsewhere retried
         picked = _one_provider(rows, picked, res)
+    _compute_of_sizes(rows, picked, res, provider)
     got = _fields(picked, ("service", "service_code", "category", "method", "provider"))
     rows["service"] = got["service"]
     rows["service_name"] = rows["service"]                    # the catalog's name: empty when nothing matched
@@ -124,6 +128,42 @@ def _resolve_services(rows: pd.DataFrame, data_dir: Path) -> tuple[float, float]
     return float(cost[picked.notna()].sum()), float(cost.sum())
 
 
+def _compute_service(provider: str | None, size) -> str | None:
+    """The service that runs an instance of this size: a VM list or an instance report names no service."""
+    if not isinstance(size, str) or not size.strip():
+        return None
+    size = size.strip()
+    if provider == "aws":
+        return "Amazon RDS" if size.startswith("db.") else "Amazon ElastiCache" if size.startswith("cache.") \
+            else "Amazon EC2"
+    return {"azure": "Virtual Machines", "gcp": "Compute Engine"}.get(provider or "")
+
+
+def _compute_of_sizes(rows: pd.DataFrame, picked: pd.Series, res, provider: str | None) -> None:
+    """A line with an instance type that names no service at all (an inventory of VMs): its provider's compute
+    service. A line that prints a service name keeps it (resolved or not)."""
+    if "instance_type" not in rows:
+        return
+    lines = rows["provider"].astype(object) if "provider" in rows else pd.Series(provider, index=rows.index)
+    lines = lines.where(lines.notna(), provider)
+    named = pd.Series(False, index=rows.index)
+    for col in ("product_code", "service_raw"):
+        if col in rows:
+            named |= rows[col].notna() & rows[col].astype(str).str.strip().ne("")
+    todo = picked.isna() & rows["instance_type"].notna() & ~named
+    if not todo.any():
+        return
+    names = pd.Series([_compute_service(str(p).lower() if isinstance(p, str) else None, t)
+                       for p, t in zip(lines[todo], rows.loc[todo, "instance_type"])], index=todo[todo].index)
+    for (prov, name), idx in names.groupby([lines[todo].astype(str).str.lower(), names]).groups.items():
+        hit = res.resolve_many([name], prov).get(name)
+        if hit is not None and hit.service_key:
+            for i in idx:
+                picked.at[i] = hit
+
+
+COVERAGE_TERM = re.compile(r"(?i)^(on[- ]?demand|spot|(standard|convertible) ri|reserved( instances?)?|"
+                           r"((compute|ec2 instance) )?savings plans?)$")
 MARKETPLACE_TEXT = re.compile(r"\bmarketplace\b|\bsold by\b", re.I)
 # the cloud area of a commitment that matched no service, by its name ("Compute savings plan")
 COMMITMENT_AREAS = [("Compute", r"\bcompute\b|virtual machine|\bvms?\b|\bec2\b|app service"),

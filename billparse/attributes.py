@@ -47,8 +47,11 @@ REGION_NAME = re.compile(r"^(US East|US West|Canada|EU|Europe|Asia Pacific|South
                          r"Mexico|AWS GovCloud)\s*\(([^)]+)\)$|^(Any|Global)$")
 PRICE = re.compile(r"(?:USD|\$|€|£)\s?\$?\s?(\d+(?:\.\d+)?)\s+per\b", re.I)
 # the block of units a price is for: "per 1,000 requests", "per 1 million", "per million", "per 10000"
-BLOCK = re.compile(r"\s+(?:(\d{1,3}(?:,\d{3})+|\d+)\s*)?(million|billion|thousand)?\b", re.I)
-SCALE_WORDS = {"thousand": 1e3, "million": 1e6, "billion": 1e9}
+# ("per 10M metric samples", "per MM objects", "per 100K Objects": a block letter is upper case; "MB", "Month" are not)
+BLOCK = re.compile(r"\s+(?:(\d{1,3}(?:,\d{3})+|\d+)\s*)?(million|billion|thousand|(?-i:MM|[KMB]))?\b", re.I)
+SCALE_WORDS = {"thousand": 1e3, "million": 1e6, "billion": 1e9, "k": 1e3, "m": 1e6, "mm": 1e6, "b": 1e9}
+# a quantity counted in blocks ("13.052 1K tokens"): its price is per block
+UNIT_BLOCK = re.compile(r"^\s*(\d{1,3}(?:,\d{3})+|\d+)?\s*(million|billion|thousand|(?-i:MM|[KMB]))\b", re.I)
 QTY_UNIT = re.compile(r"(?<![\w.$])(\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+(?:\.\d+)?)\s+([A-Za-z][\w/()-]*(?:[ -][A-Za-z][\w/()-]*)?)\s*$")
 UNIT_WORDS = re.compile(r"^(hrs?|hours?|gb|gb-mo|gb-month|tb|requests?|events?|ios|lcu-hrs?|acu-hrs?|vcpu-hours?|"
                         r"units?|instances?|calls?|queries|messages|objects|keys|secrets|metrics|alarms|dashboards|"
@@ -297,8 +300,48 @@ def extract(rows: pd.DataFrame, warnings: list[str] | None = None) -> list[str]:
                         rows[HOW + f] = None
                     rows.loc[empty & vals.notna(), HOW + f] = "text"
                 filled.append(f)
+    _unproved_text_prices(rows)
     filled += [f for f in ec2_software(rows) if f not in filled]
     return filled
+
+
+def _unit_block(u) -> float:
+    m = UNIT_BLOCK.match(u) if isinstance(u, str) else None
+    return float((m.group(1) or "1").replace(",", "")) * SCALE_WORDS[m.group(2).lower()] if m else 1.0
+
+
+TEXT_PRICE_OFF = "_text_price_off"     # a row's column: its words' price is not what it was billed (coverage.py)
+
+
+def _unproved_text_prices(rows: pd.DataFrame) -> None:
+    """A price read from a line's words is the price of its quantity only when quantity x price is the line's cost
+    before tax and credits. Else the quantity is in another unit (GiBps-mo against MiBps-month, GB-Seconds against
+    GB-Hour, Object-days against objects a month) or a commitment covered part of the usage: the unit price stays
+    empty, and the line is marked so that its words "On Demand" do not set its coverage."""
+    need = {"unit_price", "quantity", "billed_cost", HOW + "unit_price"}
+    if not need <= set(rows.columns):
+        return
+    text = rows[HOW + "unit_price"].eq("text")
+    if "charge_type" in rows:                     # a negation prints quantity x on-demand rate; its cost cancels
+        text &= rows["charge_type"].ne("Negation")
+    q = pd.to_numeric(rows["quantity"], errors="coerce")
+    up = pd.to_numeric(rows["unit_price"], errors="coerce")
+    if "unit" in rows:                            # "13.052 1K tokens": a quantity in blocks has a price per block
+        block = map_unique(rows["unit"], _unit_block).astype(float)
+        scale = text & block.ne(1.0)
+        if scale.any():
+            up[scale] = up[scale] * block[scale]
+            rows.loc[scale, "unit_price"] = up[scale]
+    net = pd.to_numeric(rows["billed_cost"], errors="coerce")
+    for f in ("tax", "credits"):
+        if f in rows:
+            net = net - pd.to_numeric(rows[f], errors="coerce").fillna(0.0)
+    known = text & q.notna() & up.notna() & net.notna()
+    off = known & ((q * up - net).abs() > np.maximum(0.011, 0.01 * net.abs()))
+    if off.any():
+        rows.loc[off, "unit_price"] = None
+        rows.loc[off, HOW + "unit_price"] = None
+        rows[TEXT_PRICE_OFF] = off
 
 
 def _ec2_code(op) -> tuple[str, str, str] | None:
@@ -351,6 +394,9 @@ def ec2_software(rows: pd.DataFrame) -> list[str]:
     return list(dict.fromkeys(filled))
 
 
+NO_REGION = {"unassigned", "unknown", "n/a", "none", "-"}     # a placeholder for no location (Azure: Unassigned)
+
+
 def normalize_regions(rows: pd.DataFrame) -> int:
     """A region column of printed names ("US East (N. Virginia)", "East US 2") becomes codes ("us-east-1",
     "eastus2"); the printed name is kept in region_name. Values that are no known region stay as printed. Returns
@@ -358,13 +404,24 @@ def normalize_regions(rows: pd.DataFrame) -> int:
     if rows.empty or "region" not in rows:
         return 0
     from svcres.regions import lookup
-    codes = {v: (hit[1] if (hit := lookup(v)) else None) for v in rows["region"].dropna().astype(str).unique()}
+
+    def several(v: str) -> bool:                # "global, US East": a line that spans regions has no one region
+        parts = [p.strip() for p in v.split(",")]
+        return len(parts) > 1 and all(lookup(p) for p in parts)
+    values = rows["region"].dropna().astype(str).unique()
+    nowhere = {v for v in values if v.strip().lower() in NO_REGION or several(v)}
+    codes = {v: (hit[1] if (hit := lookup(v)) else None) for v in values if v not in nowhere}
     named = map_unique(rows["region"], lambda v: codes.get(str(v)) if v is not None and not pd.isna(v) else None)
     change = named.notna() & named.ne(rows["region"])
-    if not change.any():
+    none = rows["region"].isin(nowhere)
+    if not (change.any() or none.any()):
         return 0
     if "region_name" not in rows:
         rows["region_name"] = None
+    if none.any():                              # kept as printed in region_name, never as a region code
+        rows.loc[none & rows["region_name"].isna(), "region_name"] = rows.loc[none, "region"]
+        rows.loc[none, "region"] = None
+        change = change | none
     keep = change & rows["region_name"].isna()
     rows.loc[keep, "region_name"] = rows.loc[keep, "region"]
     rows.loc[change, "region"] = named[change]

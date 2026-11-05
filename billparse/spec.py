@@ -19,6 +19,7 @@ from .docmodel import Document, Region
 from .layout import _row_to_cols, build_columns, extract_fields, extract_lines, extract_table, find_header, norm_h
 from .mapper import map_columns
 from .transforms import CANONICAL, TRANSFORMS, apply_transforms, default_transforms, map_unique, parse_number
+from .tree import CURRENCIES, SYMBOL
 
 ALLOWED_TOP = {"id", "version", "trust", "extends", "detect", "meta", "source", "table", "columns",
                "derive", "reshape", "filters", "fields", "lines", "totals", "total_rows", "fingerprint", "stats",
@@ -27,6 +28,65 @@ ALLOWED_TOP = {"id", "version", "trust", "extends", "detect", "meta", "source", 
 
 class SpecError(ValueError):
     pass
+
+
+INLINE_FLAGS = re.compile(r"\(\?([imsx]+)\)")       # "(?i)": Python takes it only at the start of a pattern
+
+
+def regexes(spec: dict) -> list[tuple[str, str]]:
+    """Every regex of a spec, as (where, pattern)."""
+    out: list[tuple[str, str]] = []
+    detect = spec.get("detect") or {}
+    if isinstance(detect.get("text"), str):
+        out.append(("detect.text", detect["text"]))
+    if isinstance((detect.get("any_regex") or {}).get("pattern"), str):
+        out.append(("detect.any_regex.pattern", detect["any_regex"]["pattern"]))
+    for k in ("sheet", "start", "end"):
+        if isinstance((spec.get("table") or {}).get(k), str):
+            out.append((f"table.{k}", spec["table"][k]))
+    unpivot = (spec.get("reshape") or {}).get("unpivot") or {}
+    out += [(f"reshape.unpivot.{k}", unpivot[k]) for k in ("exclude", "total_row") if isinstance(unpivot.get(k), str)]
+    for i, f in enumerate(spec.get("filters") or []):
+        rx = (f.get("drop_if_match") or {}).get("regex") if isinstance(f, dict) else None
+        if isinstance(rx, str):
+            out.append((f"filters[{i}].drop_if_match.regex", rx))
+    for name, f in (spec.get("fields") or {}).items():
+        out += [(f"fields.{name}.{k}", f[k]) for k in ("anchor", "regex") if isinstance(f, dict)
+                and isinstance(f.get(k), str)]
+    out += [(f"lines[{i}].pattern", p["pattern"]) for i, p in enumerate(spec.get("lines") or [])
+            if isinstance(p, dict) and isinstance(p.get("pattern"), str)]
+    out += [(f"total_rows[{i}].match", t["match"]) for i, t in enumerate(spec.get("total_rows") or [])
+            if isinstance(t, dict) and isinstance(t.get("match"), str)]
+    for fld, c in (spec.get("columns") or {}).items():
+        if not isinstance(c, dict):
+            continue
+        if isinstance(c.get("header_regex"), str):
+            out.append((f"columns.{fld}.header_regex", c["header_regex"]))
+        for step in c.get("t") or []:
+            arg = step.get("regex") if isinstance(step, dict) else None
+            arg = arg.get("pattern") if isinstance(arg, dict) else arg
+            if isinstance(arg, str):
+                out.append((f"columns.{fld}.t.regex", arg))
+    return out
+
+
+def hoist_flags(pattern: str) -> str:
+    """The pattern with its inline flags ("(?i)") at the start, where Python takes them: an LLM writes
+    "^Total(?i)" or "(?i)a|(?i)b", which re.compile refuses."""
+    found = list(INLINE_FLAGS.finditer(pattern))
+    if not found or (len(found) == 1 and found[0].start() == 0):
+        return pattern
+    flags = "".join(sorted({ch for m in found for ch in m.group(1)}))
+    return f"(?{flags})" + INLINE_FLAGS.sub("", pattern)
+
+
+def fix_flags(value):
+    """A spec (any JSON value) with the inline flags of every string moved to its start (hoist_flags)."""
+    if isinstance(value, dict):
+        return {k: fix_flags(v) for k, v in value.items()}
+    if isinstance(value, list):
+        return [fix_flags(v) for v in value]
+    return hoist_flags(value) if isinstance(value, str) else value
 
 
 @dataclass
@@ -62,12 +122,14 @@ def check_spec(spec: dict) -> None:
         if fld not in CANONICAL:
             raise SpecError(f"Unknown derived field: {fld}")
         expr.validate(e)
-    for p in spec.get("lines") or []:
-        re.compile(p["pattern"])
     for t in spec.get("total_rows") or []:
         if not (isinstance(t, dict) and {"field", "match", "amount"} <= set(t)):
             raise SpecError('total_rows: [{"field": column, "match": regex, "amount": column, "label": column}]')
-        re.compile(t["match"])
+    for where, pattern in regexes(spec):                 # a bad regex is told now, not found when the spec runs
+        try:
+            re.compile(pattern)
+        except re.error as e:
+            raise SpecError(f"{where}: bad regex {pattern!r}: {e}") from None
     maps = spec.get("maps")
     if maps is not None and not (isinstance(maps, dict) and all(isinstance(k, str) and isinstance(v, str)
                                                                 for k, v in maps.items())):
@@ -97,10 +159,6 @@ def check_spec(spec: dict) -> None:
         unknown = [p for p in post if p not in POST]
         if unknown:
             raise SpecError(f"Unknown meta.post step(s): {unknown}; known: {sorted(POST)}")
-    text_rx = (spec.get("detect") or {}).get("text")
-    if text_rx is not None:
-        re.compile(text_rx)
-
 
 def merge(base: dict, child: dict) -> dict:
     out = copy.deepcopy(base)
@@ -154,7 +212,8 @@ def run(spec: dict, doc: Document, catalog_dir=None) -> Extraction:
         res = iac.read(doc)
         ext = Extraction(rows=iac.rows(res), fields=fields, spec_id=spec.get("id", ""),
                          evidence={"excluded": res.excluded, "gaps": res.gaps})
-        ext.warnings += [f"{g['name']}: {g['message']} ({g['src']})" for g in res.gaps]
+        # the gaps go to the contract as missing_input gaps; what was left out is a decision, said as a note
+        ext.warnings += [f"{x['name']} is not counted: {x['reason']} ({x['src']})" for x in res.excluded]
         return ext
     if source == "lines" or (source == "auto" and spec.get("lines") and not spec.get("table")):
         raw = extract_lines(regions, spec["lines"])
@@ -187,8 +246,9 @@ def run(spec: dict, doc: Document, catalog_dir=None) -> Extraction:
     meta = spec.get("meta") or {}
     if meta.get("provider") and "provider" not in (spec.get("columns") or {}):
         rows["provider"] = meta["provider"]
-    if meta.get("currency") and rows.get("currency") is not None and rows["currency"].isna().all():
-        rows["currency"] = meta["currency"]
+    if ("currency" not in rows or rows["currency"].isna().all()) and not rows.empty:
+        if (cur := meta.get("currency") or _printed_currency(doc)):
+            rows["currency"] = cur
     ext.rows = rows.reset_index(drop=True)
     if meta.get("post"):
         from .costs import POST
@@ -358,6 +418,32 @@ def _find_col(df: pd.DataFrame, names: list[str]) -> str | None:
     return None
 
 
+_CODES = "|".join(CURRENCIES)
+# the currency a money column's header names: "Cost (USD)", "CostUSD", "EC2-Instances($)", "Cost USD"
+HEADER_CURRENCY = re.compile(rf"\(\s*(?P<sym>[$€£₹¥])\s*\)|\(\s*(?P<paren>{_CODES})\s*\)"
+                             rf"|(?<=[a-z])(?P<camel>{_CODES})$|(?<![A-Za-z])(?P<word>{_CODES})(?![A-Za-z])")
+CURRENCY_KEY = re.compile(r"(^|\.)(currency|currency_?code|billing_?currency)$", re.I)
+
+
+def header_currency(header) -> str | None:
+    m = HEADER_CURRENCY.search(str(header).strip()) if header is not None else None
+    if not m:
+        return None
+    return SYMBOL.get(m["sym"]) if m["sym"] else (m["paren"] or m["camel"] or m["word"])
+
+
+def _printed_currency(doc: Document) -> str | None:
+    """A JSON file's currency key outside its records ("currency": "USD")."""
+    for region in doc.regions:
+        if region.is_frame or not region.name.endswith("json-meta"):
+            continue
+        for row in region.rows:
+            if len(row.cells) == 2 and CURRENCY_KEY.search(row.cells[0].text) \
+                    and row.cells[1].text.strip().upper() in CURRENCIES:
+                return row.cells[1].text.strip().upper()
+    return None
+
+
 def _map_columns(spec: dict, raw: pd.DataFrame, ext: Extraction) -> pd.DataFrame:
     out = pd.DataFrame(index=raw.index)
     used: set = set()
@@ -386,6 +472,27 @@ def _map_columns(spec: dict, raw: pd.DataFrame, ext: Extraction) -> pd.DataFrame
         used.add(src)
         steps = c.get("t") if c.get("t") is not None else default_transforms(fld)
         out[fld] = apply_transforms(raw[src].where(raw[src].notna(), None), steps)
+    # no currency column: the cost column's header may name it ("CostUSD", "Cost (USD)"; unpivoted: "EC2($)")
+    if "currency" not in out or out["currency"].isna().all():
+        cost = (spec.get("columns") or {}).get("billed_cost")
+        src = _find_col(raw, _from_list(cost)) if cost and "const" not in cost else None
+        if src == "_value" and "_var" in raw:
+            cur = map_unique(raw["_var"], header_currency)
+            if cur.notna().any():
+                out["currency"] = cur
+        elif src is not None and (c := header_currency(src)):
+            out["currency"] = c
+        elif "_currency" in raw and raw["_currency"].notna().any():     # the cells' number format
+            out["currency"] = raw["_currency"]
+    used.add("_currency")
+    # lines from several sheets and no service column: each sheet names its service ("Virtual Machines", "Disks")
+    cols = spec.get("columns") or {}
+    named = "service_raw" in out and out["service_raw"].notna().any() and \
+        [c for c in _from_list(cols.get("service_raw")) if not c.startswith("_")] != \
+        _from_list(cols.get("description"))                  # a name column (or a group above it) is no service
+    if not named and "_sheet" in raw and raw["_sheet"].nunique() > 1:
+        out["service_raw"] = raw["_sheet"]
+    used.add("_sheet")
     meta = spec.get("meta") or {}
     ext.unmapped = _keep_unmapped(raw, out, used, guess=not meta.get("exact_columns"), plan=spec.get("_unmapped"),
                                   extra=not (meta.get("exact_columns") or spec.get("_no_extra")))

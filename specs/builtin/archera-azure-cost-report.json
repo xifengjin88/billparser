@@ -1,0 +1,54 @@
+{
+  "id": "archera-azure-cost-report",
+  "version": 1,
+  "trust": "builtin",
+  "detect": {
+    "text": "— Azure Cost Intelligence Report\\s*$"
+  },
+  "meta": {
+    "provider": "azure",
+    "kind": "cost_lines",
+    "cost_basis": "billed",
+    "format": "Archera Azure Cost Intelligence Report workbook (sheet Service Breakdown)",
+    "notes": "One line for each service from the Service Breakdown sheet. The Monthly column can hold more than one month (a 12-month report prints its 12-month amount there): the period is only in the Executive Summary text. The Reservable? and Commitment Type columns are advice, not the coverage of the cost."
+  },
+  "source": "grid",
+  "table": {
+    "sheet": "^Service Breakdown$",
+    "start": "^Service\\b.*\\bMonthly\\b",
+    "end": "^TOTAL$",
+    "header_rows": 1,
+    "stop_at_total": true
+  },
+  "columns": {
+    "service_raw": {
+      "from": [
+        "Service"
+      ]
+    },
+    "description": {
+      "from": [
+        "Service"
+      ]
+    },
+    "billed_cost": {
+      "from": [
+        "Monthly"
+      ],
+      "t": [
+        "number"
+      ]
+    }
+  },
+  "filters": [
+    {
+      "drop_if_blank": "billed_cost"
+    },
+    {
+      "drop_if_match": {
+        "field": "service_raw",
+        "regex": "^(Service|TOTAL|Total)$"
+      }
+    }
+  ]
+}

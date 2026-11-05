@@ -103,6 +103,10 @@ def _match_col(cols: list[Col], cell, kind: str) -> Col | None:
 
 
 # ---------------------------------------------------------------- table extraction
+OFFICE_TABLE = re.compile(r"^(slide|page)\d+ table\d+$")    # a table of a slide or a Word page (docmodel)
+CELL_SYMBOL = {"$": "USD", "€": "EUR", "£": "GBP"}             # a cell's text that begins with it ("$102,901")
+
+
 def extract_table(regions: list[Region], tspec: dict, amount_headers: list[str],
                   label_headers: list[str], expect_headers: list[str]) -> GridTable | None:
     sheet_rx = re.compile(tspec["sheet"], re.I) if tspec.get("sheet") else None
@@ -126,6 +130,14 @@ def extract_table(regions: list[Region], tspec: dict, amount_headers: list[str],
         if sheet_rx and not sheet_rx.search(region.name):
             continue
         hdr = find_header(region, start_anchor, expect_headers)
+        if hdr is not None and not start_anchor and region.kind == "sheet" and expect_headers:
+            exp = {norm_h(e) for e in expect_headers}
+            hits = {norm_h(c.text) for c in region.rows[hdr].cells} & exp
+            lab = {norm_h(h) for h in label_headers}
+            if len(hits) < min(2, len(exp)) or (lab & exp and not hits & lab):
+                hdr = None                 # a summary sheet that shares one cost header is another table
+        if region.kind == "sheet":
+            group = None                   # a group heading never carries over to another sheet
         if hdr is None and (cols is None or region.kind == "sheet"):
             continue                       # a sheet without the table's header is another table, not a next page
         if hdr is not None and (cols is None or region.kind == "sheet"):
@@ -178,6 +190,12 @@ def extract_table(regions: list[Region], tspec: dict, amount_headers: list[str],
                 rec = dict(by_col)
                 rec["_group"] = group
                 rec["_src"] = src
+                if region.kind == "sheet" and not OFFICE_TABLE.match(region.name.rsplit(":", 1)[-1]):
+                    rec["_sheet"] = region.name.rsplit(":", 1)[-1]     # a workbook's sheet name (not a slide's)
+                curs = {c.currency or CELL_SYMBOL.get(c.text[:1]) for c in row.cells
+                        if c.currency or CELL_SYMBOL.get(c.text[:1])}
+                if len(curs) == 1:              # the row's numbers are formatted in one currency
+                    rec["_currency"] = curs.pop()
                 if carry != "_group":
                     rec[f"_carry:{carry}"] = group
                 records.append(rec)
@@ -190,6 +208,9 @@ def extract_table(regions: list[Region], tspec: dict, amount_headers: list[str],
             elif label in ("subtotal", "total"):
                 out.stated_totals.append({"label": row.text[:80], "amount": amt, "kind": label, "src": src})
                 if label == "total" and tspec.get("stop_at_total", True):
+                    if region.kind == "sheet":     # a sheet's TOTAL ends that sheet, not the workbook
+                        out.stated_totals[-1]["kind"] = "sheet_total"
+                        break
                     finished = True
                     break
             prev = label
@@ -197,6 +218,9 @@ def extract_table(regions: list[Region], tspec: dict, amount_headers: list[str],
 
     if not records:
         return None
+    sheets = [t for t in out.stated_totals if t["kind"] == "sheet_total"]
+    for t in sheets:                       # one sheet's TOTAL is the total; several sheets' are subtotals
+        t["kind"] = "total" if len(sheets) == 1 else "subtotal"
     out.df = pd.DataFrame(records)
     return out
 

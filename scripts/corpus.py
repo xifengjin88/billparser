@@ -22,6 +22,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import shutil
 import sys
 import tempfile
 import time
@@ -32,14 +33,32 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from billparse import agent, bundle  # noqa: E402
+from billparse import agent, bundle, fieldcheck  # noqa: E402
+from billparse.export import to_schema  # noqa: E402
 from billparse.pipeline import Pipeline, Settings  # noqa: E402
+from billparse.schema import Document  # noqa: E402
 from billparse.settings import load_env  # noqa: E402
 
 OUT = ROOT / "store" / "corpus"
 ATTRS = ("service", "region", "account_id", "instance_type", "database_engine", "operating_system", "usage_type",
          "quantity", "unit_price")
 ACCEPTED = ("reconciled", "unreconciled", "consistent", "auxiliary")
+
+
+def service_catalog_like_the_app(cat_dir: Path) -> Path:
+    """The service catalog the app resolves with: built from the database's price lists (read only) and data/raw,
+    in a folder of this run. Without a database, the repo's data/ (as before)."""
+    from billparse.service_catalog import rows_for_url
+    from billparse.settings import catalog_dir
+    from svcres.catalog import build
+    url, src = os.environ.get("DATABASE_URL"), catalog_dir()
+    rows = rows_for_url(url)
+    if not rows:
+        print("service catalog: no database, the repo's data/ catalog is used (Azure meter names may be missing)")
+        return src
+    shutil.copytree(src / "raw", cat_dir / "raw")
+    build(cat_dir / "raw", rows).save(cat_dir / "catalog.msgpack")
+    return cat_dir
 
 
 def run_file(pipe: Pipeline, path: Path, name: str | None = None) -> dict:
@@ -64,7 +83,12 @@ def run_file(pipe: Pipeline, path: Path, name: str | None = None) -> dict:
     if total is None and n and "billed_cost" in rows:
         total = round(float(rows["billed_cost"].sum()), 2)
     sums, lines = (sums_of(rows), lines_key(rows)) if n else ({}, None)
-    return {"sums": sums, "lines_key": lines, "file": name, "sha256": r["sha256"], "file_type": r.get("file_type"), "kind": r.get("kind"), "status": r["status"],
+    doc = pipe.store.part(r["sha256"], "doc")            # what a consumer gets: its field values are checked
+    pub = to_schema(Document.model_validate_json(doc)) if doc else None
+    found = fieldcheck.issues(pub, r["status"]) if pub else {"no_contract": "no contract was saved"}
+    return {"field_issues": found, "currency": pub.currency.value if pub and pub.currency else None,
+            "reasons": pub.confidence.reasons[:3] if pub and pub.confidence else [],
+            "sums": sums, "lines_key": lines, "file": name, "sha256": r["sha256"], "file_type": r.get("file_type"), "kind": r.get("kind"), "status": r["status"],
             "completeness": r.get("completeness"), "confidence": r.get("confidence"), "rows": n, "total": total,
             "route": (r.get("spec") or {}).get("route"), "spec": (r.get("spec") or {}).get("id"),
             "failed": [c["name"] for c in r.get("checks", []) if c["status"] == "fail"],
@@ -154,7 +178,10 @@ def compare(base: dict, cur: dict) -> list[tuple[str, str]]:
 
 
 def check_expected(res: dict, exp: dict) -> list[str]:
+    """The file's label: its status, total, rows, currency, and the field issues it may have ("allow")."""
     bad = []
+    if "currency" in exp and res.get("currency") != exp["currency"]:
+        bad.append(f"currency {res.get('currency')} != {exp['currency']}")
     if "total" in exp and (res.get("total") is None or abs(res["total"] - exp["total"]) > exp.get("tol", 0.011)):
         bad.append(f"total {res.get('total')} != {exp['total']}")
     if "status" in exp and res.get("status") != exp["status"]:
@@ -162,6 +189,12 @@ def check_expected(res: dict, exp: dict) -> list[str]:
     if "min_rows" in exp and (res.get("rows") or 0) < exp["min_rows"]:
         bad.append(f"rows {res.get('rows')} < {exp['min_rows']}")
     return bad
+
+
+def field_failures(res: dict, exp: dict) -> list[str]:
+    """The field issues (fieldcheck.py) the file's label does not allow."""
+    allow = set(exp.get("allow") or [])
+    return [f"{code}: {detail}" for code, detail in (res.get("field_issues") or {}).items() if code not in allow]
 
 
 def with_agent(pipe: Pipeline, path: Path, res: dict, name: str | None = None) -> dict:
@@ -203,10 +236,12 @@ def main() -> None:
     expected = json.loads((OUT / "expected.json").read_text()) if (OUT / "expected.json").exists() else {}
     previous = sorted(OUT.glob("2*.json"))
     with tempfile.TemporaryDirectory() as tmp:
+        cat_dir = service_catalog_like_the_app(Path(tmp) / "catalog")
         os.environ.pop("DATABASE_URL", None)                    # never the real database
         store_dir = keep or Path(tmp)
         # the agent step runs here only with --agent (with_agent), so its outcome is measured on its own
-        pipe = Pipeline(Settings(store_dir=store_dir, use_llm=False, retain_docs=keep is not None, use_agent=False))
+        pipe = Pipeline(Settings(store_dir=store_dir, catalog_dir=cat_dir, use_llm=False,
+                                 retain_docs=keep is not None, use_agent=False))
         results = []
         for f in files:
             with bundle.files_of(f) as parts:                  # a zip of separate files: each file, as an upload
@@ -247,6 +282,15 @@ def main() -> None:
                 print(f"  {r['file'][:46]:46} {b.get('status')}/{b.get('rows')}/{b.get('total')} -> "
                       f"{r.get('status')}/{r.get('rows')}/{r.get('total')}")
     failed = check_baseline(results, a.only) if a.check else False
+    fields = {r["file"]: f for r in ok if (f := field_failures(r, expected.get(r["file"]) or {}))}
+    print(f"\nFIELD ISSUES ({len(fields)} files; a label's \"allow\" accepts a known one):")
+    for name, found in fields.items():
+        print(f"  {name[:60]}")
+        for line in found:
+            print(f"    {line}")
+    if a.check and fields:
+        print("field check: FAILED (fix the field, or add the code to the file's \"allow\" in expected.json)")
+        failed = True
     if a.accept:
         accept_baseline(results, a.only)
     jobs = [r["agent"] for r in results if r.get("agent")]

@@ -149,8 +149,12 @@ AZURE_ALIASES = {
     "Storage": ["Managed Disks", "Premium SSD Managed Disks", "Standard HDD Managed Disks",
                 "Standard SSD Managed Disks", "Files", "Files v2", "File Sync", "Blob Features", "Tiered Block Blob",
                 "Premium Page Blob", "Standard Page Blob", "Standard Page Blob v2", "General Block Blob",
-                "Blob Storage", "Page Blob", "Block Blob", "Data Lake Storage", "General Block Blob v2"],
-    "SQL Database": ["SQL Database Single", "SQL Database Single Standard", "SQL Database Single Elastic"],
+                "Blob Storage", "Page Blob", "Block Blob", "Data Lake Storage", "General Block Blob v2",
+                "Premium managed disk"],
+    "SQL Database": ["SQL Database Single", "SQL Database Single Standard", "SQL Database Single Elastic",
+                     "SQL vCore compute", "SQL DTU"],
+    "VPN Gateway": ["VNet Gateway"],
+    "Azure Active Directory B2C": ["Azure AD B2C", "AD B2C"],
     "Application Gateway": ["WAF App Gateway", "Basic App Gateway", "App Gateway"],
     "Azure Cognitive Search": ["AI Search"],
     "Bandwidth": ["Routing Preference", "Bandwidth Inter Region"],
@@ -160,17 +164,18 @@ AZURE_ALIASES = {
     "Azure Synapse Analytics": ["Synapse"],
     "Azure App Service": ["App Service"],
     "Azure Cosmos DB": ["Cosmos Database"],
+    "Virtual Machines": ["Virtual Machine Scale Sets"],     # billed as Virtual Machines
 }
 
 # Azure resource types, as a cost analysis grouped by resource prints them (its only service column), by the service
 # that bills them; a type whose service is not clear is left out (unresolved is better than a wrong service)
 AZURE_RESOURCE_TYPES = {
     "Storage": ["Disk", "Snapshot", "Restore Point Collection"],
-    "Backup": ["Recovery Services vault"],
+    "Backup": ["Recovery Services vault", "Recovery Services vaults"],
     "Azure Synapse Analytics": ["Apache Spark pool", "Dedicated SQL pool"],
     "Azure Arc": ["microsoft.hybridcompute/machines", "SQL Server - Azure Arc"],
     "Virtual Machines": ["Virtual machine scale set", "Virtual machine scale set instance"],
-    "Virtual Network": ["Public IP address", "Private endpoint"],
+    "Virtual Network": ["Public IP address", "Public IP addresses", "Private endpoint", "Private endpoints"],
     "Azure DNS": ["Private DNS zone"],
     "SQL Database": ["SQL server", "microsoft.sql/longtermretentionservers/longtermretentiondatabases"],
     "Microsoft Defender for Cloud": ["microsoft.security/pricings", "microsoft.security/pricings/images"],
@@ -185,11 +190,15 @@ AZURE_RESOURCE_TYPES = {
 # names of the provider's "Marketplace" service (category Marketplace). Add more on the Mapping page: an alias to the
 # code "Marketplace" (it matches as a word prefix, so "Veeam" covers every Veeam product).
 MARKETPLACE_SELLERS = {
-    "azure": ["Veeam", "SendGrid", "Twilio SendGrid"],
+    "azure": ["Veeam", "SendGrid", "Twilio SendGrid", "SaaS", "SCEPman"],
     "aws": [],
     "gcp": [],
 }
 
+
+# The support plan of a cloud that has no Support service in its price lists, by the names its bills print (AWS has
+# its own: AWS Support)
+SUPPORT_NAMES = {"azure": ["Support", "Microsoft Azure Support", "Azure Support"], "gcp": ["Support", "Cloud Support"]}
 
 # Services whose charges are fees (charge type "Fee"), not usage, wherever they are billed
 FEE_SERVICES = {"AWSPartnerNetwork"}
